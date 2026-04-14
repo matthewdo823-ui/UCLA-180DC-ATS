@@ -6,12 +6,13 @@ const API = 'http://localhost:3000';
 //left component
 function ResumeViewer({resume, loading}){
     if (loading) {return <div>Loading resume!</div>}
-    if(!resume){return <div> no mo reusmes </div>};
+    if(!resume){return <div> no mo resumes </div>};
     return (
-      <iframe
-        src={resume.file_url}
-        style={{width: '100%', height: '100%', border: 'none'}}
-        title='Resume'/>
+          <iframe
+            src={`${resume.file_url}#toolbar=0&navpanes=0`}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            title="Resume"
+          />
     );
   }
 
@@ -116,27 +117,18 @@ export default function App() {
       //set loading true
       setLoading(true);
       //set response to fetch next resume hyper
-          console.log("🚀 Starting fetch...");
-
-
       const res = await fetch(`${API}/next-resume`);
-          console.log("✅ Got response:", res);
-
       //make data json of response
       const data = await res.json();
-          console.log("📦 Data:", data);
-
       //set every var according to data and change loading 0
     setResume(data);
     setScores({});
     setNotes('');}
     
     catch (err){
-          console.error("❌ Fetch failed:", err);
-
       console.error("Fetch failed: ", err);
     }
-    finally{    console.log("🛑 Done loading");
+    finally{
 setLoading(false);}
   }
 
