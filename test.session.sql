@@ -1,3 +1,4 @@
+/*
 CREATE TABLE resumes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
@@ -23,6 +24,6 @@ where name = 'Matthew Do';
 SELECT file_url FROM resumes 
 ORDER BY review_count ASC, created_at ASC
 LIMIT 1;
-
+*/
 
 /* id, resume id, scores, notes sbumitted_at*/
