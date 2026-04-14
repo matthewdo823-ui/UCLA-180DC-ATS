@@ -32,7 +32,19 @@ app.get('/next-resume', async (input, output) => {
     if (error) return output.status(500).json({error: error.message});
     if (!data) return output.status(404).json({error: "No resumes found"});
 
-    return output.json(data);
+    const fileID = extractDriveFileID(data.file_url);
+    
+    if (!fileID) {
+        return output.status(400).json({ error: "Could not parse Google Drive ID" });
+    }
+
+    const accessable_file_url = toDownloadURL(fileID);
+
+    return output.json({
+        ...data,
+        "file_url": accessable_file_url
+    }
+    );
 });
 
 //saves review 
@@ -66,7 +78,13 @@ app.get('/resume/:id/file', async(input,output) =>{
 
     if (error) return output.status(404).json({error: error.message});
 
-    let accessable_file_url = toDownloadURL(extractDriveFileId(data.file_url));
+    const fileID = extractDriveFileID(data.file_url);
+    
+    if (!fileID) {
+        return output.status(400).json({ error: "Could not parse Google Drive ID" });
+    }
+
+    const accessable_file_url = toDownloadURL(fileID);
 
     return output.json({
         ...data,
@@ -82,7 +100,7 @@ app.get('/resume/:id/file', async(input,output) =>{
 
 
 //working thru drive urls
-function extractDriveFileId(url) {
+function extractDriveFileID(url) {
   if (!url || typeof url !== 'string') return null;
 
   try {
@@ -112,6 +130,7 @@ function extractDriveFileId(url) {
   }
 }
 
-function toDownloadUrl(fileId) {
-  return `https://drive.google.com/uc?export=download&id=${fileId}`;
+function toDownloadURL(fileID) {
+  //return `https://drive.google.com/uc?export=download&id=${fileID}`;
+return `https://docs.google.com/viewer?url=https://drive.google.com/uc?id=${fileID}&embedded=true`;;
 }
