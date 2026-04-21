@@ -15,19 +15,20 @@ const supabase = createClient(
 
 //route handlers
 
-app.listen(process.env.PORT, () => {
-    console.log(`Server running on port ${process.env.PORT}`)
-});
-
 //gets next resume row
 app.get('/next-resume', async (input, output) => {
+    console.log("HIT /next-resume");
+
     const {data,error} = await supabase
     .from('resumes')
     .select('*')
     .order('review_count', {ascending: true})
     .order('created_at', {ascending: true})
     .limit(1)
-    .single();
+    .maybeSingle();
+
+    console.log("DATA:", data);
+    console.log("ERROR:", error);
 
     if (error) return output.status(500).json({error: error.message});
     if (!data) return output.status(404).json({error: "No resumes found"});
@@ -40,6 +41,7 @@ app.get('/next-resume', async (input, output) => {
 
     const accessable_file_url = toDownloadURL(fileID);
 
+    console.log("abouta pass file url: " + accessable_file_url);
     return output.json({
         ...data,
         "file_url": accessable_file_url
@@ -95,7 +97,9 @@ app.get('/resume/:id/file', async(input,output) =>{
 });
 
 
-
+app.listen(process.env.PORT, () => {
+    console.log(`Server running on port ${process.env.PORT}`)
+});
 
 
 
@@ -130,7 +134,10 @@ function extractDriveFileID(url) {
   }
 }
 
+
+
 function toDownloadURL(fileID) {
   //return `https://drive.google.com/uc?export=download&id=${fileID}`;
-return `https://docs.google.com/viewer?url=https://drive.google.com/uc?id=${fileID}&embedded=true`;;
+//return `https://docs.google.com/viewer?url=https://drive.google.com/uc?id=${fileID}&embedded=true`;;
+    return `https://drive.google.com/file/d/${fileID}/preview`;
 }
