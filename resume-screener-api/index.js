@@ -67,6 +67,7 @@ app.post('/reviews', async (input, output) => {
 
     if (countError) return output.status(500).json({error: countError.message});
 
+ 
     return output.json({success: true});
 });
 
