@@ -5,8 +5,7 @@ const API = 'http://localhost:3000';
 
 //left component
 function ResumeViewer({resume, loading}){
-    if (loading) {return <div>Loading resume!</div>}
-    if(!resume){return <div> no mo resumes </div>};
+  if(!resume){return <div> no mo resumes </div>};  
     return (
           <iframe
             src={`${resume.file_url}#toolbar=0&navpanes=0`}
@@ -118,6 +117,13 @@ export default function App() {
       setLoading(true);
       //set response to fetch next resume hyper
       const res = await fetch(`${API}/next-resume`);
+
+  if (!res.ok) {
+      console.error("Server error:", res.status);
+      setResume(null); // <-- don't set the error object as resume
+      return;
+    }
+
       //make data json of response
       const data = await res.json();
       //set every var according to data and change loading 0
@@ -147,9 +153,17 @@ setLoading(false);}
 
   return (
     <div style = {{display: 'grid', gridTemplateColumns: '1fr 320px', height: '100vh'}}>
-    <ResumeViewer resume={resume} loading={loading}/>
-    
-    <Sidebar
+
+      {loading ? (
+      <div style={{ padding: 20 }}>Loading PDF...</div>
+    ) : resume?.file_url ? (
+      <ResumeViewer resume={resume} loading={loading}/>
+    ) : (
+      <div style={{ padding: 20 }}>No resume found.</div>
+    )}
+
+
+    {!loading && resume ? (<Sidebar
       resume={resume}
       scores={scores}
       onScore={(metric, val) => setScores(s => ({...s, [metric]: val}))}
@@ -157,9 +171,9 @@ setLoading(false);}
       onNotes={setNotes}
       onSubmit={handleSubmit}
     ></Sidebar>
-    </div>
+    ) : (
+    <div style={{ width: 320, padding: 20 }}>Loading details...</div>)}
+  </div>
   );
-
-
 
 }
