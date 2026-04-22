@@ -1,13 +1,37 @@
 /*
+CREATE TYPE year_enum AS ENUM ('Freshman', 'Sophomore', 'Junior Transfer', 'Junior', 'Senior');
+CREATE TABLE candidates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone_number TEXT NOT NULL,
+  major TEXT NOT NULL,
+  gpa TEXT NOT NULL,
+  year year_enum,
+  pronouns TEXT NOT NULL,
+  urm TEXT NOT NULL,
+  linkedin TEXT NOT NULL,
+  gm TEXT NOT NULL,
+  newbie_training TEXT NOT NULL,
+  why_consulting TEXT NOT NULL,
+  why_180DC TEXT NOT NULL,
+  why_social_impact TEXT NOT NULL,
+  resume_file_url TEXT NOT NULL,
+  extenuating_circumstances TEXT NOT NULL,
+  headshot TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE resumes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    candidate_id UUID REFERENCES candidates(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     file_url TEXT NOT NULL,
     review_count INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE reviews(
+CREATE TABLE resume_reviews(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     resume_id UUID NOT NULL REFERENCES resumes(id) ON DELETE CASCADE,
     scores JSONB NOT NULL,
@@ -15,6 +39,12 @@ CREATE TABLE reviews(
     submitted_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+DELETE FROM candidates 
+WHERE name = ' ';
+
+INSERT INTO resumes (candidate_id, name, file_url)
+SELECT id, name, resume_file_url
+FROM candidates;
 
 UPDATE resumes 
 SET review_count = 0
