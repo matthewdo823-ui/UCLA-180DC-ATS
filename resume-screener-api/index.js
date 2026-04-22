@@ -55,7 +55,7 @@ app.post('/reviews', async (input, output) => {
 
     //storing review
     const {error:reviewError} = await supabase 
-        .from('reviews')
+        .from('resume_reviews')
         .insert({resume_id, scores, notes});
         
     if (reviewError) return output.status(500).json({error: reviewError.message});
@@ -66,7 +66,6 @@ app.post('/reviews', async (input, output) => {
     );
 
     if (countError) return output.status(500).json({error: countError.message});
-
  
     return output.json({success: true});
 });

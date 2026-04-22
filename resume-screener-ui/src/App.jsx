@@ -145,6 +145,9 @@ setLoading(false);}
       body: JSON.stringify({resume_id: resume.id, scores, notes})
     })
     //post data to reviews
+      
+
+    
     fetchNext();
     //fetch next
   }
