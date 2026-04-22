@@ -165,7 +165,7 @@ function CandidateRow({ resume }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, padding: "10px 16px", background: css.surface, border: `1px solid ${css.border}`, borderRadius: 10 }}>
       <span style={{ fontSize: 9, fontWeight: 700, color: css.text3, textTransform: "uppercase", letterSpacing: "0.08em" }}>Candidate</span>
-      <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: css.gold }}>{resume?.id ?? "—"}</span>
+      <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: css.gold }}>{resume?.name + " can replace with id if redacted" ?? "—"}</span>
       <div style={{ width: 1, height: 16, background: css.border2 }} />
       {year && (
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 11px", borderRadius: 20, border: `1.5px solid ${year.badgeBd}`, background: year.badgeBg, color: year.badgeColor, fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase" }}>
@@ -174,7 +174,7 @@ function CandidateRow({ resume }) {
         </span>
       )}
       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "rgba(127,119,221,0.1)", color: "#A8A3EE", border: "1px solid rgba(127,119,221,0.22)", fontSize: 10, fontWeight: 600, letterSpacing: "0.04em" }}>
-        🔒 Redacted
+        will put year here and color the whole top bar like a hero
       </span>
     </div>
   );
@@ -433,7 +433,7 @@ export default function App() {
         <div style={{ flex: 1, overflow: "hidden", padding: "14px 22px 0", display: "flex", flexDirection: "column", gap: 12 }}>
           <CandidateRow resume={resume} />
  
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, flex: 1, minHeight: 0, overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.35fr", gap: 14, flex: 1, minHeight: 0, overflow: "hidden" }}>
             {/* ── Left: Resume panel ── */}
             <div ref={panelRef} style={{ background: css.surface, border: `1px solid ${css.border}`, borderTop: year ? `3px solid ${year.panelColor}` : `1px solid ${css.border}`, borderRadius: 14, display: "flex", flexDirection: "column", overflow: "hidden", transition: "border-color 0.3s" }}>
               {/* Year banner */}
