@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const {createClient} = require('@supabase/supabase-js');
 const cors = require('cors');
+const axios = require('axios');
 
 
 const app = express();
@@ -96,6 +97,29 @@ app.get('/resume/:id/file', async(input,output) =>{
 
 });
 
+//reverse proxy for file streaming (streams drive pdf to frontend)
+app.get('/view/pdf', async(req, res) => {
+    const fileUrl = req.query.url;
+    if (!fileUrl) return res.status(400).send("No URL provided");
+    try{
+        const response = await axios({
+            method: 'get',
+            url: fileUrl,
+            responseType: 'stream',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        });
+        res.setHeader('Content-Type', 'application/pdf');
+        response.data.pipe(res);
+    }
+    catch (err){
+        console.error("Proxy error: ", err.message);
+        res.status(500).send("Error fetching pdf from drive");
+    }
+})
+
+
 
 app.listen(process.env.PORT, () => {
     console.log(`Server running on port ${process.env.PORT}`)
@@ -139,5 +163,8 @@ function extractDriveFileID(url) {
 function toDownloadURL(fileID) {
   //return `https://drive.google.com/uc?export=download&id=${fileID}`;
 //return `https://docs.google.com/viewer?url=https://drive.google.com/uc?id=${fileID}&embedded=true`;;
-    return `https://drive.google.com/file/d/${fileID}/preview`;
+    //return `https://drive.google.com/file/d/${fileID}/preview`;
+    return `https://drive.google.com/uc?export=download&id=${fileID}`
 }
+
+
