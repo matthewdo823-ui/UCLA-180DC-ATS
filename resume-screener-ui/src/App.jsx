@@ -9,18 +9,28 @@ const MAX_SCORE = METRICS.length * 6;
  
 const YEAR_CFG = {
   freshman: {
-    label: "Freshman", icon: "🌱", sub: "1st Year",
-    panelColor: "#5BA3E0", panelBg: "rgba(74,144,217,0.10)", panelBd: "rgba(91,163,224,0.30)",
+    label: "freshman", icon: "🌱", sub: "1st Year",
+    panelColor: "#5BA3E0", panelBg: "rgb(0, 104, 216)", panelBd: "rgba(91,163,224,0.30)",
     badgeBg: "rgba(74,144,217,0.13)", badgeColor: "#5BA3E0", badgeBd: "rgba(91,163,224,0.35)",
   },
   sophomore: {
-    label: "Sophomore", icon: "📚", sub: "2nd Year",
-    panelColor: "#3DC9A0", panelBg: "rgba(29,158,117,0.10)", panelBd: "rgba(61,201,160,0.30)",
+    label: "sophomore", icon: "📚", sub: "2nd Year",
+    panelColor: "#3DC9A0", panelBg: "rgb(0, 184, 126)", panelBd: "rgba(61,201,160,0.30)",
     badgeBg: "rgba(29,158,117,0.13)", badgeColor: "#3DC9A0", badgeBd: "rgba(61,201,160,0.35)",
   },
   junior: {
-    label: "Junior", icon: "⭐", sub: "3rd Year",
-    panelColor: "#F5C060", panelBg: "rgba(239,159,39,0.10)", panelBd: "rgba(245,192,96,0.30)",
+    label: "junior", icon: "⭐", sub: "3rd Year",
+    panelColor: "#F5C060", panelBg: "rgb(206, 124, 0)", panelBd: "rgba(245,192,96,0.30)",
+    badgeBg: "rgba(239,159,39,0.13)", badgeColor: "#F5C060", badgeBd: "rgba(245,192,96,0.35)",
+  },
+  juniortransfer: {
+    label: "juniortransfer", icon: "⭐", sub: "3rd Year Transfer",
+    panelColor: "#F5C060", panelBg: "rgb(206, 124, 0)", panelBd: "rgba(245,192,96,0.30)",
+    badgeBg: "rgba(239,159,39,0.13)", badgeColor: "#F5C060", badgeBd: "rgba(245,192,96,0.35)",
+  },
+  senior: {
+    label: "senior", icon: "⭐", sub: "4th Year",
+    panelColor: "#F5C060", panelBg: "rgb(225, 0, 0)", panelBd: "rgba(245,192,96,0.30)",
     badgeBg: "rgba(239,159,39,0.13)", badgeColor: "#F5C060", badgeBd: "rgba(245,192,96,0.35)",
   },
 };
@@ -161,21 +171,68 @@ function Topbar({ reviewed, total, onHistory, historyCount }) {
  
 // ─── Candidate Row ────────────────────────────────────────────────────────────
 function CandidateRow({ resume }) {
-  const year = resume?.year ? YEAR_CFG[resume.year] : null;
+  // 1. Safety Check
+  if (!resume || !resume.candidates) return null;
+
+  // 2. Data Mapping
+  const rawYear = resume.candidates.year?.toLowerCase().replace(/\s/g, '');
+  const year = YEAR_CFG[rawYear];
+
+  // 3. Pre-defined Styles (The "Style Routing")
+  // This centralizes the 'Hero' look and fallbacks
+  const rowStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    flexShrink: 0,
+    padding: "10px 16px",
+    borderRadius: 10,
+    // Route to config values OR defaults
+    background: year ? year.panelBg : css.surface,
+    border: `1px solid ${year ? year.panelBd : css.border}`,
+    transition: "all 0.2s ease" // Smooth color changes
+  };
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, padding: "10px 16px", background: css.surface, border: `1px solid ${css.border}`, borderRadius: 10 }}>
-      <span style={{ fontSize: 9, fontWeight: 700, color: css.text3, textTransform: "uppercase", letterSpacing: "0.08em" }}>Candidate</span>
-      <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: css.gold }}>{resume?.name + " can replace with id if redacted" ?? "—"}</span>
-      <div style={{ width: 1, height: 16, background: css.border2 }} />
-      {year && (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 11px", borderRadius: 20, border: `1.5px solid ${year.badgeBd}`, background: year.badgeBg, color: year.badgeColor, fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase" }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: year.badgeColor, flexShrink: 0 }} />
-          {year.label}
-        </span>
-      )}
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "rgba(127,119,221,0.1)", color: "#A8A3EE", border: "1px solid rgba(127,119,221,0.22)", fontSize: 10, fontWeight: 600, letterSpacing: "0.04em" }}>
-        will put year here and color the whole top bar like a hero
+    <div style={rowStyle}>
+      <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        Candidate
       </span>
+
+      <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "#FFF" }}>
+        {resume.name ?? "—"}
+      </span>
+
+      <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.2)" }} />
+
+      {year ? (
+        <>
+          {/* The Year Badge */}
+          <span style={{ 
+            display: "inline-flex", 
+            alignItems: "center", 
+            gap: 6, 
+            padding: "4px 11px", 
+            borderRadius: 20, 
+            border: `1.5px solid ${year.badgeBd}`, 
+            background: year.badgeBg, 
+            color: "#FFF", 
+            fontSize: 10, 
+            fontWeight: 700, 
+            textTransform: "uppercase" 
+          }}>
+            <span>{year.icon}</span>
+            {year.label}
+          </span>
+
+          {/* The Hero Status Text */}
+          <span style={{ color: "rgba(255,255,255,0.9)", fontSize: 10, fontWeight: 600 }}>
+            {year.sub} Student
+          </span>
+        </>
+      ) : (
+        <span style={{ color: css.text3, fontSize: 10 }}>Year Not Specified</span>
+      )}
     </div>
   );
 }
