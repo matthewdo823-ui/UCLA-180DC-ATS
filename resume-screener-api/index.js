@@ -22,7 +22,9 @@ app.get('/next-resume', async (input, output) => {
 
     const {data,error} = await supabase
     .from('resumes')
-    .select('*')
+    .select(`*,
+        candidates(year)
+    `)
     .order('review_count', {ascending: true})
     .order('created_at', {ascending: true})
     .limit(1)
