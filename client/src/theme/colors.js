@@ -1,5 +1,12 @@
 export const css = {
   // tokens
+  bgLight:   "#EFF5EF",
+  greenDark: "#286241",
+  cardWhite: "#FFFFFF",
+  textDark:  "#111827",
+  textGray:  "#6B7280",
+  borderLight: "#EAEAEA",
+  
   navy:    "#0D1B2A",
   navy2:   "#131f2e",
   gold:    "#FFB81C",

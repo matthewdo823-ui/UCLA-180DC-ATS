@@ -73,7 +73,7 @@ export default function ScreenerPage() {
   const year = rawYear ? YEAR_CFG[rawYear] : null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: css.navy, color: css.text1, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "hidden" }}>
       <Topbar reviewed={reviewed} total={total ?? reviewed + 1} onHistory={() => setDrawerOpen(true)} historyCount={history.length} />
 
       <div style={{ flex: 1, overflow: "hidden", padding: "14px 22px 0", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -81,29 +81,17 @@ export default function ScreenerPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1.35fr", gap: 14, flex: 1, minHeight: 0, overflow: "hidden" }}>
           {/* ── Left: Resume panel ── */}
-          <div ref={panelRef} style={{ background: css.surface, border: `1px solid ${css.border}`, borderTop: year ? `3px solid ${year.panelColor}` : `1px solid ${css.border}`, borderRadius: 14, display: "flex", flexDirection: "column", overflow: "hidden", transition: "border-color 0.3s" }}>
-            {/* Year banner */}
-            {year && (
-              <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 16px", borderBottom: `1px solid ${css.border}`, background: year.panelBg, flexShrink: 0 }}>
-                <span style={{ fontSize: 16 }}>{year.icon}</span>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: year.panelColor, lineHeight: 1 }}>{year.label}</div>
-                  <div style={{ fontSize: 10, color: css.text3, marginTop: 2 }}>{year.sub}</div>
-                </div>
-                <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 20, background: "rgba(127,119,221,0.1)", color: "#A8A3EE", border: "1px solid rgba(127,119,221,0.22)", fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>🔒 REDACTED</span>
-              </div>
-            )}
-
+          <div ref={panelRef} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
             {/* PDF view */}
             {loading ? (
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, color: css.text3, fontSize: 13 }}>
-                <div style={{ width: 36, height: 36, border: `3px solid ${css.border2}`, borderTopColor: css.gold, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, color: css.textGray, fontSize: 13 }}>
+                <div style={{ width: 36, height: 36, border: `3px solid ${css.borderLight}`, borderTopColor: css.greenDark, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
                 Loading resume…
               </div>
             ) : resume?.file_url ? (
               <PdfViewer url={`http://localhost:3000/view/pdf?url=${encodeURIComponent(resume.file_url)}`} />
             ) : (
-              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.text3, fontSize: 13 }}>No resume available</div>
+              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.textGray, fontSize: 13 }}>No resume available</div>
             )}
           </div>
 

@@ -1,4 +1,10 @@
 export const METRICS = ["experience", "leadership", "social impact", "communication"];
+export const METRIC_ICONS = {
+  "experience": "💼",
+  "leadership": "👑",
+  "social impact": "🤝",
+  "communication": "🗣️",
+};
 export const MAX_SCORE = METRICS.length * 6;
 
 export const YEAR_CFG = {
@@ -30,12 +36,12 @@ export const YEAR_CFG = {
 };
 
 export const BUBBLE_COLORS = {
-  1: { bg: "rgba(226,75,74,0.20)",  bd: "#E24B4A",               color: "#E24B4A"  },
-  2: { bg: "rgba(226,75,74,0.12)",  bd: "rgba(226,75,74,0.5)",   color: "#F07877"  },
-  3: { bg: "rgba(239,159,39,0.15)", bd: "#EF9F27",               color: "#EF9F27"  },
-  4: { bg: "rgba(239,159,39,0.10)", bd: "rgba(239,159,39,0.5)",  color: "#F5C060"  },
-  5: { bg: "rgba(29,158,117,0.15)", bd: "#1D9E75",               color: "#4ECBA0"  },
-  6: { bg: "rgba(29,158,117,0.22)", bd: "#4ECBA0",               color: "#80D9BF"  },
+  1: { bg: "rgba(226,75,74,0.1)",  bd: "#E24B4A", color: "#E24B4A"  },
+  2: { bg: "rgba(226,75,74,0.05)", bd: "rgba(226,75,74,0.5)", color: "#E24B4A"  },
+  3: { bg: "rgba(239,159,39,0.1)", bd: "#EF9F27", color: "#EF9F27"  },
+  4: { bg: "rgba(239,159,39,0.05)",bd: "rgba(239,159,39,0.5)", color: "#EF9F27"  },
+  5: { bg: "rgba(29,158,117,0.1)", bd: "#1D9E75", color: "#1D9E75"  },
+  6: { bg: "rgba(29,158,117,0.2)", bd: "#1D9E75", color: "#1D9E75"  },
 };
 
 export const DEC_STYLE = {
