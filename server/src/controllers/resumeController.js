@@ -44,7 +44,7 @@ exports.saveReview = async (req, res) => {
     // storing review
     const { error: reviewError } = await supabase
         .from('resume_reviews')
-        .insert({ resume_id, scores, notes, decision });
+        .insert({ resume_id, scores, notes });
 
     if (reviewError) return res.status(500).json({ error: reviewError.message });
 
@@ -100,5 +100,87 @@ exports.viewPdf = async (req, res) => {
     } catch (err) {
         console.error("Proxy error: ", err.message);
         res.status(500).send("Error fetching pdf from drive");
+    }
+};
+
+// Gets scoreboard data
+exports.getScoreboard = async (req, res) => {
+    try {
+        const { data: reviews, error: reviewError } = await supabase
+            .from('resume_reviews')
+            .select(`
+                *,
+                resumes (
+                    id,
+                    name,
+                    candidates ( major )
+                )
+            `);
+            
+        if (reviewError) throw reviewError;
+
+        const { count: totalApplicants, error: countError } = await supabase
+            .from('resumes')
+            .select('*', { count: 'exact', head: true });
+            
+        if (countError) throw countError;
+
+        const candidateMap = {};
+        let totalScoreSum = 0;
+        let reviewCount = 0;
+
+        reviews.forEach(review => {
+            if (!review.resumes) return;
+            const resumeId = review.resumes.id;
+            
+            let reviewScore = 0;
+            if (review.scores) {
+                Object.values(review.scores).forEach(val => reviewScore += val);
+            }
+            
+            totalScoreSum += reviewScore;
+            reviewCount++;
+
+            if (!candidateMap[resumeId]) {
+                candidateMap[resumeId] = {
+                    id: resumeId,
+                    name: review.resumes.name || 'Unknown',
+                    major: review.resumes.candidates?.major || 'Undeclared',
+                    totalScore: 0,
+                    numReviews: 0,
+                };
+            }
+            
+            candidateMap[resumeId].totalScore += reviewScore;
+            candidateMap[resumeId].numReviews++;
+        });
+
+        const candidates = Object.values(candidateMap).map(c => ({
+            id: c.id,
+            name: c.name,
+            major: c.major,
+            score: Math.round((c.totalScore / c.numReviews) * (100 / 24))
+        }));
+
+        candidates.sort((a, b) => b.score - a.score);
+        candidates.forEach((c, index) => c.rank = index + 1);
+
+        const totalReviewed = candidates.length;
+        const avgScore = reviewCount > 0 ? (totalScoreSum / reviewCount * (100 / 24)).toFixed(1) : 0;
+        const advancedCount = candidates.filter(c => c.score >= 80).length;
+
+        res.json({
+            stats: {
+                applicants: totalApplicants || 0,
+                reviewed: totalReviewed,
+                advanced: advancedCount,
+                avgScore: avgScore
+            },
+            candidates: candidates
+        });
+
+    } catch (err) {
+        console.error("Scoreboard error:", err);
+        res.status(500).json({ error: err.message });
     }
 };

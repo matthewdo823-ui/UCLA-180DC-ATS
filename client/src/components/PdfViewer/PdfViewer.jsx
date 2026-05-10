@@ -18,7 +18,7 @@ function PageCanvas({ page, viewport }) {
   }, [page, viewport]);
 
   return (
-    <canvas ref={canvasRef} style={{ width: "100%", maxWidth: viewport.width, boxShadow: "0 4px 24px rgba(0,0,0,0.5)", borderRadius: 6 }} />
+    <canvas ref={canvasRef} style={{ width: "100%", maxWidth: viewport.width }} />
   );
 }
 
@@ -75,10 +75,10 @@ export default function PdfViewer({ url }) {
   }, [url]);
 
   return (
-    <div ref={containerRef} style={{ flex: 1, overflowY: "auto", background: css.navy, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "16px 12px", scrollbarWidth: "thin", scrollbarColor: `${css.border2} transparent` }}>
+    <div ref={containerRef} style={{ flex: 1, overflowY: "auto", background: "transparent", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "0", scrollbarWidth: "thin", scrollbarColor: `${css.borderLight} transparent` }}>
       {loading && (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, color: css.text3, fontSize: 13 }}>
-          <div style={{ width: 36, height: 36, border: `3px solid ${css.border2}`, borderTopColor: css.gold, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, color: css.textGray, fontSize: 13 }}>
+          <div style={{ width: 36, height: 36, border: `3px solid ${css.borderLight}`, borderTopColor: css.greenDark, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
           Rendering PDF…
         </div>
       )}
@@ -88,4 +88,5 @@ export default function PdfViewer({ url }) {
       ))}
     </div>
   );
+
 }
