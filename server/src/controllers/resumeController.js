@@ -2,6 +2,80 @@ const supabase = require('../config/supabase');
 const axios = require('axios');
 const { extractDriveFileID, toDownloadURL } = require('../utils/drive');
 
+const SCORE_METRICS = ["experience", "leadership", "social impact", "communication"];
+const REVIEWER_NAME_FIELDS = [
+    "name",
+    "full_name",
+    "first_name",
+    "last_name",
+    "reviewer_name",
+    "reviewer",
+    "reviewed_by",
+    "reviewer_email",
+    "user_email",
+    "user_name",
+    "created_by_name",
+    "created_by",
+    "user_id"
+];
+const REVIEWER_EMAIL_FIELDS = ["email", "reviewer_email", "user_email"];
+const REVIEWER_JOIN_TABLES = ["reviewers", "resume_reviewers", "review_assignments"];
+const REVIEWER_REVIEW_ID_FIELDS = ["review_id", "resume_review_id", "resume_reviews_id"];
+
+function getReviewerName(review) {
+    if (review.first_name || review.last_name) {
+        return [review.first_name, review.last_name].filter(Boolean).join(" ");
+    }
+
+    for (const field of REVIEWER_NAME_FIELDS) {
+        if (review[field]) return review[field];
+    }
+
+    return null;
+}
+
+function getReviewerEmail(review) {
+    for (const field of REVIEWER_EMAIL_FIELDS) {
+        if (review[field]) return review[field];
+    }
+
+    return null;
+}
+
+function getReviewScore(scores = {}) {
+    return Object.values(scores).reduce((total, value) => total + (Number(value) || 0), 0);
+}
+
+async function getReviewerLookup(reviewIds) {
+    const lookup = {};
+    if (!reviewIds.length) return lookup;
+
+    for (const table of REVIEWER_JOIN_TABLES) {
+        for (const reviewIdField of REVIEWER_REVIEW_ID_FIELDS) {
+            const { data, error } = await supabase
+                .from(table)
+                .select('*')
+                .in(reviewIdField, reviewIds);
+
+            if (error) continue;
+
+            (data || []).forEach(row => {
+                const reviewId = row[reviewIdField];
+                if (!reviewId || lookup[reviewId]) return;
+
+                lookup[reviewId] = {
+                    name: getReviewerName(row),
+                    email: getReviewerEmail(row)
+                };
+            });
+
+            if (Object.keys(lookup).length) return lookup;
+        }
+    }
+
+    return lookup;
+}
+
 // Gets next resume row
 exports.getNextResume = async (req, res) => {
     console.log("HIT /next-resume");
@@ -113,11 +187,23 @@ exports.getScoreboard = async (req, res) => {
                 resumes (
                     id,
                     name,
-                    candidates ( major )
+                    candidates (
+                        email,
+                        phone_number,
+                        major,
+                        gpa,
+                        year,
+                        pronouns,
+                        linkedin,
+                        gm,
+                        newbie_training
+                    )
                 )
             `);
             
         if (reviewError) throw reviewError;
+
+        const reviewerLookup = await getReviewerLookup((reviews || []).map(review => review.id));
 
         const { count: totalApplicants, error: countError } = await supabase
             .from('resumes')
@@ -133,34 +219,84 @@ exports.getScoreboard = async (req, res) => {
             if (!review.resumes) return;
             const resumeId = review.resumes.id;
             
-            let reviewScore = 0;
-            if (review.scores) {
-                Object.values(review.scores).forEach(val => reviewScore += val);
-            }
+            const reviewScore = getReviewScore(review.scores);
             
             totalScoreSum += reviewScore;
             reviewCount++;
 
             if (!candidateMap[resumeId]) {
+                const candidate = review.resumes.candidates || {};
                 candidateMap[resumeId] = {
                     id: resumeId,
                     name: review.resumes.name || 'Unknown',
-                    major: review.resumes.candidates?.major || 'Undeclared',
+                    email: candidate.email || '',
+                    phoneNumber: candidate.phone_number || '',
+                    major: candidate.major || 'Undeclared',
+                    gpa: candidate.gpa || '',
+                    year: candidate.year || '',
+                    pronouns: candidate.pronouns || '',
+                    linkedin: candidate.linkedin || '',
+                    gm: candidate.gm || '',
+                    newbieTraining: candidate.newbie_training || '',
                     totalScore: 0,
                     numReviews: 0,
+                    categoryTotals: {},
+                    categoryCounts: {},
+                    reviews: [],
                 };
             }
             
             candidateMap[resumeId].totalScore += reviewScore;
             candidateMap[resumeId].numReviews++;
+
+            Object.entries(review.scores || {}).forEach(([metric, value]) => {
+                const numericValue = Number(value) || 0;
+                candidateMap[resumeId].categoryTotals[metric] =
+                    (candidateMap[resumeId].categoryTotals[metric] || 0) + numericValue;
+                candidateMap[resumeId].categoryCounts[metric] =
+                    (candidateMap[resumeId].categoryCounts[metric] || 0) + 1;
+            });
+
+            candidateMap[resumeId].reviews.push({
+                id: review.id,
+                scores: review.scores || {},
+                score: reviewScore,
+                reviewerName: getReviewerName(review) || reviewerLookup[review.id]?.name || null,
+                reviewerEmail: getReviewerEmail(review) || reviewerLookup[review.id]?.email || null,
+                notes: review.notes || '',
+                submittedAt: review.submitted_at
+            });
         });
 
-        const candidates = Object.values(candidateMap).map(c => ({
-            id: c.id,
-            name: c.name,
-            major: c.major,
-            score: Math.round((c.totalScore / c.numReviews) * (100 / 24))
-        }));
+        const candidates = Object.values(candidateMap).map(c => {
+            const aggregateScore = c.numReviews > 0 ? c.totalScore / c.numReviews : 0;
+            const categoryScores = SCORE_METRICS.reduce((acc, metric) => {
+                const count = c.categoryCounts[metric] || 0;
+                const total = c.categoryTotals[metric] || 0;
+                acc[metric] = count > 0 ? Number((total / count).toFixed(1)) : 0;
+                return acc;
+            }, {});
+
+            return {
+                id: c.id,
+                name: c.name,
+                email: c.email,
+                phoneNumber: c.phoneNumber,
+                major: c.major,
+                gpa: c.gpa,
+                year: c.year,
+                pronouns: c.pronouns,
+                linkedin: c.linkedin,
+                gm: c.gm,
+                newbieTraining: c.newbieTraining,
+                aggregateScore: Number(aggregateScore.toFixed(1)),
+                maxScore: 24,
+                categoryScores,
+                numReviews: c.numReviews,
+                reviews: c.reviews.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt)),
+                score: Math.round(aggregateScore * (100 / 24))
+            };
+        });
 
         candidates.sort((a, b) => b.score - a.score);
         candidates.forEach((c, index) => c.rank = index + 1);

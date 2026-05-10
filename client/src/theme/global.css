@@ -25,6 +25,43 @@ body {
   to { opacity: 1; transform: none; }
 }
 
+@keyframes scorecardBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scorecardDealIn {
+  0% { opacity: 0; transform: translateY(28px) rotateX(13deg) rotateZ(-2deg) scale(0.9); }
+  62% { opacity: 1; transform: translateY(-5px) rotateX(0deg) rotateZ(0.7deg) scale(1.025); }
+  100% { opacity: 1; transform: translateY(0) rotateX(0deg) rotateZ(0deg) scale(1); }
+}
+
+@keyframes scorecardShine {
+  0% { transform: translateX(-140%) skewX(-18deg); opacity: 0; }
+  28% { opacity: 0.34; }
+  70% { opacity: 0.18; }
+  100% { transform: translateX(145%) skewX(-18deg); opacity: 0; }
+}
+
+.scorecard-backdrop {
+  animation: scorecardBackdropIn 160ms ease-out both;
+}
+
+.scorecard-shell {
+  animation: scorecardDealIn 420ms cubic-bezier(.18,.9,.28,1.15) both;
+  transform-origin: center bottom;
+}
+
+.scorecard-shell::after {
+  content: "";
+  position: absolute;
+  inset: 32px 0 auto;
+  height: 72%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.38), transparent);
+  animation: scorecardShine 620ms ease-out 120ms both;
+}
+
 textarea::placeholder {
   color: #4A6070;
 }
