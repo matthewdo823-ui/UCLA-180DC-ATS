@@ -2,62 +2,92 @@ import { css } from "../../theme/colors";
 import { YEAR_CFG } from "../../constants/config";
 
 export default function CandidateRow({ resume }) {
-  // 1. Safety Check
   if (!resume || !resume.candidates) return null;
 
-  // 2. Data Mapping
   const rawYear = resume.candidates.year?.toLowerCase().replace(/\s/g, '');
   const year = YEAR_CFG[rawYear];
 
-  // 3. Pre-defined Styles
-  const rowStyle = {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    flexShrink: 0,
-    padding: "10px 16px",
-    borderRadius: 10,
-    background: year ? year.panelBg : css.surface,
-    border: `1px solid ${year ? year.panelBd : css.border}`,
-    transition: "all 0.2s ease"
+  const getInitials = (name) => {
+    if (!name) return "??";
+    return name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
   };
 
   return (
-    <div style={rowStyle}>
-      <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-        Candidate
-      </span>
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 16,
+      flexShrink: 0,
+      padding: "16px 24px",
+      borderRadius: 16,
+      background: css.greenDark,
+      boxShadow: "0 4px 20px rgba(40, 98, 65, 0.15)",
+      transition: "all 0.2s ease"
+    }}>
+      {/* Avatar */}
+      <div style={{
+        width: 48,
+        height: 48,
+        borderRadius: "50%",
+        border: "1px solid rgba(255,255,255,0.4)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 16,
+        fontWeight: 600,
+        color: "#FFF",
+        fontFamily: "'DM Sans', sans-serif",
+        flexShrink: 0
+      }}>
+        {getInitials(resume.name)}
+      </div>
 
-      <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "#FFF" }}>
-        {resume.name ?? "—"}
-      </span>
+      {/* Name and Subtitle */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 20, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", color: "#FFF", letterSpacing: "-0.01em" }}>
+          {resume.name ?? "—"}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.8)" }}>
+          B.A. Business Economics • UCLA • Expected 2029
+        </span>
+      </div>
 
-      <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.2)" }} />
+      <div style={{ flex: 1 }} />
 
-      {year ? (
-        <>
+      {/* Badges */}
+      {year && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ 
             display: "inline-flex", 
             alignItems: "center", 
             gap: 6, 
-            padding: "4px 11px", 
+            padding: "6px 14px", 
             borderRadius: 20, 
-            border: `1.5px solid ${year.badgeBd}`, 
-            background: year.badgeBg, 
+            border: `1px solid ${year.badgeBd}`, 
+            background: year.panelColor, 
             color: "#FFF", 
-            fontSize: 10, 
+            fontSize: 11, 
             fontWeight: 700, 
-            textTransform: "uppercase" 
           }}>
             <span>{year.icon}</span>
-            {year.label}
+            {year.label.charAt(0).toUpperCase() + year.label.slice(1)}
           </span>
-          <span style={{ color: "rgba(255,255,255,0.9)", fontSize: 10, fontWeight: 600 }}>
-            {year.sub} Student
+          <span style={{ 
+            display: "inline-flex", 
+            alignItems: "center", 
+            padding: "6px 14px", 
+            borderRadius: 20, 
+            border: `1px solid rgba(255,255,255,0.2)`, 
+            background: "rgba(255,255,255,0.2)", 
+            color: "#FFF", 
+            fontSize: 11, 
+            fontWeight: 800, 
+            textTransform: "uppercase",
+            letterSpacing: "0.02em"
+          }}>
+            {year.sub.toUpperCase()} STUDENT
           </span>
-        </>
-      ) : (
-        <span style={{ color: css.text3, fontSize: 10 }}>Year Not Specified</span>
+        </div>
       )}
     </div>
   );
