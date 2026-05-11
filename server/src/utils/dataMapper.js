@@ -1,0 +1,216 @@
+/**
+ * Maps Google Forms API FormResponse answers to Supabase candidates + resume fields.
+ * @see https://developers.google.com/forms/api/reference/rest/v1/forms.responses#FormResponse
+ */
+
+const DEFAULT_TEXT = "";
+
+const VALID_YEAR = new Set([
+  "Freshman",
+  "Sophomore",
+  "Junior Transfer",
+  "Junior",
+  "Senior",
+]);
+
+const YEAR_ALIASES = new Map(
+  Object.entries({
+    freshman: "Freshman",
+    "1st year": "Freshman",
+    "first year": "Freshman",
+    sophomore: "Sophomore",
+    "2nd year": "Sophomore",
+    "second year": "Sophomore",
+    junior: "Junior",
+    "3rd year": "Junior",
+    "third year": "Junior",
+    "junior transfer": "Junior Transfer",
+    "transfer junior": "Junior Transfer",
+    "3rd year transfer": "Junior Transfer",
+    senior: "Senior",
+    "4th year": "Senior",
+    "fourth year": "Senior",
+  }).map(([k, v]) => [k.toLowerCase(), v])
+);
+
+function normalizeYear(raw) {
+  if (raw == null || raw === "") return null;
+  const s = String(raw).trim();
+  if (VALID_YEAR.has(s)) return s;
+  const lower = s.toLowerCase();
+  if (YEAR_ALIASES.has(lower)) return YEAR_ALIASES.get(lower);
+  const collapsed = lower.replace(/\s+/g, " ");
+  if (YEAR_ALIASES.has(collapsed)) return YEAR_ALIASES.get(collapsed);
+  for (const v of VALID_YEAR) {
+    if (v.toLowerCase() === lower) return v;
+  }
+  return null;
+}
+
+function driveViewUrl(fileId) {
+  if (!fileId) return DEFAULT_TEXT;
+  return `https://drive.google.com/file/d/${fileId}/view`;
+}
+
+/**
+ * @param {import('googleapis').forms_v1.Schema$Answer} answer
+ * @returns {string} Plain text / choice text (not file URLs).
+ */
+function extractTextFromAnswer(answer) {
+  if (!answer) return DEFAULT_TEXT;
+
+  const textAnswers = answer.textAnswers?.answers;
+  if (textAnswers?.length) {
+    return textAnswers.map((a) => a.value || "").filter(Boolean).join(", ");
+  }
+
+  if (answer.choiceAnswers?.answers?.length) {
+    return answer.choiceAnswers.answers.map((a) => a.value || "").filter(Boolean).join(", ");
+  }
+
+  if (answer.scaleAnswer != null && answer.scaleAnswer !== "") {
+    return String(answer.scaleAnswer);
+  }
+
+  if (answer.dateAnswers?.answers?.length) {
+    return answer.dateAnswers.answers.map((a) => a.value || "").filter(Boolean).join(", ");
+  }
+
+  if (answer.timeAnswers?.answers?.length) {
+    return answer.timeAnswers.answers.map((a) => a.value || "").filter(Boolean).join(", ");
+  }
+
+  return DEFAULT_TEXT;
+}
+
+/**
+ * @param {import('googleapis').forms_v1.Schema$Answer} answer
+ * @returns {string} First uploaded file as Drive view URL, or empty string.
+ */
+function extractFileUrlFromAnswer(answer) {
+  const files = answer?.fileUploadAnswers?.answers;
+  if (!files?.length) return DEFAULT_TEXT;
+  const fileId = files[0].fileId;
+  return driveViewUrl(fileId);
+}
+
+/**
+ * @param {import('googleapis').forms_v1.Schema$Answer} answer
+ * @param {string} columnName Supabase column (e.g. resume_file_url).
+ */
+function extractValueForColumn(answer, columnName) {
+  const fileFields = new Set(["resume_file_url", "headshot"]);
+  if (fileFields.has(columnName)) {
+    const fileUrl = extractFileUrlFromAnswer(answer);
+    if (fileUrl) return fileUrl;
+  }
+  return extractTextFromAnswer(answer);
+}
+
+/** Maps common aliases to Postgres column names (unquoted identifiers are lowercased). */
+function normalizeTargetColumn(columnName) {
+  if (columnName === "why_180DC") return "why_180dc";
+  return columnName;
+}
+
+const CANDIDATE_TEXT_COLUMNS = [
+  "name",
+  "email",
+  "phone_number",
+  "major",
+  "gpa",
+  "pronouns",
+  "urm",
+  "linkedin",
+  "gm",
+  "newbie_training",
+  "why_consulting",
+  "why_180dc",
+  "why_social_impact",
+  "resume_file_url",
+  "extenuating_circumstances",
+  "headshot",
+];
+
+/**
+ * @typedef {Object} FormSyncConfig
+ * @property {string} formId
+ * @property {Record<string, string>} fieldMap questionItemId -> candidates column name
+ * @property {string} [resumeQuestionId]
+ * @property {string} [headshotQuestionId]
+ */
+
+/**
+ * @param {import('googleapis').forms_v1.Schema$FormResponse} response
+ * @param {FormSyncConfig} config
+ * @returns {{ google_form_response_id: string, candidateRow: Record<string, unknown>, resumeDerived: { name: string, file_url: string } } | null}
+ */
+function mapFormResponseToCandidate(response, config) {
+  const google_form_response_id = response.responseId;
+  if (!google_form_response_id) return null;
+
+  const answers = response.answers || {};
+  const fieldMap = config.fieldMap || {};
+
+  /** @type {Record<string, string>} */
+  const columnValues = {};
+
+  for (const [questionId, rawColumn] of Object.entries(fieldMap)) {
+    if (typeof rawColumn !== "string") continue;
+    const columnName = normalizeTargetColumn(rawColumn);
+    const allowed = CANDIDATE_TEXT_COLUMNS.includes(columnName) || columnName === "year";
+    if (!allowed) continue;
+    const answer = answers[questionId];
+    if (columnName === "year") {
+      const raw = extractTextFromAnswer(answer);
+      columnValues.year = normalizeYear(raw);
+    } else {
+      columnValues[columnName] = extractValueForColumn(answer, columnName);
+    }
+  }
+
+  const resumeQ = config.resumeQuestionId;
+  if (resumeQ && answers[resumeQ]) {
+    columnValues.resume_file_url = extractFileUrlFromAnswer(answers[resumeQ]) || columnValues.resume_file_url || "";
+  }
+
+  const headQ = config.headshotQuestionId;
+  if (headQ && answers[headQ]) {
+    columnValues.headshot = extractFileUrlFromAnswer(answers[headQ]) || columnValues.headshot || "";
+  }
+
+  const candidateRow = {
+    google_form_response_id,
+    name: columnValues.name ?? DEFAULT_TEXT,
+    email: columnValues.email ?? DEFAULT_TEXT,
+    phone_number: columnValues.phone_number ?? DEFAULT_TEXT,
+    major: columnValues.major ?? DEFAULT_TEXT,
+    gpa: columnValues.gpa ?? DEFAULT_TEXT,
+    year: columnValues.year ?? null,
+    pronouns: columnValues.pronouns ?? DEFAULT_TEXT,
+    urm: columnValues.urm ?? DEFAULT_TEXT,
+    linkedin: columnValues.linkedin ?? DEFAULT_TEXT,
+    gm: columnValues.gm ?? DEFAULT_TEXT,
+    newbie_training: columnValues.newbie_training ?? DEFAULT_TEXT,
+    why_consulting: columnValues.why_consulting ?? DEFAULT_TEXT,
+    why_180dc: columnValues.why_180dc ?? DEFAULT_TEXT,
+    why_social_impact: columnValues.why_social_impact ?? DEFAULT_TEXT,
+    resume_file_url: columnValues.resume_file_url ?? DEFAULT_TEXT,
+    extenuating_circumstances: columnValues.extenuating_circumstances ?? DEFAULT_TEXT,
+    headshot: columnValues.headshot ?? DEFAULT_TEXT,
+  };
+
+  const resumeDerived = {
+    name: candidateRow.name || "Unknown",
+    file_url: candidateRow.resume_file_url || DEFAULT_TEXT,
+  };
+
+  return { google_form_response_id, candidateRow, resumeDerived };
+}
+
+module.exports = {
+  mapFormResponseToCandidate,
+  normalizeYear,
+  extractTextFromAnswer,
+  extractFileUrlFromAnswer,
+};
