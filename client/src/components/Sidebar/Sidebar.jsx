@@ -1,9 +1,11 @@
 import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
 
 export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const links = [
     { path: "/", label: "Home", icon: (
@@ -90,6 +92,34 @@ export default function Sidebar() {
             </div>
           );
         })}
+      </div>
+
+      <div style={{ marginTop: "auto", padding: 16, borderTop: `1px solid ${css.borderLight}`, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: css.textDark, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {[user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email}
+          </div>
+          <div style={{ fontSize: 11, color: css.textGray, marginTop: 3, textTransform: "capitalize" }}>
+            {user?.role}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={logout}
+          style={{
+            border: `1px solid ${css.borderLight}`,
+            background: "#FFF",
+            color: css.textGray,
+            borderRadius: 8,
+            padding: "9px 10px",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          Sign out
+        </button>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
-import { YEAR_CFG } from "../../constants/config";
 
 import Topbar from "../../components/Topbar/Topbar";
 import CandidateRow from "../../components/CandidateRow/CandidateRow";
@@ -11,26 +11,24 @@ import Drawer from "../../components/Drawer/Drawer";
 const API = "http://localhost:3000";
 
 export default function ScreenerPage() {
+  const { token } = useAuth();
+  const authedFetch = useAuthedFetch();
   const [resume, setResume] = useState(null);
   const [scores, setScores] = useState({});
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(null);   // total resumes to review
   const [reviewed, setReviewed] = useState(0);
   const [history, setHistory] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const panelRef = useRef(null);
 
-  useEffect(() => { fetchNext(); }, []);
-
-  async function fetchNext() {
+  const fetchNext = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API}/next-resume`);
+      const res = await authedFetch(`${API}/next-resume`);
       if (!res.ok) { setResume(null); return; }
       const data = await res.json();
       setResume(data);
-      setTotal(data.total ?? null);
       setScores({});
       setNotes("");
     } catch (e) {
@@ -39,7 +37,9 @@ export default function ScreenerPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [authedFetch]);
+
+  useEffect(() => { fetchNext(); }, [fetchNext]);
 
   async function handleAction(type) {
     const total_score = Object.values(scores).reduce((a, b) => a + b, 0);
@@ -50,7 +50,7 @@ export default function ScreenerPage() {
 
     // Post to server
     try {
-      await fetch(`${API}/reviews`, {
+      await authedFetch(`${API}/reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resume_id: resume.id, scores, notes, decision: type }),
@@ -69,12 +69,9 @@ export default function ScreenerPage() {
     }
   }
 
-  const rawYear = resume?.candidates?.year?.toLowerCase().replace(/\s/g, '');
-  const year = rawYear ? YEAR_CFG[rawYear] : null;
-
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "hidden" }}>
-      <Topbar reviewed={reviewed} total={total ?? reviewed + 1} onHistory={() => setDrawerOpen(true)} historyCount={history.length} />
+      <Topbar reviewed={reviewed} onHistory={() => setDrawerOpen(true)} historyCount={history.length} />
 
       <div style={{ flex: 1, overflow: "hidden", padding: "14px 22px 0", display: "flex", flexDirection: "column", gap: 12 }}>
         <CandidateRow resume={resume} />
@@ -89,7 +86,7 @@ export default function ScreenerPage() {
                 Loading resume…
               </div>
             ) : resume?.file_url ? (
-              <PdfViewer url={`http://localhost:3000/view/pdf?url=${encodeURIComponent(resume.file_url)}`} />
+              <PdfViewer url={`http://localhost:3000/view/pdf?url=${encodeURIComponent(resume.file_url)}`} authToken={token} />
             ) : (
               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.textGray, fontSize: 13 }}>No resume available</div>
             )}
