@@ -85,6 +85,55 @@ exports.login = async (req, res) => {
     }
 };
 
+exports.register = async (req, res) => {
+    const email = req.body.email?.trim().toLowerCase();
+    const password = req.body.password;
+    const firstName = req.body.first_name?.trim() || null;
+    const lastName = req.body.last_name?.trim() || null;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    try {
+        const passwordHash = await bcrypt.hash(password, 12);
+        const now = new Date().toISOString();
+
+        const { data: user, error } = await supabase
+            .from('users')
+            .insert({
+                email,
+                password_hash: passwordHash,
+                role: 'applicant',
+                first_name: firstName,
+                last_name: lastName,
+                last_login: now,
+            })
+            .select(USER_FIELDS)
+            .single();
+
+        if (error) {
+            if (error.code === '23505') {
+                return res.status(409).json({ error: 'An account already exists for this email' });
+            }
+
+            return res.status(500).json({ error: error.message });
+        }
+
+        return res.status(201).json({
+            token: createToken(user),
+            user: serializeUser(user),
+        });
+    } catch (err) {
+        console.error('Register error:', err.message);
+        return res.status(500).json({ error: 'Account creation failed' });
+    }
+};
+
 exports.me = (req, res) => {
     return res.json({ user: serializeUser(req.user) });
 };
