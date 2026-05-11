@@ -1,0 +1,24 @@
+{
+  "formId": "YOUR_FORM_ID_FROM_THE_EDIT_URL",
+  "fieldMap": {
+    "your_question_id_for_full_name": "name",
+    "your_question_id_for_email": "email",
+    "your_question_id_for_phone": "phone_number",
+    "your_question_id_for_major": "major",
+    "your_question_id_for_gpa": "gpa",
+    "your_question_id_for_year": "year",
+    "your_question_id_for_pronouns": "pronouns",
+    "your_question_id_for_urm": "urm",
+    "your_question_id_for_linkedin": "linkedin",
+    "your_question_id_for_gm": "gm",
+    "your_question_id_for_newbie_training": "newbie_training",
+    "your_question_id_for_why_consulting": "why_consulting",
+    "your_question_id_for_why_180dc": "why_180dc",
+    "your_question_id_for_why_social_impact": "why_social_impact",
+    "your_question_id_for_resume_upload": "resume_file_url",
+    "your_question_id_for_extenuating": "extenuating_circumstances",
+    "your_question_id_for_headshot": "headshot"
+  },
+  "resumeQuestionId": "optional_same_as_resume_upload_if_you_prefer_this_key",
+  "headshotQuestionId": "optional_same_as_headshot_if_you_prefer_this_key"
+}

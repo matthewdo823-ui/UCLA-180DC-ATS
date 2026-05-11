@@ -9,10 +9,16 @@ const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
 const cardLime = "#C0DD97";
 
+function hasNumericScore(value) {
+  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+}
+
 function scoreColor(score) {
-  if (score >= 90) return css.greenDark;
-  if (score >= 80) return "#4CAF50";
-  if (score >= 70) return css.amber;
+  if (!hasNumericScore(score)) return css.textGray;
+  const numeric = Number(score);
+  if (numeric >= 90) return css.greenDark;
+  if (numeric >= 80) return "#4CAF50";
+  if (numeric >= 70) return css.amber;
   return css.textGray;
 }
 
@@ -42,13 +48,14 @@ function titleCase(value) {
 }
 
 function formatScore(value) {
-  const numeric = Number(value) || 0;
+  if (!hasNumericScore(value)) return "N/A";
+  const numeric = Number(value);
   return Number.isInteger(numeric) ? numeric : numeric.toFixed(1);
 }
 
 function normalizeMetricScore(candidate, metric) {
   const value = candidate?.categoryScores?.[metric];
-  return Number.isFinite(Number(value)) ? Number(value) : 0;
+  return hasNumericScore(value) ? Number(value) : null;
 }
 
 function getMaxScore(candidate) {
@@ -56,11 +63,15 @@ function getMaxScore(candidate) {
 }
 
 function getAggregateScore(candidate) {
-  if (Number.isFinite(Number(candidate?.aggregateScore))) {
+  if (hasNumericScore(candidate?.aggregateScore)) {
     return Number(candidate.aggregateScore);
   }
 
-  return ((Number(candidate?.score) || 0) / 100) * getMaxScore(candidate);
+  if (hasNumericScore(candidate?.score)) {
+    return (Number(candidate.score) / 100) * getMaxScore(candidate);
+  }
+
+  return null;
 }
 
 function ReviewerStack({ reviews }) {
@@ -100,7 +111,7 @@ function ReviewerStack({ reviews }) {
 }
 
 function ScoreTiles({ score, maxScore }) {
-  const filled = Math.round(score);
+  const filled = hasNumericScore(score) ? Math.round(Number(score)) : 0;
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 2 }}>
       {Array.from({ length: maxScore }).map((_, index) => (
@@ -119,7 +130,7 @@ function ScoreTiles({ score, maxScore }) {
 }
 
 function CategoryRow({ metric, value }) {
-  const pct = Math.max(0, Math.min(100, (value / 6) * 100));
+  const pct = hasNumericScore(value) ? Math.max(0, Math.min(100, (Number(value) / 6) * 100)) : 0;
 
   return (
     <div style={{ marginBottom: 9 }}>
@@ -416,7 +427,7 @@ export default function ScoreboardPage() {
             </div>
 
             <div>
-              <div style={{ color: scoreColor(c.score), fontSize: 18, fontFamily: serifFont, fontWeight: 600 }}>{c.score}</div>
+              <div style={{ color: scoreColor(c.score), fontSize: 18, fontFamily: serifFont, fontWeight: 600 }}>{formatScore(c.score)}</div>
               <div style={{ fontSize: 11, color: css.textGray }}>
                 {formatScore(getAggregateScore(c))} / {getMaxScore(c)} · {c.numReviews ?? c.reviews?.length ?? 0} {(c.numReviews ?? c.reviews?.length ?? 0) === 1 ? "review" : "reviews"}
               </div>
