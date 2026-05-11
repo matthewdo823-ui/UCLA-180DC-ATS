@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useAuthedFetch } from "../../auth/AuthContext";
 import { METRICS, MAX_SCORE } from "../../constants/config";
 import { css } from "../../theme/colors";
 
@@ -321,6 +322,7 @@ const chipStyle = {
 };
 
 export default function ScoreboardPage() {
+  const authedFetch = useAuthedFetch();
   const [data, setData] = useState({ stats: null, candidates: [] });
   const [loading, setLoading] = useState(true);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
@@ -328,7 +330,7 @@ export default function ScoreboardPage() {
   useEffect(() => {
     async function fetchScoreboard() {
       try {
-        const res = await fetch(`${API}/scoreboard`);
+        const res = await authedFetch(`${API}/scoreboard`);
         if (res.ok) {
           const json = await res.json();
           setData(json);
@@ -340,7 +342,7 @@ export default function ScoreboardPage() {
       }
     }
     fetchScoreboard();
-  }, []);
+  }, [authedFetch]);
 
   const candidates = useMemo(() => data.candidates ?? [], [data.candidates]);
 

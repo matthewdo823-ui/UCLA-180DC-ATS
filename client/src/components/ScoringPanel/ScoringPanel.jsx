@@ -3,7 +3,7 @@ import { METRICS, MAX_SCORE } from "../../constants/config";
 import MetricRow from "./MetricRow";
 import ActionBtn from "./ActionBtn";
 
-export default function ScoringPanel({ resume, scores, onScore, notes, onNotes, onAction }) {
+export default function ScoringPanel({ scores, onScore, notes, onNotes, onAction }) {
   const total = Object.values(scores).reduce((a, b) => a + b, 0);
   const scoreColor = total >= MAX_SCORE * 0.75 ? css.greenDark : total >= MAX_SCORE * 0.5 ? css.amber : css.red;
 

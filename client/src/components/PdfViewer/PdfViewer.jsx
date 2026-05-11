@@ -22,7 +22,7 @@ function PageCanvas({ page, viewport }) {
   );
 }
 
-export default function PdfViewer({ url }) {
+export default function PdfViewer({ url, authToken }) {
   const containerRef = useRef(null);
   const [pages, setPages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +55,10 @@ export default function PdfViewer({ url }) {
       if (!window.pdfjsLib) { setError("PDF.js failed to load"); setLoading(false); return; }
 
       try {
-        const pdf = await window.pdfjsLib.getDocument(url).promise;
+        const source = authToken
+          ? { url, httpHeaders: { Authorization: `Bearer ${authToken}` } }
+          : url;
+        const pdf = await window.pdfjsLib.getDocument(source).promise;
         if (cancelled) return;
 
         const pageDataArr = [];
@@ -65,14 +68,14 @@ export default function PdfViewer({ url }) {
           pageDataArr.push({ page, viewport });
         }
         if (!cancelled) { setPages(pageDataArr); setLoading(false); }
-      } catch (e) {
+      } catch {
         if (!cancelled) { setError("Could not render PDF"); setLoading(false); }
       }
     }
 
     renderPdf();
     return () => { cancelled = true; };
-  }, [url]);
+  }, [authToken, url]);
 
   return (
     <div ref={containerRef} style={{ flex: 1, overflowY: "auto", background: "transparent", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "0", scrollbarWidth: "thin", scrollbarColor: `${css.borderLight} transparent` }}>

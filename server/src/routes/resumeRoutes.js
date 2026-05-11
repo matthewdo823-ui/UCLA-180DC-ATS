@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const resumeController = require('../controllers/resumeController');
+const { authenticateToken, requireRoles } = require('../middleware/authMiddleware');
+
+router.use(authenticateToken, requireRoles('admin', 'member'));
 
 router.get('/next-resume', resumeController.getNextResume);
 router.post('/reviews', resumeController.saveReview);
