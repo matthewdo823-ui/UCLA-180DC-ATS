@@ -180,6 +180,28 @@ exports.viewPdf = async (req, res) => {
 // Gets scoreboard data
 exports.getScoreboard = async (req, res) => {
     try {
+        const { data: resumes, error: resumeError } = await supabase
+            .from('resumes')
+            .select(`
+                id,
+                name,
+                created_at,
+                candidates (
+                    email,
+                    phone_number,
+                    major,
+                    gpa,
+                    year,
+                    pronouns,
+                    linkedin,
+                    gm,
+                    newbie_training
+                )
+            `)
+            .order('created_at', { ascending: true });
+
+        if (resumeError) throw resumeError;
+
         const { data: reviews, error: reviewError } = await supabase
             .from('resume_reviews')
             .select(`
@@ -205,17 +227,34 @@ exports.getScoreboard = async (req, res) => {
 
         const reviewerLookup = await getReviewerLookup((reviews || []).map(review => review.id));
 
-        const { count: totalApplicants, error: countError } = await supabase
-            .from('resumes')
-            .select('*', { count: 'exact', head: true });
-            
-        if (countError) throw countError;
-
         const candidateMap = {};
         let totalScoreSum = 0;
         let reviewCount = 0;
 
-        reviews.forEach(review => {
+        (resumes || []).forEach(resume => {
+            const candidate = resume.candidates || {};
+            candidateMap[resume.id] = {
+                id: resume.id,
+                name: resume.name || 'Unknown',
+                email: candidate.email || '',
+                phoneNumber: candidate.phone_number || '',
+                major: candidate.major || 'Undeclared',
+                gpa: candidate.gpa || '',
+                year: candidate.year || '',
+                pronouns: candidate.pronouns || '',
+                linkedin: candidate.linkedin || '',
+                gm: candidate.gm || '',
+                newbieTraining: candidate.newbie_training || '',
+                createdAt: resume.created_at,
+                totalScore: 0,
+                numReviews: 0,
+                categoryTotals: {},
+                categoryCounts: {},
+                reviews: [],
+            };
+        });
+
+        (reviews || []).forEach(review => {
             if (!review.resumes) return;
             const resumeId = review.resumes.id;
             
@@ -238,6 +277,7 @@ exports.getScoreboard = async (req, res) => {
                     linkedin: candidate.linkedin || '',
                     gm: candidate.gm || '',
                     newbieTraining: candidate.newbie_training || '',
+                    createdAt: null,
                     totalScore: 0,
                     numReviews: 0,
                     categoryTotals: {},
@@ -269,11 +309,11 @@ exports.getScoreboard = async (req, res) => {
         });
 
         const candidates = Object.values(candidateMap).map(c => {
-            const aggregateScore = c.numReviews > 0 ? c.totalScore / c.numReviews : 0;
+            const aggregateScore = c.numReviews > 0 ? c.totalScore / c.numReviews : null;
             const categoryScores = SCORE_METRICS.reduce((acc, metric) => {
                 const count = c.categoryCounts[metric] || 0;
                 const total = c.categoryTotals[metric] || 0;
-                acc[metric] = count > 0 ? Number((total / count).toFixed(1)) : 0;
+                acc[metric] = count > 0 ? Number((total / count).toFixed(1)) : null;
                 return acc;
             }, {});
 
@@ -289,25 +329,33 @@ exports.getScoreboard = async (req, res) => {
                 linkedin: c.linkedin,
                 gm: c.gm,
                 newbieTraining: c.newbieTraining,
-                aggregateScore: Number(aggregateScore.toFixed(1)),
+                aggregateScore: aggregateScore === null ? null : Number(aggregateScore.toFixed(1)),
                 maxScore: 24,
                 categoryScores,
                 numReviews: c.numReviews,
                 reviews: c.reviews.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt)),
-                score: Math.round(aggregateScore * (100 / 24))
+                score: aggregateScore === null ? null : Math.round(aggregateScore * (100 / 24)),
+                createdAt: c.createdAt
             };
         });
 
-        candidates.sort((a, b) => b.score - a.score);
+        candidates.sort((a, b) => {
+            if (a.score === null && b.score === null) {
+                return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+            }
+            if (a.score === null) return 1;
+            if (b.score === null) return -1;
+            return b.score - a.score;
+        });
         candidates.forEach((c, index) => c.rank = index + 1);
 
-        const totalReviewed = candidates.length;
+        const totalReviewed = candidates.filter(c => c.numReviews > 0).length;
         const avgScore = reviewCount > 0 ? (totalScoreSum / reviewCount * (100 / 24)).toFixed(1) : 0;
         const advancedCount = candidates.filter(c => c.score >= 80).length;
 
         res.json({
             stats: {
-                applicants: totalApplicants || 0,
+                applicants: candidates.length,
                 reviewed: totalReviewed,
                 advanced: advancedCount,
                 avgScore: avgScore

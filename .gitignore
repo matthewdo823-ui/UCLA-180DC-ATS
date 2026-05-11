@@ -1,3 +1,11 @@
 ./server.env
 .node_modules
 ./node_modules
+
+# Google Forms sync (secrets / local config)
+server/form-config.json
+*-sa.json
+*.sa.json
+google-credentials.json
+**/google-service-account*.json
+server/gcp/my-service-account.json
