@@ -4,15 +4,20 @@ import { useAuth } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
 
 export default function LoginPage() {
-  const { login, user, loading, isStaff } = useAuth();
+  const { login, createAccount, user, loading, isStaff } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [mode, setMode] = useState("login");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const redirectTo = location.state?.from?.pathname || "/";
+  const isCreateMode = mode === "create";
 
   useEffect(() => {
     if (loading || !user) return;
@@ -25,7 +30,13 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
-      const loggedInUser = await login({ email, password });
+      if (isCreateMode && password !== confirmPassword) {
+        throw new Error("Passwords do not match");
+      }
+
+      const loggedInUser = isCreateMode
+        ? await createAccount({ email, password, first_name: firstName, last_name: lastName })
+        : await login({ email, password });
       const canAccessApp = loggedInUser?.role === "admin" || loggedInUser?.role === "member";
       navigate(canAccessApp ? redirectTo : "/no-access", { replace: true });
     } catch (err) {
@@ -67,10 +78,43 @@ export default function LoginPage() {
           </svg>
         </div>
 
-        <h1 style={{ fontSize: 26, margin: "0 0 8px", letterSpacing: "-0.03em" }}>Sign in</h1>
+        <h1 style={{ fontSize: 26, margin: "0 0 8px", letterSpacing: "-0.03em" }}>
+          {isCreateMode ? "Create account" : "Sign in"}
+        </h1>
         <p style={{ fontSize: 14, color: css.textGray, marginBottom: 28 }}>
-          Use your ATS account to access resume screening.
+          {isCreateMode
+            ? "New accounts start as applicants until an admin updates their role."
+            : "Use your ATS account to access resume screening."}
         </p>
+
+        {isCreateMode && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            <div>
+              <label style={labelStyle} htmlFor="firstName">First name</label>
+              <input
+                id="firstName"
+                type="text"
+                autoComplete="given-name"
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+                style={inputStyle}
+                placeholder="First"
+              />
+            </div>
+            <div>
+              <label style={labelStyle} htmlFor="lastName">Last name</label>
+              <input
+                id="lastName"
+                type="text"
+                autoComplete="family-name"
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
+                style={inputStyle}
+                placeholder="Last"
+              />
+            </div>
+          </div>
+        )}
 
         <label style={labelStyle} htmlFor="email">Email</label>
         <input
@@ -96,6 +140,22 @@ export default function LoginPage() {
           placeholder="Password"
         />
 
+        {isCreateMode && (
+          <>
+            <label style={{ ...labelStyle, marginTop: 16 }} htmlFor="confirmPassword">Confirm password</label>
+            <input
+              id="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              required
+              style={inputStyle}
+              placeholder="Confirm password"
+            />
+          </>
+        )}
+
         {error && (
           <div style={{ marginTop: 16, color: css.red, background: "rgba(226,75,74,0.08)", border: "1px solid rgba(226,75,74,0.18)", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
             {error}
@@ -118,7 +178,29 @@ export default function LoginPage() {
             cursor: submitting ? "not-allowed" : "pointer",
           }}
         >
-          {submitting ? "Signing in..." : "Sign in"}
+          {submitting ? (isCreateMode ? "Creating account..." : "Signing in...") : (isCreateMode ? "Create account" : "Sign in")}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setMode(isCreateMode ? "login" : "create");
+            setError("");
+            setConfirmPassword("");
+          }}
+          style={{
+            width: "100%",
+            marginTop: 14,
+            border: "none",
+            background: "transparent",
+            color: css.greenDark,
+            padding: "8px 0",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          {isCreateMode ? "Already have an account? Sign in" : "Create new account"}
         </button>
       </form>
     </div>
