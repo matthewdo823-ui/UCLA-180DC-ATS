@@ -1,6 +1,6 @@
 import { css } from "../../theme/colors";
 
-export default function Topbar({ reviewed, total, onHistory, historyCount }) {
+export default function Topbar({ reviewed, onHistory, historyCount }) {
   return (
     <div style={{ height: 60, background: "transparent", borderBottom: `1px solid ${css.borderLight}`, display: "flex", alignItems: "center", padding: "0 24px", gap: 12, flexShrink: 0 }}>
       <span style={{ fontSize: 16, fontWeight: 700, color: css.greenDark, fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em" }}>180° Resume Screener</span>

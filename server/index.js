@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
+const authRoutes = require('./src/routes/authRoutes');
 const resumeRoutes = require('./src/routes/resumeRoutes');
 const { startFormsSyncCron } = require('./src/jobs/formsSyncCron');
 
@@ -11,6 +12,7 @@ app.use(express.json());
 app.use(cors());
 
 // Mount routes
+app.use('/auth', authRoutes);
 app.use('/', resumeRoutes);
 
 const PORT = process.env.PORT || 3000;

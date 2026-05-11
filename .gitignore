@@ -2,6 +2,9 @@
 server/.env
 .node_modules
 ./node_modules
+node_modules/
+server/node_modules/
+client/node_modules/
 
 # Google Forms sync (secrets / local config)
 server/form-config.json

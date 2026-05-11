@@ -72,3 +72,29 @@ $$;
 */
 
 /* id, resume id, scores, notes sbumitted_at*/
+
+
+CREATE TYPE user_role AS ENUM ('applicant', 'member', 'admin');
+
+CREATE TABLE users (
+    -- Unique identifier for each user
+    user_id SERIAL PRIMARY KEY,
+    
+    -- Authentication details
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    
+    -- Authorization / RBAC
+    role user_role NOT NULL DEFAULT 'applicant',
+    
+    -- Profile Information
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    
+    -- Metadata
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP WITH TIME ZONE
+);
+
+-- Index the email for faster login lookups
+CREATE INDEX idx_users_email ON users(email);
