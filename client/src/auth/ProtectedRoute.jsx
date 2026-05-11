@@ -4,6 +4,10 @@ import { useAuth } from "./AuthContext";
 
 const staffRoles = ["admin", "member"];
 
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
 function LoadingSession() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: css.bgLight, color: css.textGray, fontFamily: "'DM Sans', sans-serif" }}>
@@ -22,7 +26,7 @@ export default function ProtectedRoute({ children, allowedRoles = staffRoles }) 
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (!user || !allowedRoles.includes(user.role)) {
+  if (!user || !allowedRoles.includes(normalizeRole(user.role))) {
     return <Navigate to="/no-access" replace />;
   }
 
