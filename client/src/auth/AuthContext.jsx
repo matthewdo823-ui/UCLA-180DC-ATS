@@ -84,14 +84,34 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
+  const createAccount = useCallback(async ({ email, password, first_name, last_name }) => {
+    const res = await fetch(`${API}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, first_name, last_name }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(data.error || "Account creation failed");
+    }
+
+    storeToken(data.token);
+    setToken(data.token);
+    setUser(data.user);
+
+    return data.user;
+  }, []);
+
   const value = useMemo(() => ({
     token,
     user,
     loading,
     login,
+    createAccount,
     logout,
     isStaff: user?.role === "admin" || user?.role === "member",
-  }), [loading, login, logout, token, user]);
+  }), [createAccount, loading, login, logout, token, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
