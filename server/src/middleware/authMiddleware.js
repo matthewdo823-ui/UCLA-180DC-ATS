@@ -3,6 +3,10 @@ const supabase = require('../config/supabase');
 
 const USER_FIELDS = 'user_id, email, role, first_name, last_name, created_at, last_login';
 
+function normalizeRole(role) {
+    return String(role || '').trim().toLowerCase();
+}
+
 function getJwtSecret() {
     const secret = process.env.JWT_SECRET;
     if (!secret) {
@@ -48,7 +52,7 @@ function requireRoles(...roles) {
             return res.status(500).json({ error: 'Authenticated user missing from request' });
         }
 
-        if (!roles.includes(req.user.role)) {
+        if (!roles.includes(normalizeRole(req.user.role))) {
             return res.status(403).json({ error: 'Insufficient permissions' });
         }
 

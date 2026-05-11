@@ -17,6 +17,14 @@ function storeToken(token) {
   }
 }
 
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function isStaffRole(role) {
+  return normalizeRole(role) === "admin" || normalizeRole(role) === "member";
+}
+
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(getStoredToken);
   const [user, setUser] = useState(null);
@@ -110,7 +118,7 @@ export function AuthProvider({ children }) {
     login,
     createAccount,
     logout,
-    isStaff: user?.role === "admin" || user?.role === "member",
+    isStaff: isStaffRole(user?.role),
   }), [createAccount, loading, login, logout, token, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

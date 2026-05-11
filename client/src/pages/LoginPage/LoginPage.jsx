@@ -16,7 +16,10 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const redirectTo = location.state?.from?.pathname || "/";
+  const requestedPath = location.state?.from?.pathname;
+  const redirectTo = requestedPath && requestedPath !== "/login" && requestedPath !== "/no-access"
+    ? requestedPath
+    : "/";
   const isCreateMode = mode === "create";
 
   useEffect(() => {
@@ -37,7 +40,8 @@ export default function LoginPage() {
       const loggedInUser = isCreateMode
         ? await createAccount({ email, password, first_name: firstName, last_name: lastName })
         : await login({ email, password });
-      const canAccessApp = loggedInUser?.role === "admin" || loggedInUser?.role === "member";
+      const role = String(loggedInUser?.role || "").trim().toLowerCase();
+      const canAccessApp = role === "admin" || role === "member";
       navigate(canAccessApp ? redirectTo : "/no-access", { replace: true });
     } catch (err) {
       setError(err.message);

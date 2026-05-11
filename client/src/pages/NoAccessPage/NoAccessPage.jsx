@@ -1,8 +1,15 @@
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
 
 export default function NoAccessPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, isStaff } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isStaff) navigate("/", { replace: true });
+  }, [isStaff, navigate]);
 
   return (
     <div style={{
