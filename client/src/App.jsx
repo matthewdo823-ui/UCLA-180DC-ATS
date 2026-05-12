@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from "r
 import { AuthProvider } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import DashboardPage from "./pages/DashboardPage/DashboardPage";
+import FlaggedCandidatesPage from "./pages/FlaggedCandidatesPage/FlaggedCandidatesPage";
 import GraderScoreboardPage from "./pages/GraderScoreboardPage/GraderScoreboardPage";
 import LoginPage from "./pages/LoginPage/LoginPage";
 import NoAccessPage from "./pages/NoAccessPage/NoAccessPage";
@@ -56,6 +57,14 @@ function AppShell() {
             element={(
               <ProtectedRoute allowedRoles={["admin"]}>
                 <GraderScoreboardPage />
+              </ProtectedRoute>
+            )}
+          />
+          <Route
+            path="/flagged-candidates"
+            element={(
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <FlaggedCandidatesPage />
               </ProtectedRoute>
             )}
           />
