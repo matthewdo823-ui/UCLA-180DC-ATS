@@ -63,7 +63,6 @@ export default function ScoringPanel({ scores, onScore, notes, onNotes, onAction
       {/* Action buttons */}
       <div style={{ display: "flex", gap: 12 }}>
         {[
-          { type: "reject", label: "✕ Skip",    style: { borderColor: css.red,   color: css.red, bg: css.cardWhite,  hoverBg: "rgba(226,75,74,0.05)"  } },
           { type: "flag",   label: "⚑ Flag",    style: { borderColor: css.amber, color: css.amber, bg: css.cardWhite, hoverBg: "rgba(239,159,39,0.05)" } },
           { type: "pass",   label: "✓ Advance", style: { borderColor: css.greenDark, color: css.cardWhite, bg: css.greenDark, hoverBg: "#1F4E33" } },
         ].map(({ type, label, style }) => (
