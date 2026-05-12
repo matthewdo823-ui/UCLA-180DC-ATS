@@ -39,6 +39,13 @@ export default function Sidebar() {
           <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
         </svg>
       )
+    }, {
+      path: "/flagged-candidates", label: "Flags", icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+          <line x1="4" y1="22" x2="4" y2="15"></line>
+        </svg>
+      )
     }] : [])
   ];
 

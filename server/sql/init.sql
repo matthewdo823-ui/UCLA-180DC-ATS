@@ -98,3 +98,31 @@ CREATE TABLE users (
 
 -- Index the email for faster login lookups
 CREATE INDEX idx_users_email ON users(email);
+
+ALTER TABLE resume_reviews
+ADD COLUMN graded_by INT,
+ADD CONSTRAINT fk_graded_by
+    FOREIGN KEY (graded_by) 
+    REFERENCES users(user_id)
+    ON DELETE SET NULL;
+
+CREATE TYPE review_decision AS ENUM ('pass', 'flag', 'reject');
+ALTER TABLE resume_reviews
+ADD COLUMN decision review_decision NOT NULL DEFAULT 'pass';
+CREATE INDEX idx_resume_reviews_resume_decision
+ON resume_reviews(resume_id, decision);
+
+CREATE TABLE candidate_flags (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  candidate_id UUID NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  resume_id UUID REFERENCES resumes(id) ON DELETE SET NULL,
+  flagged_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at TIMESTAMPTZ,
+  CONSTRAINT chk_candidate_flags_status CHECK (status IN ('open', 'resolved'))
+);
+CREATE INDEX idx_candidate_flags_status ON candidate_flags(status);
+CREATE INDEX idx_candidate_flags_candidate_id ON candidate_flags(candidate_id);
+CREATE INDEX idx_candidate_flags_resume_id ON candidate_flags(resume_id);

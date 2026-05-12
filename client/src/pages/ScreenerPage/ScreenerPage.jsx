@@ -45,16 +45,20 @@ export default function ScreenerPage() {
     const total_score = Object.values(scores).reduce((a, b) => a + b, 0);
 
     // Save review to history
-    setHistory(h => [{ id: resume.id, year: resume.year, scores: { ...scores }, total: total_score, decision: type, notes: notes || "No notes added." }, ...h]);
+    setHistory(h => [{ id: resume.id, year: resume.candidates?.year, scores: { ...scores }, total: total_score, decision: type, notes: notes || "No notes added." }, ...h]);
     setReviewed(r => r + 1);
 
     // Post to server
     try {
-      await authedFetch(`${API}/reviews`, {
+      const res = await authedFetch(`${API}/reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resume_id: resume.id, scores, notes, decision: type }),
       });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.error || "Could not save review");
+      }
     } catch (e) { console.warn("Could not post review:", e); }
 
     // Animate out → fetch next → animate in

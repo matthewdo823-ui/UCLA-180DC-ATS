@@ -25,6 +25,7 @@ const REVIEWER_NAME_FIELDS = [
 const REVIEWER_EMAIL_FIELDS = ["email", "reviewer_email", "user_email"];
 const REVIEWER_JOIN_TABLES = ["reviewers", "resume_reviewers", "review_assignments"];
 const REVIEWER_REVIEW_ID_FIELDS = ["review_id", "resume_review_id", "resume_reviews_id"];
+const VALID_REVIEW_DECISIONS = new Set(["pass", "flag", "reject"]);
 
 function getReviewerName(review) {
     if (review.first_name || review.last_name) {
@@ -48,6 +49,10 @@ function getReviewerEmail(review) {
 
 function getReviewScore(scores = {}) {
     return Object.values(scores).reduce((total, value) => total + (Number(value) || 0), 0);
+}
+
+function getUserName(user = {}) {
+    return [user.first_name, user.last_name].filter(Boolean).join(" ") || user.email || null;
 }
 
 async function getReviewerLookup(reviewIds) {
@@ -119,11 +124,32 @@ exports.getNextResume = async (req, res) => {
 exports.saveReview = async (req, res) => {
     const { resume_id, scores, notes, decision } = req.body;
     const gradedBy = req.user?.user_id;
+    const normalizedDecision = VALID_REVIEW_DECISIONS.has(decision) ? decision : "pass";
+
+    if (!resume_id) {
+        return res.status(400).json({ error: "resume_id is required" });
+    }
+
+    let flaggedResume = null;
+    if (normalizedDecision === "flag") {
+        const { data, error } = await supabase
+            .from('resumes')
+            .select('id, candidate_id')
+            .eq('id', resume_id)
+            .maybeSingle();
+
+        if (error) return res.status(500).json({ error: error.message });
+        if (!data?.candidate_id) {
+            return res.status(400).json({ error: "Flagged resume is not linked to a candidate" });
+        }
+
+        flaggedResume = data;
+    }
 
     // storing review
     const { error: reviewError } = await supabase
         .from('resume_reviews')
-        .insert({ resume_id, scores, notes, graded_by: gradedBy });
+        .insert({ resume_id, scores, notes, decision: normalizedDecision, graded_by: gradedBy });
 
     if (reviewError) return res.status(500).json({ error: reviewError.message });
 
@@ -134,7 +160,160 @@ exports.saveReview = async (req, res) => {
 
     if (countError) return res.status(500).json({ error: countError.message });
 
+    if (flaggedResume) {
+        const { error: flagError } = await supabase
+            .from('candidate_flags')
+            .insert({
+                candidate_id: flaggedResume.candidate_id,
+                resume_id: flaggedResume.id,
+                flagged_by: gradedBy,
+                reason: notes || "Flagged during resume review",
+            });
+
+        if (flagError) return res.status(500).json({ error: flagError.message });
+    }
+
     return res.json({ success: true });
+};
+
+exports.createCandidateFlag = async (req, res) => {
+    const { candidate_id, resume_id, reason } = req.body;
+    let candidateId = candidate_id;
+
+    if (!candidateId && resume_id) {
+        const { data, error } = await supabase
+            .from('resumes')
+            .select('candidate_id')
+            .eq('id', resume_id)
+            .maybeSingle();
+
+        if (error) return res.status(500).json({ error: error.message });
+        candidateId = data?.candidate_id;
+    }
+
+    if (!candidateId) {
+        return res.status(400).json({ error: "candidate_id or a linked resume_id is required" });
+    }
+
+    const { data, error } = await supabase
+        .from('candidate_flags')
+        .insert({
+            candidate_id: candidateId,
+            resume_id: resume_id || null,
+            flagged_by: req.user?.user_id,
+            reason: reason || "Flagged for admin review",
+        })
+        .select('id')
+        .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    return res.status(201).json({ success: true, flag: data });
+};
+
+exports.getCandidateFlags = async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('candidate_flags')
+            .select(`
+                id,
+                candidate_id,
+                resume_id,
+                flagged_by,
+                reason,
+                status,
+                created_at,
+                resolved_at,
+                candidates (
+                    id,
+                    name,
+                    email,
+                    phone_number,
+                    major,
+                    gpa,
+                    year,
+                    pronouns,
+                    linkedin,
+                    gm,
+                    newbie_training,
+                    extenuating_circumstances
+                ),
+                resumes (
+                    id,
+                    name,
+                    file_url
+                ),
+                users (
+                    user_id,
+                    email,
+                    first_name,
+                    last_name
+                )
+            `)
+            .eq('status', 'open')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const flags = (data || []).map(flag => ({
+            id: flag.id,
+            candidateId: flag.candidate_id,
+            resumeId: flag.resume_id,
+            reason: flag.reason || '',
+            status: flag.status,
+            createdAt: flag.created_at,
+            resolvedAt: flag.resolved_at,
+            candidate: flag.candidates ? {
+                id: flag.candidates.id,
+                name: flag.candidates.name || 'Unknown',
+                email: flag.candidates.email || '',
+                phoneNumber: flag.candidates.phone_number || '',
+                major: flag.candidates.major || 'Undeclared',
+                gpa: flag.candidates.gpa || '',
+                year: flag.candidates.year || '',
+                pronouns: flag.candidates.pronouns || '',
+                linkedin: flag.candidates.linkedin || '',
+                gm: flag.candidates.gm || '',
+                newbieTraining: flag.candidates.newbie_training || '',
+                extenuatingCircumstances: flag.candidates.extenuating_circumstances || '',
+            } : null,
+            resume: flag.resumes ? {
+                id: flag.resumes.id,
+                name: flag.resumes.name || '',
+                fileUrl: flag.resumes.file_url || '',
+            } : null,
+            flaggedBy: flag.users ? {
+                id: flag.users.user_id,
+                name: getUserName(flag.users),
+                email: flag.users.email || '',
+            } : null,
+        }));
+
+        return res.json({
+            stats: {
+                openFlags: flags.length,
+                candidates: new Set(flags.map(flag => flag.candidateId).filter(Boolean)).size,
+            },
+            flags,
+        });
+    } catch (err) {
+        console.error("Candidate flags error:", err);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+exports.resolveCandidateFlag = async (req, res) => {
+    const { data, error } = await supabase
+        .from('candidate_flags')
+        .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+        .eq('id', req.params.id)
+        .select('id, status, resolved_at')
+        .maybeSingle();
+
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data) return res.status(404).json({ error: "Flag not found" });
+
+    return res.json({ success: true, flag: data });
 };
 
 // Gets file link from resume 
