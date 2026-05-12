@@ -3,6 +3,10 @@ const axios = require('axios');
 const { extractDriveFileID, toDownloadURL } = require('../utils/drive');
 
 const SCORE_METRICS = ["experience", "leadership", "social impact", "communication"];
+const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
+const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
+    ? configuredGraderReviewGoal
+    : 15;
 const REVIEWER_NAME_FIELDS = [
     "name",
     "full_name",
@@ -114,11 +118,12 @@ exports.getNextResume = async (req, res) => {
 // Saves review 
 exports.saveReview = async (req, res) => {
     const { resume_id, scores, notes, decision } = req.body;
+    const gradedBy = req.user?.user_id;
 
     // storing review
     const { error: reviewError } = await supabase
         .from('resume_reviews')
-        .insert({ resume_id, scores, notes });
+        .insert({ resume_id, scores, notes, graded_by: gradedBy });
 
     if (reviewError) return res.status(500).json({ error: reviewError.message });
 
@@ -365,6 +370,131 @@ exports.getScoreboard = async (req, res) => {
 
     } catch (err) {
         console.error("Scoreboard error:", err);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+// Gets admin-only grader scoreboard data
+exports.getGraderScoreboard = async (req, res) => {
+    try {
+        const { data: users, error: userError } = await supabase
+            .from('users')
+            .select('user_id, email, role, first_name, last_name, created_at, last_login')
+            .in('role', ['admin', 'member'])
+            .order('first_name', { ascending: true });
+
+        if (userError) throw userError;
+
+        const { data: reviews, error: reviewError } = await supabase
+            .from('resume_reviews')
+            .select(`
+                id,
+                graded_by,
+                scores,
+                notes,
+                submitted_at,
+                resumes (
+                    id,
+                    name
+                )
+            `)
+            .not('graded_by', 'is', null);
+
+        if (reviewError) throw reviewError;
+
+        const graderMap = {};
+        (users || []).forEach(user => {
+            const name = [user.first_name, user.last_name].filter(Boolean).join(' ');
+            graderMap[user.user_id] = {
+                id: user.user_id,
+                name: name || user.email,
+                email: user.email,
+                role: user.role,
+                createdAt: user.created_at,
+                lastLogin: user.last_login,
+                reviewCount: 0,
+                totalScore: 0,
+                categoryTotals: {},
+                categoryCounts: {},
+                reviews: [],
+            };
+        });
+
+        (reviews || []).forEach(review => {
+            const grader = graderMap[review.graded_by];
+            if (!grader) return;
+
+            const reviewScore = getReviewScore(review.scores);
+            grader.reviewCount++;
+            grader.totalScore += reviewScore;
+
+            Object.entries(review.scores || {}).forEach(([metric, value]) => {
+                const numericValue = Number(value) || 0;
+                grader.categoryTotals[metric] = (grader.categoryTotals[metric] || 0) + numericValue;
+                grader.categoryCounts[metric] = (grader.categoryCounts[metric] || 0) + 1;
+            });
+
+            grader.reviews.push({
+                id: review.id,
+                resumeId: review.resumes?.id || null,
+                resumeName: review.resumes?.name || 'Unknown resume',
+                scores: review.scores || {},
+                score: reviewScore,
+                notes: review.notes || '',
+                submittedAt: review.submitted_at,
+            });
+        });
+
+        const graders = Object.values(graderMap).map(grader => {
+            const averageScore = grader.reviewCount > 0 ? grader.totalScore / grader.reviewCount : null;
+            const categoryScores = SCORE_METRICS.reduce((acc, metric) => {
+                const count = grader.categoryCounts[metric] || 0;
+                const total = grader.categoryTotals[metric] || 0;
+                acc[metric] = count > 0 ? Number((total / count).toFixed(1)) : null;
+                return acc;
+            }, {});
+
+            const sortedReviews = grader.reviews.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+
+            return {
+                id: grader.id,
+                name: grader.name,
+                email: grader.email,
+                role: grader.role,
+                createdAt: grader.createdAt,
+                lastLogin: grader.lastLogin,
+                reviewCount: grader.reviewCount,
+                expectedReviews: GRADER_REVIEW_GOAL,
+                progressScore: Math.min(100, Math.round((grader.reviewCount / GRADER_REVIEW_GOAL) * 100)),
+                averageScore: averageScore === null ? null : Number(averageScore.toFixed(1)),
+                maxScore: 24,
+                categoryScores,
+                latestReviewAt: sortedReviews[0]?.submittedAt || null,
+                reviews: sortedReviews,
+            };
+        });
+
+        graders.sort((a, b) => {
+            if (b.reviewCount !== a.reviewCount) return b.reviewCount - a.reviewCount;
+            return a.name.localeCompare(b.name);
+        });
+        graders.forEach((grader, index) => grader.rank = index + 1);
+
+        const totalReviews = graders.reduce((total, grader) => total + grader.reviewCount, 0);
+        const activeGraders = graders.filter(grader => grader.reviewCount > 0).length;
+
+        res.json({
+            stats: {
+                graders: graders.length,
+                activeGraders,
+                totalReviews,
+                avgReviews: graders.length ? Number((totalReviews / graders.length).toFixed(1)) : 0,
+                expectedReviews: GRADER_REVIEW_GOAL,
+            },
+            graders,
+        });
+    } catch (err) {
+        console.error("Grader scoreboard error:", err);
         res.status(500).json({ error: err.message });
     }
 };
