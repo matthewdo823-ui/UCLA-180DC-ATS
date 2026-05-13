@@ -7,14 +7,31 @@ export default function ScoringPanel({ scores, onScore, notes, onNotes, onAction
   const total = Object.values(scores).reduce((a, b) => a + (Number(b) || 0), 0);
   const scoreColor = total >= MAX_SCORE * 0.75 ? css.greenDark : total >= MAX_SCORE * 0.5 ? css.amber : css.red;
 
-  const scoredCount = METRICS.filter((m) => {
-    const v = Number(scores[m]);
-    return Number.isFinite(v) && v >= 1 && v <= 6;
-  }).length;
-  const progressPct = (scoredCount / METRICS.length) * 100;
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", paddingBottom: 16, scrollbarWidth: "thin", scrollbarColor: `${css.borderLight} transparent` }}>
+      {/* Full rubric reference — placeholder at top so it stays in view */}
+      <div
+        style={{
+          background: "linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(249,250,251,0.98) 100%)",
+          border: `1px dashed ${css.borderLight}`,
+          borderRadius: 12,
+          padding: "14px 18px",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <span style={{ fontSize: 18, lineHeight: 1.2, flexShrink: 0 }} aria-hidden>📋</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: css.textDark, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 4 }}>
+              Detailed rubric — coming soon
+            </div>
+            <p style={{ fontSize: 12, color: css.textGray, lineHeight: 1.45, margin: 0 }}>
+              Written criteria and level-by-level guidance for each category will show here. For now, use the 1–6 sliders below and your judgment.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Metrics card */}
       <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: "20px 24px", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -81,70 +98,6 @@ export default function ScoringPanel({ scores, onScore, notes, onNotes, onAction
             onClick={() => onAction(type)}
           />
         ))}
-      </div>
-      {!scoringComplete ? (
-        <div
-          role="status"
-          style={{
-            marginTop: 2,
-            padding: "14px 16px",
-            borderRadius: 14,
-            border: "1px solid rgba(239,159,39,0.22)",
-            background: "linear-gradient(145deg, rgba(255,252,245,0.98) 0%, rgba(255,249,237,0.55) 100%)",
-            boxShadow: "0 2px 14px rgba(239,159,39,0.07)",
-            display: "flex",
-            gap: 14,
-            alignItems: "flex-start",
-          }}
-        >
-          <div
-            aria-hidden
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              background: "rgba(239,159,39,0.12)",
-              border: "1px solid rgba(239,159,39,0.2)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 18,
-              flexShrink: 0,
-            }}
-          >
-            ⚖️
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: css.textDark, letterSpacing: "-0.01em", marginBottom: 4 }}>
-              Finish scoring first
-            </div>
-            <p style={{ fontSize: 12, color: css.textGray, lineHeight: 1.5, margin: "0 0 10px" }}>
-              Choose a score from <strong style={{ color: css.greenDark, fontWeight: 700 }}>1–6</strong> on every category, then you can flag or advance this resume.
-            </p>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ flex: 1, height: 6, background: css.bgLight, borderRadius: 99, overflow: "hidden", border: `1px solid ${css.borderLight}` }}>
-                <div
-                  style={{
-                    height: "100%",
-                    width: `${progressPct}%`,
-                    borderRadius: 99,
-                    background: `linear-gradient(90deg, ${css.amber} 0%, ${css.greenDark} 100%)`,
-                    transition: "width 0.35s ease",
-                  }}
-                />
-              </div>
-              <span style={{ fontSize: 11, fontWeight: 700, color: css.textDark, fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap" }}>
-                {scoredCount}/{METRICS.length}
-              </span>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Placeholder card */}
-      <div style={{ background: css.bgLight, border: `1px dashed ${css.borderLight}`, borderRadius: 12, padding: 30, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: css.textGray, marginTop: 4 }}>
-        <span style={{ fontSize: 20, marginBottom: 8, opacity: 0.5 }}>📋</span>
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", opacity: 0.7 }}>Rubric — Coming Soon</span>
       </div>
     </div>
   );
