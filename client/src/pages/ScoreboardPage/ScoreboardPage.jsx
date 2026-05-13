@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { METRICS, MAX_SCORE } from "../../constants/config";
 import { css } from "../../theme/colors";
@@ -52,6 +52,184 @@ function formatScore(value) {
   if (!hasNumericScore(value)) return "N/A";
   const numeric = Number(value);
   return Number.isInteger(numeric) ? numeric : numeric.toFixed(1);
+}
+
+function uniqueSortedStrings(items) {
+  const set = new Set((items || []).map(s => String(s).trim()).filter(Boolean));
+  return [...set].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
+const defaultFilters = {
+  major: "all",
+  year: "all",
+  reviews: "all",
+  scoreBand: "all",
+};
+
+function countActiveFilters(filters) {
+  return Object.keys(defaultFilters).filter(key => filters[key] !== defaultFilters[key]).length;
+}
+
+function passesScoreBand(candidate, scoreBand) {
+  const n = candidate?.numReviews ?? candidate?.reviews?.length ?? 0;
+  const score = hasNumericScore(candidate?.score) ? Number(candidate.score) : null;
+
+  switch (scoreBand) {
+    case "top":
+      return score !== null && score >= 80;
+    case "strong":
+      return score !== null && score >= 70;
+    case "low":
+      return score !== null && score < 60 && n > 0;
+    case "pending":
+      return n === 0 || score === null;
+    default:
+      return true;
+  }
+}
+
+function passesReviewFilter(candidate, reviews) {
+  const n = candidate?.numReviews ?? candidate?.reviews?.length ?? 0;
+  switch (reviews) {
+    case "0":
+      return n === 0;
+    case "1":
+      return n === 1;
+    case "2+":
+      return n >= 2;
+    default:
+      return true;
+  }
+}
+
+function filterCandidates(list, filters) {
+  return list.filter(c => {
+    if (filters.major !== "all" && (c.major || "Undeclared") !== filters.major) return false;
+    if (filters.year !== "all" && String(c.year || "").trim() !== filters.year) return false;
+    if (!passesReviewFilter(c, filters.reviews)) return false;
+    if (!passesScoreBand(c, filters.scoreBand)) return false;
+    return true;
+  });
+}
+
+const SORT_TABS = [
+  { id: "performance_desc", label: "Score · high to low" },
+  { id: "performance_asc", label: "Score · low to high" },
+  { id: "last_review_desc", label: "Last grade · newest" },
+  { id: "last_review_asc", label: "Last grade · oldest" },
+  { id: "name_asc", label: "Name · A–Z" },
+  { id: "name_desc", label: "Name · Z–A" },
+  { id: "reviews_desc", label: "Reviews · most" },
+  { id: "reviews_asc", label: "Reviews · fewest" },
+  { id: "created_desc", label: "Applied · newest" },
+  { id: "created_asc", label: "Applied · oldest" },
+];
+
+function getNumReviews(c) {
+  return c?.numReviews ?? c?.reviews?.length ?? 0;
+}
+
+function getLastReviewMs(c) {
+  const reviews = c?.reviews ?? [];
+  let max = -Infinity;
+  for (const r of reviews) {
+    if (!r?.submittedAt) continue;
+    const t = new Date(r.submittedAt).getTime();
+    if (Number.isFinite(t) && t > max) max = t;
+  }
+  return max === -Infinity ? null : max;
+}
+
+function getCreatedMs(c) {
+  if (!c?.createdAt) return null;
+  const t = new Date(c.createdAt).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+function cmpName(a, b) {
+  return String(a?.name ?? "").localeCompare(String(b?.name ?? ""), undefined, { sensitivity: "base" });
+}
+
+function cmpId(a, b) {
+  return String(a.id).localeCompare(String(b.id));
+}
+
+function compareCandidates(a, b, sortBy) {
+  let primary = 0;
+
+  switch (sortBy) {
+    case "performance_desc": {
+      const as = hasNumericScore(a.score) ? Number(a.score) : null;
+      const bs = hasNumericScore(b.score) ? Number(b.score) : null;
+      if (as === null && bs === null) primary = (getCreatedMs(a) ?? 0) - (getCreatedMs(b) ?? 0);
+      else if (as === null) primary = 1;
+      else if (bs === null) primary = -1;
+      else primary = bs - as;
+      break;
+    }
+    case "performance_asc": {
+      const as = hasNumericScore(a.score) ? Number(a.score) : null;
+      const bs = hasNumericScore(b.score) ? Number(b.score) : null;
+      if (as === null && bs === null) primary = (getCreatedMs(a) ?? 0) - (getCreatedMs(b) ?? 0);
+      else if (as === null) primary = 1;
+      else if (bs === null) primary = -1;
+      else primary = as - bs;
+      break;
+    }
+    case "last_review_desc": {
+      const ta = getLastReviewMs(a);
+      const tb = getLastReviewMs(b);
+      if (ta === null && tb === null) primary = 0;
+      else if (ta === null) primary = 1;
+      else if (tb === null) primary = -1;
+      else primary = tb - ta;
+      break;
+    }
+    case "last_review_asc": {
+      const ta = getLastReviewMs(a);
+      const tb = getLastReviewMs(b);
+      if (ta === null && tb === null) primary = 0;
+      else if (ta === null) primary = -1;
+      else if (tb === null) primary = 1;
+      else primary = ta - tb;
+      break;
+    }
+    case "name_asc":
+      primary = cmpName(a, b);
+      break;
+    case "name_desc":
+      primary = cmpName(b, a);
+      break;
+    case "reviews_desc":
+      primary = getNumReviews(b) - getNumReviews(a);
+      break;
+    case "reviews_asc":
+      primary = getNumReviews(a) - getNumReviews(b);
+      break;
+    case "created_desc": {
+      const ta = getCreatedMs(a);
+      const tb = getCreatedMs(b);
+      if (ta === null && tb === null) primary = 0;
+      else if (ta === null) primary = 1;
+      else if (tb === null) primary = -1;
+      else primary = tb - ta;
+      break;
+    }
+    case "created_asc": {
+      const ta = getCreatedMs(a);
+      const tb = getCreatedMs(b);
+      if (ta === null && tb === null) primary = 0;
+      else if (ta === null) primary = 1;
+      else if (tb === null) primary = -1;
+      else primary = ta - tb;
+      break;
+    }
+    default:
+      primary = 0;
+  }
+
+  if (primary !== 0) return primary;
+  return cmpName(a, b) || cmpId(a, b);
 }
 
 function normalizeMetricScore(candidate, metric) {
@@ -321,11 +499,37 @@ const chipStyle = {
   fontWeight: 700,
 };
 
+const selectStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  borderRadius: 6,
+  border: `1px solid ${css.borderLight}`,
+  fontSize: 13,
+  fontFamily: "'DM Sans', sans-serif",
+  color: css.textDark,
+  background: "#FFF",
+  cursor: "pointer",
+};
+
+const sortTabBaseStyle = {
+  padding: "7px 12px",
+  borderRadius: 6,
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+  fontFamily: "'DM Sans', sans-serif",
+  whiteSpace: "nowrap",
+};
+
 export default function ScoreboardPage() {
   const authedFetch = useAuthedFetch();
   const [data, setData] = useState({ stats: null, candidates: [] });
   const [loading, setLoading] = useState(true);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState(() => ({ ...defaultFilters }));
+  const [sortBy, setSortBy] = useState("performance_desc");
+  const filterWrapRef = useRef(null);
 
   useEffect(() => {
     async function fetchScoreboard() {
@@ -344,7 +548,43 @@ export default function ScoreboardPage() {
     fetchScoreboard();
   }, [authedFetch]);
 
+  useEffect(() => {
+    if (!filtersOpen) return;
+    function onPointerDown(event) {
+      if (filterWrapRef.current && !filterWrapRef.current.contains(event.target)) {
+        setFiltersOpen(false);
+      }
+    }
+    function onKeyDown(event) {
+      if (event.key === "Escape") setFiltersOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [filtersOpen]);
+
   const candidates = useMemo(() => data.candidates ?? [], [data.candidates]);
+
+  const majorOptions = useMemo(
+    () => uniqueSortedStrings(candidates.map(c => c.major || "Undeclared")),
+    [candidates]
+  );
+
+  const yearOptions = useMemo(
+    () => uniqueSortedStrings(candidates.map(c => c.year).filter(Boolean)),
+    [candidates]
+  );
+
+  const filteredCandidates = useMemo(() => {
+    const filtered = filterCandidates(candidates, filters);
+    return [...filtered].sort((a, b) => compareCandidates(a, b, sortBy));
+  }, [candidates, filters, sortBy]);
+
+  const activeFilterCount = countActiveFilters(filters);
+  const sortLabel = SORT_TABS.find(t => t.id === sortBy)?.label ?? sortBy;
 
   return (
     <div style={{ minHeight: "100vh", background: "#FCFBFA", fontFamily: "'DM Sans', sans-serif", color: css.textDark }}>
@@ -363,28 +603,185 @@ export default function ScoreboardPage() {
           <span style={{ fontSize: 16, color: "rgba(255,255,255,0.5)", fontFamily: serifFont }}>›</span>
           <span style={{ fontSize: 16, fontWeight: 600, fontFamily: serifFont }}>Scoreboard</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div ref={filterWrapRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
           <button style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.4)", color: "#FFF", padding: "6px 16px", borderRadius: 6, fontSize: 13, cursor: "pointer", fontWeight: 500 }}>Export CSV</button>
-          <button style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.4)", color: "#FFF", padding: "6px 16px", borderRadius: 6, fontSize: 13, cursor: "pointer", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
+          <button
+            type="button"
+            aria-expanded={filtersOpen}
+            aria-haspopup="true"
+            onClick={() => setFiltersOpen(open => !open)}
+            style={{
+              background: filtersOpen ? "rgba(255,255,255,0.2)" : "transparent",
+              border: "1px solid rgba(255,255,255,0.4)",
+              color: "#FFF",
+              padding: "6px 16px",
+              borderRadius: 6,
+              fontSize: 13,
+              cursor: "pointer",
+              fontWeight: 500,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
             Filters
+            {activeFilterCount > 0 && (
+              <span style={{ background: "#FFF", color: css.greenDark, borderRadius: 10, minWidth: 20, height: 20, fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 6px" }}>
+                {activeFilterCount}
+              </span>
+            )}
           </button>
+
+          {filtersOpen && (
+            <div
+              role="dialog"
+              aria-label="Scoreboard filters"
+              style={{
+                position: "absolute",
+                right: 0,
+                top: "calc(100% + 10px)",
+                width: 300,
+                background: "#FFF",
+                borderRadius: 10,
+                boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
+                border: `1px solid ${css.borderLight}`,
+                padding: "16px 16px 12px",
+                zIndex: 50,
+                color: css.textDark,
+              }}
+            >
+              <p style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: css.textGray }}>FILTER BY</p>
+
+              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
+                Major
+                <select
+                  value={filters.major}
+                  onChange={e => setFilters(f => ({ ...f, major: e.target.value }))}
+                  style={{ ...selectStyle, marginTop: 4 }}
+                >
+                  <option value="all">All majors</option>
+                  {majorOptions.map(m => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
+                Year
+                <select
+                  value={filters.year}
+                  onChange={e => setFilters(f => ({ ...f, year: e.target.value }))}
+                  style={{ ...selectStyle, marginTop: 4 }}
+                >
+                  <option value="all">All years</option>
+                  {yearOptions.map(y => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
+                Reviews
+                <select
+                  value={filters.reviews}
+                  onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))}
+                  style={{ ...selectStyle, marginTop: 4 }}
+                >
+                  <option value="all">Any count</option>
+                  <option value="0">None yet (0)</option>
+                  <option value="1">Exactly 1</option>
+                  <option value="2+">2 or more</option>
+                </select>
+              </label>
+
+              <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
+                Score
+                <select
+                  value={filters.scoreBand}
+                  onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))}
+                  style={{ ...selectStyle, marginTop: 4 }}
+                >
+                  <option value="all">All scores</option>
+                  <option value="top">Top (≥ 80%)</option>
+                  <option value="strong">Strong (≥ 70%)</option>
+                  <option value="low">Low (&lt; 60%, reviewed)</option>
+                  <option value="pending">Pending / no score</option>
+                </select>
+              </label>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${css.borderLight}`, paddingTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setFilters({ ...defaultFilters })}
+                  style={{ background: "none", border: "none", color: css.greenDark, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}
+                >
+                  Clear all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(false)}
+                  style={{ background: css.greenDark, border: "none", color: "#FFF", padding: "6px 14px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+
           <button style={{ background: "#FFF", border: "none", color: css.textDark, width: 32, height: 32, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></svg>
           </button>
         </div>
       </div>
 
-      <div style={{ padding: "40px 48px 32px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24 }}>
+      <div style={{ padding: "40px 48px 32px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ fontFamily: serifFont, fontSize: 32, margin: "0 0 8px 0", color: "#111", fontWeight: 500 }}>Candidate Scoreboard</h1>
-          <div style={{ fontSize: 15, color: "#666" }}>Spring 2025 Cohort · Ranked by aggregate score</div>
+          <div style={{ fontSize: 15, color: "#666" }}>
+            Spring 2025 Cohort
+            <span style={{ display: "block", marginTop: 4, fontSize: 14, color: "#555" }}>Sorted by: {sortLabel}</span>
+            {activeFilterCount > 0 && (
+              <span style={{ display: "block", marginTop: 6, fontSize: 13, color: css.greenDark, fontWeight: 600 }}>
+                Showing {filteredCandidates.length} of {candidates.length} candidates
+              </span>
+            )}
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button style={{ background: css.greenDark, color: "#FFF", border: "none", padding: "6px 16px", borderRadius: 4, fontSize: 13, cursor: "pointer" }}>All</button>
-          <button style={filterButtonStyle}>Top Performers</button>
-          <button style={filterButtonStyle}>Flagged</button>
-          <button style={filterButtonStyle}>Pending</button>
+      </div>
+
+      <div style={{ padding: "0 48px 20px", maxWidth: 1200, margin: "0 auto" }}>
+        <p style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: css.textGray }}>SORT BY</p>
+        <div
+          role="tablist"
+          aria-label="Sort candidates"
+          style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}
+        >
+          {SORT_TABS.map(tab => {
+            const active = sortBy === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setSortBy(tab.id)}
+                style={{
+                  ...sortTabBaseStyle,
+                  background: active ? css.greenDark : "#FFF",
+                  color: active ? "#FFF" : css.textDark,
+                  border: active ? "none" : `1px solid ${css.borderLight}`,
+                  boxShadow: active ? "0 2px 8px rgba(8, 80, 65, 0.25)" : "none",
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -412,9 +809,17 @@ export default function ScoreboardPage() {
 
         {loading && <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading candidates...</div>}
 
-        {!loading && candidates.map(c => (
+        {!loading && candidates.length > 0 && filteredCandidates.length === 0 && (
+          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No candidates match these filters.</div>
+        )}
+
+        {!loading && candidates.length === 0 && (
+          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No candidates yet.</div>
+        )}
+
+        {!loading && filteredCandidates.map((c, index) => (
           <div key={c.id} style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "20px 0", borderBottom: "1px solid #EAEAEA", alignItems: "center", background: "#FFF" }}>
-            <div style={{ color: css.greenDark, fontWeight: 700, fontSize: 14 }}>{c.rank}</div>
+            <div style={{ color: css.greenDark, fontWeight: 700, fontSize: 14 }}>{index + 1}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
               <div style={{ width: 44, height: 44, background: css.greenDark, color: "#FFF", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
@@ -458,13 +863,3 @@ export default function ScoreboardPage() {
     </div>
   );
 }
-
-const filterButtonStyle = {
-  background: "#FFF",
-  color: css.textDark,
-  border: `1px solid ${css.borderLight}`,
-  padding: "6px 16px",
-  borderRadius: 4,
-  fontSize: 13,
-  cursor: "pointer",
-};
