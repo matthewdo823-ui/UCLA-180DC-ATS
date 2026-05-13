@@ -4,8 +4,14 @@ import MetricRow from "./MetricRow";
 import ActionBtn from "./ActionBtn";
 
 export default function ScoringPanel({ scores, onScore, notes, onNotes, onAction, scoringComplete = true }) {
-  const total = Object.values(scores).reduce((a, b) => a + b, 0);
+  const total = Object.values(scores).reduce((a, b) => a + (Number(b) || 0), 0);
   const scoreColor = total >= MAX_SCORE * 0.75 ? css.greenDark : total >= MAX_SCORE * 0.5 ? css.amber : css.red;
+
+  const scoredCount = METRICS.filter((m) => {
+    const v = Number(scores[m]);
+    return Number.isFinite(v) && v >= 1 && v <= 6;
+  }).length;
+  const progressPct = (scoredCount / METRICS.length) * 100;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", paddingBottom: 16, scrollbarWidth: "thin", scrollbarColor: `${css.borderLight} transparent` }}>
@@ -71,14 +77,67 @@ export default function ScoringPanel({ scores, onScore, notes, onNotes, onAction
             label={label}
             style={style}
             disabled={!scoringComplete}
-            title={!scoringComplete ? "Score all rubric categories (1–6) first" : undefined}
+            title={!scoringComplete ? "Rate each rubric category from 1 to 6 first" : undefined}
             onClick={() => onAction(type)}
           />
         ))}
       </div>
       {!scoringComplete ? (
-        <div style={{ fontSize: 11, color: css.amber, fontWeight: 600, marginTop: -4 }}>
-          Score every category before you can flag or advance.
+        <div
+          role="status"
+          style={{
+            marginTop: 2,
+            padding: "14px 16px",
+            borderRadius: 14,
+            border: "1px solid rgba(239,159,39,0.22)",
+            background: "linear-gradient(145deg, rgba(255,252,245,0.98) 0%, rgba(255,249,237,0.55) 100%)",
+            boxShadow: "0 2px 14px rgba(239,159,39,0.07)",
+            display: "flex",
+            gap: 14,
+            alignItems: "flex-start",
+          }}
+        >
+          <div
+            aria-hidden
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              background: "rgba(239,159,39,0.12)",
+              border: "1px solid rgba(239,159,39,0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 18,
+              flexShrink: 0,
+            }}
+          >
+            ⚖️
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: css.textDark, letterSpacing: "-0.01em", marginBottom: 4 }}>
+              Finish scoring first
+            </div>
+            <p style={{ fontSize: 12, color: css.textGray, lineHeight: 1.5, margin: "0 0 10px" }}>
+              Choose a score from <strong style={{ color: css.greenDark, fontWeight: 700 }}>1–6</strong> on every category, then you can flag or advance this resume.
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: 1, height: 6, background: css.bgLight, borderRadius: 99, overflow: "hidden", border: `1px solid ${css.borderLight}` }}>
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${progressPct}%`,
+                    borderRadius: 99,
+                    background: `linear-gradient(90deg, ${css.amber} 0%, ${css.greenDark} 100%)`,
+                    transition: "width 0.35s ease",
+                  }}
+                />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: css.textDark, fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap" }}>
+                {scoredCount}/{METRICS.length}
+              </span>
+            </div>
+          </div>
         </div>
       ) : null}
 

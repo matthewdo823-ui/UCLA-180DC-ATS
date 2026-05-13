@@ -8,6 +8,7 @@ router.use(authenticateToken, requireRoles('admin', 'member'));
 router.get('/next-resume', resumeController.getNextResume);
 router.get('/reviews', resumeController.listMyReviews);
 router.post('/reviews', resumeController.saveReview);
+router.patch('/reviews/:reviewId', resumeController.patchMyReview);
 router.post('/candidate-flags', resumeController.createCandidateFlag);
 router.get('/candidate-flags', requireRoles('admin'), resumeController.getCandidateFlags);
 router.patch('/candidate-flags/:id/resolve', requireRoles('admin'), resumeController.resolveCandidateFlag);
