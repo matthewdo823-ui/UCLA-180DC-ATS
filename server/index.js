@@ -12,7 +12,7 @@ const app = express();
 
 app.use(express.json());
 app.use(cors({
-    origin: 'https://ucla-180dc-ats.onrender.com'
+    origin: 'https://ucla-180-dc-ats.vercel.app'
   }));
 
 // Mount routes
