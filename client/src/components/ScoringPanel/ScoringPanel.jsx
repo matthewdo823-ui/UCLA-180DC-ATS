@@ -3,7 +3,7 @@ import { METRICS, MAX_SCORE } from "../../constants/config";
 import MetricRow from "./MetricRow";
 import ActionBtn from "./ActionBtn";
 
-export default function ScoringPanel({ scores, onScore, notes, onNotes, onAction }) {
+export default function ScoringPanel({ scores, onScore, notes, onNotes, onAction, scoringComplete = true }) {
   const total = Object.values(scores).reduce((a, b) => a + b, 0);
   const scoreColor = total >= MAX_SCORE * 0.75 ? css.greenDark : total >= MAX_SCORE * 0.5 ? css.amber : css.red;
 
@@ -66,9 +66,21 @@ export default function ScoringPanel({ scores, onScore, notes, onNotes, onAction
           { type: "flag",   label: "⚑ Flag",    style: { borderColor: css.amber, color: css.amber, bg: css.cardWhite, hoverBg: "rgba(239,159,39,0.05)" } },
           { type: "pass",   label: "✓ Advance", style: { borderColor: css.greenDark, color: css.cardWhite, bg: css.greenDark, hoverBg: "#1F4E33" } },
         ].map(({ type, label, style }) => (
-          <ActionBtn key={type} label={label} style={style} onClick={() => onAction(type)} />
+          <ActionBtn
+            key={type}
+            label={label}
+            style={style}
+            disabled={!scoringComplete}
+            title={!scoringComplete ? "Score all rubric categories (1–6) first" : undefined}
+            onClick={() => onAction(type)}
+          />
         ))}
       </div>
+      {!scoringComplete ? (
+        <div style={{ fontSize: 11, color: css.amber, fontWeight: 600, marginTop: -4 }}>
+          Score every category before you can flag or advance.
+        </div>
+      ) : null}
 
       {/* Placeholder card */}
       <div style={{ background: css.bgLight, border: `1px dashed ${css.borderLight}`, borderRadius: 12, padding: 30, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: css.textGray, marginTop: 4 }}>
