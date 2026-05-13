@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { METRICS, MAX_SCORE } from "../../constants/config";
 import { css } from "../../theme/colors";
+import Topbar, { topbarGhostButtonStyle } from "../../components/Topbar/Topbar";
 
 const API = "http://localhost:3000";
 const serifFont = "Georgia, 'Times New Roman', serif";
@@ -511,16 +512,6 @@ const selectStyle = {
   cursor: "pointer",
 };
 
-const sortTabBaseStyle = {
-  padding: "7px 12px",
-  borderRadius: 6,
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: "pointer",
-  fontFamily: "'DM Sans', sans-serif",
-  whiteSpace: "nowrap",
-};
-
 export default function ScoreboardPage() {
   const authedFetch = useAuthedFetch();
   const [data, setData] = useState({ stats: null, candidates: [] });
@@ -529,7 +520,17 @@ export default function ScoreboardPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState(() => ({ ...defaultFilters }));
   const [sortBy, setSortBy] = useState("performance_desc");
+  const [listMotionKey, setListMotionKey] = useState(0);
   const filterWrapRef = useRef(null);
+  const skipListMotionRef = useRef(true);
+
+  useEffect(() => {
+    if (skipListMotionRef.current) {
+      skipListMotionRef.current = false;
+      return;
+    }
+    setListMotionKey(k => k + 1);
+  }, [sortBy, filters.major, filters.year, filters.reviews, filters.scoreBand]);
 
   useEffect(() => {
     async function fetchScoreboard() {
@@ -584,229 +585,223 @@ export default function ScoreboardPage() {
   }, [candidates, filters, sortBy]);
 
   const activeFilterCount = countActiveFilters(filters);
-  const sortLabel = SORT_TABS.find(t => t.id === sortBy)?.label ?? sortBy;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#FCFBFA", fontFamily: "'DM Sans', sans-serif", color: css.textDark }}>
-      <div style={{ height: 64, background: css.greenDark, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", color: "#FFF" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 36, height: 36, background: "rgba(255,255,255,0.15)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="16" y1="13" x2="8" y2="13" />
-              <line x1="16" y1="17" x2="8" y2="17" />
-              <polyline points="10 9 9 9 8 9" />
-            </svg>
-          </div>
-          <span style={{ fontSize: 16, fontWeight: 500, fontFamily: serifFont }}>Resume Screener</span>
-          <span style={{ fontSize: 16, color: "rgba(255,255,255,0.5)", fontFamily: serifFont }}>›</span>
-          <span style={{ fontSize: 16, fontWeight: 600, fontFamily: serifFont }}>Scoreboard</span>
-        </div>
-        <div ref={filterWrapRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
-          <button style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.4)", color: "#FFF", padding: "6px 16px", borderRadius: 6, fontSize: 13, cursor: "pointer", fontWeight: 500 }}>Export CSV</button>
-          <button
-            type="button"
-            aria-expanded={filtersOpen}
-            aria-haspopup="true"
-            onClick={() => setFiltersOpen(open => !open)}
-            style={{
-              background: filtersOpen ? "rgba(255,255,255,0.2)" : "transparent",
-              border: "1px solid rgba(255,255,255,0.4)",
-              color: "#FFF",
-              padding: "6px 16px",
-              borderRadius: 6,
-              fontSize: 13,
-              cursor: "pointer",
-              fontWeight: 500,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
-            Filters
-            {activeFilterCount > 0 && (
-              <span style={{ background: "#FFF", color: css.greenDark, borderRadius: 10, minWidth: 20, height: 20, fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 6px" }}>
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-
-          {filtersOpen && (
-            <div
-              role="dialog"
-              aria-label="Scoreboard filters"
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "auto" }}>
+      <style>{`
+        @keyframes scoreboardPanelIn {
+          from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes scoreboardListRefresh {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      <Topbar
+        phaseLabel="Round 1 · Candidate scoreboard"
+        activeLabel="Live roster"
+        rightSlot={(
+          <div ref={filterWrapRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" style={topbarGhostButtonStyle}>
+              Export CSV
+            </button>
+            <button
+              type="button"
+              aria-expanded={filtersOpen}
+              aria-haspopup="true"
+              onClick={() => setFiltersOpen(open => !open)}
               style={{
-                position: "absolute",
-                right: 0,
-                top: "calc(100% + 10px)",
-                width: 300,
-                background: "#FFF",
-                borderRadius: 10,
-                boxShadow: "0 16px 48px rgba(0,0,0,0.18)",
-                border: `1px solid ${css.borderLight}`,
-                padding: "16px 16px 12px",
-                zIndex: 50,
-                color: css.textDark,
+                ...topbarGhostButtonStyle,
+                border: filtersOpen ? `1px solid ${css.greenDark}` : topbarGhostButtonStyle.border,
+                boxShadow: filtersOpen ? "0 2px 8px rgba(40, 98, 65, 0.12)" : topbarGhostButtonStyle.boxShadow,
               }}
             >
-              <p style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: css.textGray }}>FILTER BY</p>
-
-              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
-                Major
-                <select
-                  value={filters.major}
-                  onChange={e => setFilters(f => ({ ...f, major: e.target.value }))}
-                  style={{ ...selectStyle, marginTop: 4 }}
-                >
-                  <option value="all">All majors</option>
-                  {majorOptions.map(m => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
-                Year
-                <select
-                  value={filters.year}
-                  onChange={e => setFilters(f => ({ ...f, year: e.target.value }))}
-                  style={{ ...selectStyle, marginTop: 4 }}
-                >
-                  <option value="all">All years</option>
-                  {yearOptions.map(y => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
-                Reviews
-                <select
-                  value={filters.reviews}
-                  onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))}
-                  style={{ ...selectStyle, marginTop: 4 }}
-                >
-                  <option value="all">Any count</option>
-                  <option value="0">None yet (0)</option>
-                  <option value="1">Exactly 1</option>
-                  <option value="2+">2 or more</option>
-                </select>
-              </label>
-
-              <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
-                Score
-                <select
-                  value={filters.scoreBand}
-                  onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))}
-                  style={{ ...selectStyle, marginTop: 4 }}
-                >
-                  <option value="all">All scores</option>
-                  <option value="top">Top (≥ 80%)</option>
-                  <option value="strong">Strong (≥ 70%)</option>
-                  <option value="low">Low (&lt; 60%, reviewed)</option>
-                  <option value="pending">Pending / no score</option>
-                </select>
-              </label>
-
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${css.borderLight}`, paddingTop: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => setFilters({ ...defaultFilters })}
-                  style={{ background: "none", border: "none", color: css.greenDark, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}
-                >
-                  Clear all
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltersOpen(false)}
-                  style={{ background: css.greenDark, border: "none", color: "#FFF", padding: "6px 14px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          )}
-
-          <button style={{ background: "#FFF", border: "none", color: css.textDark, width: 32, height: 32, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></svg>
-          </button>
-        </div>
-      </div>
-
-      <div style={{ padding: "40px 48px 32px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ fontFamily: serifFont, fontSize: 32, margin: "0 0 8px 0", color: "#111", fontWeight: 500 }}>Candidate Scoreboard</h1>
-          <div style={{ fontSize: 15, color: "#666" }}>
-            Spring 2025 Cohort
-            <span style={{ display: "block", marginTop: 4, fontSize: 14, color: "#555" }}>Sorted by: {sortLabel}</span>
-            {activeFilterCount > 0 && (
-              <span style={{ display: "block", marginTop: 6, fontSize: 13, color: css.greenDark, fontWeight: 600 }}>
-                Showing {filteredCandidates.length} of {candidates.length} candidates
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }} aria-hidden>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M7 12h10M11 18h2" /></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
               </span>
+              Sort & filters
+              {activeFilterCount > 0 && (
+                <span style={{ background: css.greenDark, color: css.cardWhite, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: "2px 7px" }}>{activeFilterCount}</span>
+              )}
+            </button>
+
+            {filtersOpen && (
+              <div
+                role="dialog"
+                aria-label="Sort and filter scoreboard"
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: "calc(100% + 10px)",
+                  width: 300,
+                  background: css.cardWhite,
+                  borderRadius: 10,
+                  boxShadow: "0 16px 48px rgba(0,0,0,0.12)",
+                  border: `1px solid ${css.borderLight}`,
+                  padding: "16px 16px 12px",
+                  zIndex: 50,
+                  color: css.textDark,
+                  animation: "scoreboardPanelIn 0.22s ease-out",
+                }}
+              >
+                <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: css.textGray }}>SORT BY</p>
+                <label style={{ display: "block", marginBottom: 14, fontSize: 12, fontWeight: 600 }}>
+                  Order
+                  <select
+                    value={sortBy}
+                    onChange={e => setSortBy(e.target.value)}
+                    style={{ ...selectStyle, marginTop: 4 }}
+                  >
+                    {SORT_TABS.map(tab => (
+                      <option key={tab.id} value={tab.id}>
+                        {tab.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <p style={{ margin: "0 0 12px", paddingTop: 4, borderTop: `1px solid ${css.borderLight}`, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: css.textGray }}>FILTER BY</p>
+
+                <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
+                  Major
+                  <select
+                    value={filters.major}
+                    onChange={e => setFilters(f => ({ ...f, major: e.target.value }))}
+                    style={{ ...selectStyle, marginTop: 4 }}
+                  >
+                    <option value="all">All majors</option>
+                    {majorOptions.map(m => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
+                  Year
+                  <select
+                    value={filters.year}
+                    onChange={e => setFilters(f => ({ ...f, year: e.target.value }))}
+                    style={{ ...selectStyle, marginTop: 4 }}
+                  >
+                    <option value="all">All years</option>
+                    {yearOptions.map(y => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
+                  Reviews
+                  <select
+                    value={filters.reviews}
+                    onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))}
+                    style={{ ...selectStyle, marginTop: 4 }}
+                  >
+                    <option value="all">Any count</option>
+                    <option value="0">None yet (0)</option>
+                    <option value="1">Exactly 1</option>
+                    <option value="2+">2 or more</option>
+                  </select>
+                </label>
+
+                <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
+                  Score
+                  <select
+                    value={filters.scoreBand}
+                    onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))}
+                    style={{ ...selectStyle, marginTop: 4 }}
+                  >
+                    <option value="all">All scores</option>
+                    <option value="top">Top (≥ 80%)</option>
+                    <option value="strong">Strong (≥ 70%)</option>
+                    <option value="low">Low (&lt; 60%, reviewed)</option>
+                    <option value="pending">Pending / no score</option>
+                  </select>
+                </label>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${css.borderLight}`, paddingTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...defaultFilters })}
+                    style={{ background: "none", border: "none", color: css.greenDark, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}
+                  >
+                    Clear all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltersOpen(false)}
+                    style={{ background: css.greenDark, border: "none", color: "#FFF", padding: "6px 14px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
             )}
+          </div>
+        )}
+      />
+
+      <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}>
+        <div style={{ maxWidth: 640 }}>
+          <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>
+            Spring 2025 · Live roster
+          </p>
+          <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
+            <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${css.greenDark} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{ margin: 0, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: css.textDark }}>Candidate </span>
+                <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>scoreboard</span>
+              </h1>
+              <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
+                Round 1 resume reviews — refine the list with <strong style={{ fontWeight: 600, color: css.textDark }}>Sort & filters</strong> in the bar above.
+                {activeFilterCount > 0 && (
+                  <span style={{ display: "block", marginTop: 8, fontSize: 13, color: css.greenDark, fontWeight: 600 }}>
+                    Showing {filteredCandidates.length} of {candidates.length} candidates
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div style={{ padding: "0 48px 20px", maxWidth: 1200, margin: "0 auto" }}>
-        <p style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: css.textGray }}>SORT BY</p>
-        <div
-          role="tablist"
-          aria-label="Sort candidates"
-          style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}
-        >
-          {SORT_TABS.map(tab => {
-            const active = sortBy === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setSortBy(tab.id)}
-                style={{
-                  ...sortTabBaseStyle,
-                  background: active ? css.greenDark : "#FFF",
-                  color: active ? "#FFF" : css.textDark,
-                  border: active ? "none" : `1px solid ${css.borderLight}`,
-                  boxShadow: active ? "0 2px 8px rgba(8, 80, 65, 0.25)" : "none",
-                }}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div style={{ background: "#F2EFEB", borderTop: "1px solid #E4E0D9", borderBottom: "1px solid #E4E0D9", display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", padding: "20px 48px" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", padding: "18px 20px", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
         {[
           ["APPLICANTS", data.stats?.applicants ?? "—"],
           ["REVIEWED", data.stats?.reviewed ?? "—"],
           ["ADVANCED", data.stats?.advanced ?? "—"],
           ["AVG SCORE", data.stats?.avgScore ?? "—"],
         ].map(([label, value], index) => (
-          <div key={label} style={{ borderRight: index < 3 ? "1px solid #E4E0D9" : "none", padding: index ? "4px 0 4px 32px" : "4px 0" }}>
-            <div style={{ fontSize: 28, fontFamily: serifFont, color: "#111", lineHeight: 1.1 }}>{value}</div>
-            <div style={{ fontSize: 11, color: "#777", fontWeight: 600, letterSpacing: "0.05em", marginTop: 4 }}>{label}</div>
+          <div key={label} style={{ borderRight: index < 3 ? `1px solid ${css.borderLight}` : "none", padding: index ? "4px 0 4px 24px" : "4px 0" }}>
+            <div style={{ fontSize: 24, fontFamily: "'DM Sans', sans-serif", color: css.textDark, lineHeight: 1.1, fontWeight: 700 }}>{value}</div>
+            <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.06em", marginTop: 4 }}>{label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ padding: "0 48px 60px", maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "16px 0", borderBottom: "2px solid #E4E0D9", color: "#888", fontSize: 11, fontWeight: 600, letterSpacing: "0.05em" }}>
+      <div style={{ padding: "0 0 48px", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+        <div style={{ border: `1px solid ${css.borderLight}`, borderRadius: 10, overflow: "hidden", background: css.cardWhite, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "16px 20px", borderBottom: `2px solid ${css.borderLight}`, color: css.textGray, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
           <div>#</div>
           <div>CANDIDATE</div>
           <div>SCORE</div>
           <div style={{ textAlign: "right" }}>ACTIONS</div>
         </div>
 
+        <div
+          key={listMotionKey}
+          style={{
+            animation: listMotionKey > 0 ? "scoreboardListRefresh 0.38s cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+          }}
+        >
         {loading && <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading candidates...</div>}
 
         {!loading && candidates.length > 0 && filteredCandidates.length === 0 && (
@@ -818,7 +813,7 @@ export default function ScoreboardPage() {
         )}
 
         {!loading && filteredCandidates.map((c, index) => (
-          <div key={c.id} style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "20px 0", borderBottom: "1px solid #EAEAEA", alignItems: "center", background: "#FFF" }}>
+          <div key={c.id} style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "20px 20px", borderBottom: `1px solid ${css.borderLight}`, alignItems: "center", background: css.cardWhite }}>
             <div style={{ color: css.greenDark, fontWeight: 700, fontSize: 14 }}>{index + 1}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
@@ -855,6 +850,9 @@ export default function ScoreboardPage() {
             </div>
           </div>
         ))}
+        </div>
+        </div>
+      </div>
       </div>
 
       {selectedCandidate && (

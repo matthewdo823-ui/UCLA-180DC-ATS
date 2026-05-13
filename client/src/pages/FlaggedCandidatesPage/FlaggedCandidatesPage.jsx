@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
+import Topbar, { topbarGhostButtonStyle, topbarStatCircleStyle } from "../../components/Topbar/Topbar";
 
 const API = "http://localhost:3000";
 const serifFont = "Georgia, 'Times New Roman', serif";
@@ -115,29 +116,29 @@ export default function FlaggedCandidatesPage() {
   const [error, setError] = useState("");
   const [resolvingId, setResolvingId] = useState(null);
 
-  useEffect(() => {
-    async function fetchFlags() {
-      try {
-        setLoading(true);
-        setError("");
-        const res = await authedFetch(`${API}/candidate-flags`);
-        const json = await res.json().catch(() => ({}));
+  const loadFlags = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const res = await authedFetch(`${API}/candidate-flags`);
+      const json = await res.json().catch(() => ({}));
 
-        if (!res.ok) {
-          throw new Error(json.error || "Failed to load flagged candidates");
-        }
-
-        setFlags(json.flags || []);
-      } catch (err) {
-        console.error("Failed to load candidate flags:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to load flagged candidates");
       }
-    }
 
-    fetchFlags();
+      setFlags(json.flags || []);
+    } catch (err) {
+      console.error("Failed to load candidate flags:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, [authedFetch]);
+
+  useEffect(() => {
+    loadFlags();
+  }, [loadFlags]);
 
   const uniqueCandidateCount = useMemo(
     () => new Set(flags.map(flag => flag.candidateId).filter(Boolean)).size,
@@ -166,38 +167,44 @@ export default function FlaggedCandidatesPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#FCFBFA", fontFamily: "'DM Sans', sans-serif", color: css.textDark }}>
-      <div style={{ height: 64, background: css.greenDark, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", color: "#FFF" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 36, height: 36, background: "rgba(255,255,255,0.15)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: cardPale, fontWeight: 800 }}>
-            ⚑
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "auto" }}>
+      <Topbar
+        phaseLabel="Admin · Flagged candidates"
+        activeLabel="Open queue"
+        rightSlot={(
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" style={topbarGhostButtonStyle} onClick={() => loadFlags()} aria-label="Refresh list">
+              Refresh
+            </button>
+            <div style={topbarStatCircleStyle}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: css.greenDark, lineHeight: 1 }}>{flags.length}</span>
+              <span style={{ fontSize: 7, fontWeight: 700, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.02em", marginTop: 1 }}>open</span>
+            </div>
           </div>
-          <span style={{ fontSize: 16, fontWeight: 500, fontFamily: serifFont }}>Resume Screener</span>
-          <span style={{ fontSize: 16, color: "rgba(255,255,255,0.5)", fontFamily: serifFont }}>›</span>
-          <span style={{ fontSize: 16, fontWeight: 600, fontFamily: serifFont }}>Flagged Candidates</span>
-        </div>
-      </div>
+        )}
+      />
 
-      <div style={{ padding: "40px 48px 28px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24 }}>
+      <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontFamily: serifFont, fontSize: 32, margin: "0 0 8px", color: "#111", fontWeight: 500 }}>Flagged Candidates</h1>
-          <div style={{ fontSize: 15, color: "#666" }}>Open admin review queue for candidate flags</div>
+          <h1 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 22, margin: "0 0 6px", color: css.textDark, fontWeight: 700, letterSpacing: "-0.02em" }}>Flagged candidates</h1>
+          <div style={{ fontSize: 13, color: css.textGray }}>Open admin review queue for candidate flags</div>
         </div>
       </div>
 
-      <div style={{ background: "#F2EFEB", borderTop: "1px solid #E4E0D9", borderBottom: "1px solid #E4E0D9", display: "grid", gridTemplateColumns: "1fr 1fr", padding: "20px 48px" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr", padding: "18px 20px", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
         {[
           ["OPEN FLAGS", flags.length],
           ["FLAGGED CANDIDATES", uniqueCandidateCount],
         ].map(([label, value], index) => (
-          <div key={label} style={{ borderRight: index === 0 ? "1px solid #E4E0D9" : "none", padding: index ? "4px 0 4px 32px" : "4px 0" }}>
-            <div style={{ fontSize: 28, fontFamily: serifFont, color: "#111", lineHeight: 1.1 }}>{value}</div>
-            <div style={{ fontSize: 11, color: "#777", fontWeight: 600, letterSpacing: "0.05em", marginTop: 4 }}>{label}</div>
+          <div key={label} style={{ borderRight: index === 0 ? `1px solid ${css.borderLight}` : "none", padding: index ? "4px 0 4px 24px" : "4px 0" }}>
+            <div style={{ fontSize: 24, fontFamily: "'DM Sans', sans-serif", color: css.textDark, lineHeight: 1.1, fontWeight: 700 }}>{value}</div>
+            <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.06em", marginTop: 4 }}>{label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ padding: "28px 48px 60px", maxWidth: 1080, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ padding: "0 0 48px", maxWidth: 1080, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
         {loading && <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading flagged candidates...</div>}
 
         {!loading && error && (
@@ -223,6 +230,7 @@ export default function FlaggedCandidatesPage() {
             resolving={resolvingId === flag.id}
           />
         ))}
+      </div>
       </div>
     </div>
   );
