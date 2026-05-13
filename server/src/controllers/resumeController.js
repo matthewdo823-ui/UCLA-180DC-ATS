@@ -103,6 +103,32 @@ function getUserName(user = {}) {
     return [user.first_name, user.last_name].filter(Boolean).join(" ") || user.email || null;
 }
 
+/** Map graded_by (users.user_id) → display name/email for scoreboard rows. */
+async function getGradedByUserLookup(gradedByIds) {
+    const unique = [...new Set((gradedByIds || []).filter(Boolean))];
+    const lookup = {};
+    if (!unique.length) return lookup;
+
+    const { data, error } = await supabase
+        .from("users")
+        .select("user_id, email, first_name, last_name")
+        .in("user_id", unique);
+
+    if (error) {
+        console.warn("getGradedByUserLookup:", error.message);
+        return lookup;
+    }
+
+    (data || []).forEach(user => {
+        lookup[user.user_id] = {
+            name: getUserName(user),
+            email: user.email || null,
+        };
+    });
+
+    return lookup;
+}
+
 async function getReviewerLookup(reviewIds) {
     const lookup = {};
     if (!reviewIds.length) return lookup;
@@ -594,6 +620,7 @@ exports.getScoreboard = async (req, res) => {
         if (reviewError) throw reviewError;
 
         const reviewerLookup = await getReviewerLookup((reviews || []).map(review => review.id));
+        const gradedByUserLookup = await getGradedByUserLookup((reviews || []).map(review => review.graded_by));
 
         const candidateMap = {};
         let totalScoreSum = 0;
@@ -665,12 +692,22 @@ exports.getScoreboard = async (req, res) => {
                     (candidateMap[resumeId].categoryCounts[metric] || 0) + 1;
             });
 
+            const graderFromUsers = review.graded_by != null ? gradedByUserLookup[review.graded_by] : null;
+
             candidateMap[resumeId].reviews.push({
                 id: review.id,
                 scores: review.scores || {},
                 score: reviewScore,
-                reviewerName: getReviewerName(review) || reviewerLookup[review.id]?.name || null,
-                reviewerEmail: getReviewerEmail(review) || reviewerLookup[review.id]?.email || null,
+                reviewerName:
+                    getReviewerName(review) ||
+                    reviewerLookup[review.id]?.name ||
+                    graderFromUsers?.name ||
+                    null,
+                reviewerEmail:
+                    getReviewerEmail(review) ||
+                    reviewerLookup[review.id]?.email ||
+                    graderFromUsers?.email ||
+                    null,
                 notes: review.notes || '',
                 submittedAt: review.submitted_at
             });
