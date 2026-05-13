@@ -5,7 +5,12 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "discover-form-fields": "node scripts/discover-google-form-field-map.js"
+    "discover-form-fields": "node scripts/discover-google-form-field-map.js",
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{js,jsx,json,css,md}\"",
+    "prepare": "husky install"
   },
   "keywords": [],
   "author": "",
