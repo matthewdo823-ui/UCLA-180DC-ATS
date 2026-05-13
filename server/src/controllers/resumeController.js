@@ -176,6 +176,48 @@ exports.saveReview = async (req, res) => {
     return res.json({ success: true });
 };
 
+/** Reviews submitted by the authenticated screener (JWT → req.user.user_id / graded_by). */
+exports.listMyReviews = async (req, res) => {
+    const gradedBy = req.user?.user_id;
+    if (!gradedBy) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { data, error } = await supabase
+        .from("resume_reviews")
+        .select(`
+            id,
+            resume_id,
+            scores,
+            notes,
+            decision,
+            submitted_at,
+            resumes (
+                id,
+                name,
+                candidates ( year )
+            )
+        `)
+        .eq("graded_by", gradedBy)
+        .order("submitted_at", { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const reviews = (data || []).map((row) => ({
+        reviewId: row.id,
+        id: row.resume_id,
+        resumeName: row.resumes?.name ?? null,
+        year: row.resumes?.candidates?.year ?? null,
+        scores: row.scores || {},
+        total: getReviewScore(row.scores),
+        decision: row.decision || "pass",
+        notes: row.notes || "",
+        submittedAt: row.submitted_at,
+    }));
+
+    return res.json({ reviews, count: reviews.length });
+};
+
 exports.createCandidateFlag = async (req, res) => {
     const { candidate_id, resume_id, reason } = req.body;
     let candidateId = candidate_id;

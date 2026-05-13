@@ -18,8 +18,8 @@ export default function ScreenerPage() {
   const [scores, setScores] = useState({});
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
-  const [reviewed, setReviewed] = useState(0);
-  const [history, setHistory] = useState([]);
+  const [myReviews, setMyReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const panelRef = useRef(null);
 
@@ -30,6 +30,25 @@ export default function ScreenerPage() {
       ),
     [scores]
   );
+
+  const fetchMyReviews = useCallback(async (opts = {}) => {
+    const showLoading = opts.showLoading !== false;
+    if (showLoading) setReviewsLoading(true);
+    try {
+      const res = await authedFetch(`${API}/reviews`);
+      if (!res.ok) {
+        setMyReviews([]);
+        return;
+      }
+      const data = await res.json();
+      setMyReviews(Array.isArray(data.reviews) ? data.reviews : []);
+    } catch (e) {
+      console.error("Could not load my reviews:", e);
+      setMyReviews([]);
+    } finally {
+      if (showLoading) setReviewsLoading(false);
+    }
+  }, [authedFetch]);
 
   const fetchNext = useCallback(async () => {
     try {
@@ -49,16 +68,16 @@ export default function ScreenerPage() {
   }, [authedFetch]);
 
   useEffect(() => { fetchNext(); }, [fetchNext]);
+  useEffect(() => { fetchMyReviews({ showLoading: false }); }, [fetchMyReviews]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    fetchMyReviews({ showLoading: true });
+  }, [drawerOpen, fetchMyReviews]);
 
   async function handleAction(type) {
     if (!scoringComplete) return;
-    const total_score = Object.values(scores).reduce((a, b) => a + b, 0);
 
-    // Save review to history
-    setHistory(h => [{ id: resume.id, year: resume.candidates?.year, scores: { ...scores }, total: total_score, decision: type, notes: notes || "No notes added." }, ...h]);
-    setReviewed(r => r + 1);
-
-    // Post to server
     try {
       const res = await authedFetch(`${API}/reviews`, {
         method: "POST",
@@ -69,7 +88,11 @@ export default function ScreenerPage() {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.error || "Could not save review");
       }
-    } catch (e) { console.warn("Could not post review:", e); }
+      await fetchMyReviews({ showLoading: false });
+    } catch (e) {
+      console.warn("Could not get reviews:", e);
+      return;
+    }
 
     // Animate out → fetch next → animate in
     if (panelRef.current) panelRef.current.style.animation = "cardFlyOut 0.28s ease forwards";
@@ -85,7 +108,11 @@ export default function ScreenerPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "hidden" }}>
-      <Topbar reviewed={reviewed} onHistory={() => setDrawerOpen(true)} historyCount={history.length} />
+      <Topbar
+        reviewed={myReviews.length}
+        onHistory={() => setDrawerOpen(true)}
+        historyCount={myReviews.length}
+      />
 
       <div style={{ flex: 1, overflow: "hidden", padding: "14px 22px 0", display: "flex", flexDirection: "column", gap: 12 }}>
         <CandidateRow resume={resume} />
@@ -127,7 +154,12 @@ export default function ScreenerPage() {
         </div>
       </div>
 
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} reviews={history} />
+      <Drawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        reviews={myReviews}
+        loading={reviewsLoading}
+      />
     </div>
   );
 }
