@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { METRICS } from "../../constants/config";
 import { css } from "../../theme/colors";
+import Topbar, { topbarGhostButtonStyle, topbarStatCircleStyle } from "../../components/Topbar/Topbar";
 
 const API = "http://localhost:3000";
 const serifFont = "Georgia, 'Times New Roman', serif";
@@ -242,62 +243,56 @@ export default function GraderScoreboardPage() {
   const graders = useMemo(() => data.graders ?? [], [data.graders]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#FCFBFA", fontFamily: "'DM Sans', sans-serif", color: css.textDark }}>
-      <div style={{ height: 64, background: css.greenDark, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", color: "#FFF" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 36, height: 36, background: "rgba(255,255,255,0.15)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "auto" }}>
+      <Topbar
+        phaseLabel="Round 1 · Grader scoreboard"
+        activeLabel="Leaderboard"
+        rightSlot={(
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" style={topbarGhostButtonStyle}>Export CSV</button>
+            <button type="button" style={topbarGhostButtonStyle}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+              Filters
+            </button>
+            <div style={topbarStatCircleStyle}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: css.greenDark, lineHeight: 1 }}>{graders.length}</span>
+              <span style={{ fontSize: 7, fontWeight: 700, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.02em", marginTop: 1 }}>team</span>
+            </div>
           </div>
-          <span style={{ fontSize: 16, fontWeight: 500, fontFamily: serifFont }}>Resume Screener</span>
-          <span style={{ fontSize: 16, color: "rgba(255,255,255,0.5)", fontFamily: serifFont }}>›</span>
-          <span style={{ fontSize: 16, fontWeight: 600, fontFamily: serifFont }}>Graders</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.4)", color: "#FFF", padding: "6px 16px", borderRadius: 6, fontSize: 13, cursor: "pointer", fontWeight: 500 }}>Export CSV</button>
-          <button style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.4)", color: "#FFF", padding: "6px 16px", borderRadius: 6, fontSize: 13, cursor: "pointer", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
-            Filters
-          </button>
-          <button style={{ background: "#FFF", border: "none", color: css.textDark, width: 32, height: 32, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></svg>
-          </button>
-        </div>
-      </div>
+        )}
+      />
 
-      <div style={{ padding: "40px 48px 32px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24 }}>
+      <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontFamily: serifFont, fontSize: 32, margin: "0 0 8px 0", color: "#111", fontWeight: 500 }}>Grader Scoreboard</h1>
-          <div style={{ fontSize: 15, color: "#666" }}>Spring 2025 Cohort · Ranked by resumes graded</div>
+          <h1 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 22, margin: "0 0 6px 0", color: css.textDark, fontWeight: 700, letterSpacing: "-0.02em" }}>Grader scoreboard</h1>
+          <div style={{ fontSize: 13, color: css.textGray }}>Spring 2025 cohort · ranked by resumes graded</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button style={{ background: css.greenDark, color: "#FFF", border: "none", padding: "6px 16px", borderRadius: 4, fontSize: 13, cursor: "pointer" }}>All</button>
-          <button style={filterButtonStyle}>Complete</button>
-          <button style={filterButtonStyle}>In Progress</button>
-          <button style={filterButtonStyle}>Not Started</button>
+          <button type="button" style={{ background: css.greenDark, color: "#FFF", border: "none", padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>All</button>
+          <button type="button" style={filterButtonStyle}>Complete</button>
+          <button type="button" style={filterButtonStyle}>In progress</button>
+          <button type="button" style={filterButtonStyle}>Not started</button>
         </div>
       </div>
 
-      <div style={{ background: "#F2EFEB", borderTop: "1px solid #E4E0D9", borderBottom: "1px solid #E4E0D9", display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", padding: "20px 48px" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", padding: "18px 20px", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
         {[
           ["GRADERS", data.stats?.graders ?? "—"],
           ["ACTIVE", data.stats?.activeGraders ?? "—"],
           ["TOTAL REVIEWS", data.stats?.totalReviews ?? "—"],
           ["GOAL", data.stats?.expectedReviews ?? "—"],
         ].map(([label, value], index) => (
-          <div key={label} style={{ borderRight: index < 3 ? "1px solid #E4E0D9" : "none", padding: index ? "4px 0 4px 32px" : "4px 0" }}>
-            <div style={{ fontSize: 28, fontFamily: serifFont, color: "#111", lineHeight: 1.1 }}>{value}</div>
-            <div style={{ fontSize: 11, color: "#777", fontWeight: 600, letterSpacing: "0.05em", marginTop: 4 }}>{label}</div>
+          <div key={label} style={{ borderRight: index < 3 ? `1px solid ${css.borderLight}` : "none", padding: index ? "4px 0 4px 24px" : "4px 0" }}>
+            <div style={{ fontSize: 24, fontFamily: "'DM Sans', sans-serif", color: css.textDark, lineHeight: 1.1, fontWeight: 700 }}>{value}</div>
+            <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.06em", marginTop: 4 }}>{label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ padding: "0 48px 60px", maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "16px 0", borderBottom: "2px solid #E4E0D9", color: "#888", fontSize: 11, fontWeight: 600, letterSpacing: "0.05em" }}>
+      <div style={{ padding: "0 0 48px", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+        <div style={{ border: `1px solid ${css.borderLight}`, borderRadius: 10, overflow: "hidden", background: css.cardWhite, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "16px 20px", borderBottom: `2px solid ${css.borderLight}`, color: css.textGray, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
           <div>#</div>
           <div>GRADER</div>
           <div>RESUMES GRADED</div>
@@ -307,7 +302,7 @@ export default function GraderScoreboardPage() {
         {loading && <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading graders...</div>}
 
         {!loading && graders.map(grader => (
-          <div key={grader.id} style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "20px 0", borderBottom: "1px solid #EAEAEA", alignItems: "center", background: "#FFF" }}>
+          <div key={grader.id} style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "20px 20px", borderBottom: `1px solid ${css.borderLight}`, alignItems: "center", background: css.cardWhite }}>
             <div style={{ color: css.greenDark, fontWeight: 700, fontSize: 14 }}>{grader.rank}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
@@ -346,6 +341,8 @@ export default function GraderScoreboardPage() {
             </div>
           </div>
         ))}
+        </div>
+      </div>
       </div>
 
       {selectedGrader && (
@@ -356,11 +353,13 @@ export default function GraderScoreboardPage() {
 }
 
 const filterButtonStyle = {
-  background: "#FFF",
+  background: css.cardWhite,
   color: css.textDark,
   border: `1px solid ${css.borderLight}`,
-  padding: "6px 16px",
-  borderRadius: 4,
-  fontSize: 13,
+  padding: "6px 14px",
+  borderRadius: 20,
+  fontSize: 12,
+  fontWeight: 600,
   cursor: "pointer",
+  fontFamily: "'DM Sans', sans-serif",
 };
