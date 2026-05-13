@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { METRICS, MAX_SCORE } from "../../constants/config";
 import { css } from "../../theme/colors";
-import Topbar, { topbarGhostButtonStyle } from "../../components/Topbar/Topbar";
+import Topbar from "../../components/Topbar/Topbar";
 
 const API = "http://localhost:3000";
 const serifFont = "Georgia, 'Times New Roman', serif";
@@ -600,158 +600,11 @@ export default function ScoreboardPage() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      <Topbar
-        phaseLabel="Round 1 · Candidate scoreboard"
-        activeLabel="Live roster"
-        rightSlot={(
-          <div ref={filterWrapRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button type="button" style={topbarGhostButtonStyle}>
-              Export CSV
-            </button>
-            <button
-              type="button"
-              aria-expanded={filtersOpen}
-              aria-haspopup="true"
-              onClick={() => setFiltersOpen(open => !open)}
-              style={{
-                ...topbarGhostButtonStyle,
-                border: filtersOpen ? `1px solid ${css.greenDark}` : topbarGhostButtonStyle.border,
-                boxShadow: filtersOpen ? "0 2px 8px rgba(40, 98, 65, 0.12)" : topbarGhostButtonStyle.boxShadow,
-              }}
-            >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }} aria-hidden>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M7 12h10M11 18h2" /></svg>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
-              </span>
-              Sort & filters
-              {activeFilterCount > 0 && (
-                <span style={{ background: css.greenDark, color: css.cardWhite, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: "2px 7px" }}>{activeFilterCount}</span>
-              )}
-            </button>
-
-            {filtersOpen && (
-              <div
-                role="dialog"
-                aria-label="Sort and filter scoreboard"
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: "calc(100% + 10px)",
-                  width: 300,
-                  background: css.cardWhite,
-                  borderRadius: 10,
-                  boxShadow: "0 16px 48px rgba(0,0,0,0.12)",
-                  border: `1px solid ${css.borderLight}`,
-                  padding: "16px 16px 12px",
-                  zIndex: 50,
-                  color: css.textDark,
-                  animation: "scoreboardPanelIn 0.22s ease-out",
-                }}
-              >
-                <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: css.textGray }}>SORT BY</p>
-                <label style={{ display: "block", marginBottom: 14, fontSize: 12, fontWeight: 600 }}>
-                  Order
-                  <select
-                    value={sortBy}
-                    onChange={e => setSortBy(e.target.value)}
-                    style={{ ...selectStyle, marginTop: 4 }}
-                  >
-                    {SORT_TABS.map(tab => (
-                      <option key={tab.id} value={tab.id}>
-                        {tab.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <p style={{ margin: "0 0 12px", paddingTop: 4, borderTop: `1px solid ${css.borderLight}`, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: css.textGray }}>FILTER BY</p>
-
-                <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
-                  Major
-                  <select
-                    value={filters.major}
-                    onChange={e => setFilters(f => ({ ...f, major: e.target.value }))}
-                    style={{ ...selectStyle, marginTop: 4 }}
-                  >
-                    <option value="all">All majors</option>
-                    {majorOptions.map(m => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
-                  Year
-                  <select
-                    value={filters.year}
-                    onChange={e => setFilters(f => ({ ...f, year: e.target.value }))}
-                    style={{ ...selectStyle, marginTop: 4 }}
-                  >
-                    <option value="all">All years</option>
-                    {yearOptions.map(y => (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
-                  Reviews
-                  <select
-                    value={filters.reviews}
-                    onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))}
-                    style={{ ...selectStyle, marginTop: 4 }}
-                  >
-                    <option value="all">Any count</option>
-                    <option value="0">None yet (0)</option>
-                    <option value="1">Exactly 1</option>
-                    <option value="2+">2 or more</option>
-                  </select>
-                </label>
-
-                <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
-                  Score
-                  <select
-                    value={filters.scoreBand}
-                    onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))}
-                    style={{ ...selectStyle, marginTop: 4 }}
-                  >
-                    <option value="all">All scores</option>
-                    <option value="top">Top (≥ 80%)</option>
-                    <option value="strong">Strong (≥ 70%)</option>
-                    <option value="low">Low (&lt; 60%, reviewed)</option>
-                    <option value="pending">Pending / no score</option>
-                  </select>
-                </label>
-
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${css.borderLight}`, paddingTop: 10 }}>
-                  <button
-                    type="button"
-                    onClick={() => setFilters({ ...defaultFilters })}
-                    style={{ background: "none", border: "none", color: css.greenDark, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}
-                  >
-                    Clear all
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFiltersOpen(false)}
-                    style={{ background: css.greenDark, border: "none", color: "#FFF", padding: "6px 14px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      />
+      <Topbar phaseLabel="Round 1 · Candidate scoreboard" activeLabel="Live roster" rightSlot={<></>} />
 
       <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}>
-        <div style={{ maxWidth: 640 }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
+        <div style={{ maxWidth: 640, flex: "1 1 260px", minWidth: 0 }}>
           <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>
             Spring 2025 · Live roster
           </p>
@@ -763,7 +616,7 @@ export default function ScoreboardPage() {
                 <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>scoreboard</span>
               </h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
-                Round 1 resume reviews — refine the list with <strong style={{ fontWeight: 600, color: css.textDark }}>Sort & filters</strong> in the bar above.
+                Round 1 resume reviews — use <strong style={{ fontWeight: 600, color: css.textDark }}>Sort & filters</strong> to change order and narrow who appears in the table.
                 {activeFilterCount > 0 && (
                   <span style={{ display: "block", marginTop: 8, fontSize: 13, color: css.greenDark, fontWeight: 600 }}>
                     Showing {filteredCandidates.length} of {candidates.length} candidates
@@ -772,6 +625,157 @@ export default function ScoreboardPage() {
               </p>
             </div>
           </div>
+        </div>
+
+        <div ref={filterWrapRef} style={{ position: "relative", flexShrink: 0, marginLeft: "auto" }}>
+          <button
+            type="button"
+            aria-expanded={filtersOpen}
+            aria-haspopup="true"
+            onClick={() => setFiltersOpen(open => !open)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              cursor: "pointer",
+              padding: "10px 16px",
+              borderRadius: 8,
+              background: css.cardWhite,
+              color: css.textDark,
+              border: `1px solid ${filtersOpen ? css.greenDark : css.borderLight}`,
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: "'DM Sans', sans-serif",
+              boxShadow: filtersOpen ? "0 2px 12px rgba(40, 98, 65, 0.1)" : "0 1px 2px rgba(0,0,0,0.04)",
+              transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+            }}
+          >
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: css.greenDark }} aria-hidden>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M7 12h10M11 18h2" /></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+            </span>
+            Sort & filters
+            {activeFilterCount > 0 && (
+              <span style={{ background: "rgba(40, 98, 65, 0.1)", color: css.greenDark, borderRadius: 20, fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>{activeFilterCount}</span>
+            )}
+          </button>
+
+          {filtersOpen && (
+            <div
+              role="dialog"
+              aria-label="Sort and filter scoreboard"
+              style={{
+                position: "absolute",
+                right: 0,
+                top: "calc(100% + 8px)",
+                width: "min(300px, calc(100vw - 44px))",
+                background: css.cardWhite,
+                borderRadius: 10,
+                boxShadow: "0 16px 48px rgba(0,0,0,0.12)",
+                border: `1px solid ${css.borderLight}`,
+                padding: "16px 16px 12px",
+                zIndex: 50,
+                color: css.textDark,
+                animation: "scoreboardPanelIn 0.22s ease-out",
+              }}
+            >
+              <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: css.textGray }}>SORT BY</p>
+              <label style={{ display: "block", marginBottom: 14, fontSize: 12, fontWeight: 600 }}>
+                Order
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value)}
+                  style={{ ...selectStyle, marginTop: 4 }}
+                >
+                  {SORT_TABS.map(tab => (
+                    <option key={tab.id} value={tab.id}>
+                      {tab.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <p style={{ margin: "0 0 12px", paddingTop: 4, borderTop: `1px solid ${css.borderLight}`, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: css.textGray }}>FILTER BY</p>
+
+              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
+                Major
+                <select
+                  value={filters.major}
+                  onChange={e => setFilters(f => ({ ...f, major: e.target.value }))}
+                  style={{ ...selectStyle, marginTop: 4 }}
+                >
+                  <option value="all">All majors</option>
+                  {majorOptions.map(m => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
+                Year
+                <select
+                  value={filters.year}
+                  onChange={e => setFilters(f => ({ ...f, year: e.target.value }))}
+                  style={{ ...selectStyle, marginTop: 4 }}
+                >
+                  <option value="all">All years</option>
+                  {yearOptions.map(y => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
+                Reviews
+                <select
+                  value={filters.reviews}
+                  onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))}
+                  style={{ ...selectStyle, marginTop: 4 }}
+                >
+                  <option value="all">Any count</option>
+                  <option value="0">None yet (0)</option>
+                  <option value="1">Exactly 1</option>
+                  <option value="2+">2 or more</option>
+                </select>
+              </label>
+
+              <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
+                Score
+                <select
+                  value={filters.scoreBand}
+                  onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))}
+                  style={{ ...selectStyle, marginTop: 4 }}
+                >
+                  <option value="all">All scores</option>
+                  <option value="top">Top (≥ 80%)</option>
+                  <option value="strong">Strong (≥ 70%)</option>
+                  <option value="low">Low (&lt; 60%, reviewed)</option>
+                  <option value="pending">Pending / no score</option>
+                </select>
+              </label>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${css.borderLight}`, paddingTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setFilters({ ...defaultFilters })}
+                  style={{ background: "none", border: "none", color: css.greenDark, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}
+                >
+                  Clear all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(false)}
+                  style={{ background: css.greenDark, border: "none", color: "#FFF", padding: "6px 14px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
