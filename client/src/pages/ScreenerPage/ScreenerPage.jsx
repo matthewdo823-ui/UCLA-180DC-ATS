@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
-import { METRICS } from "../../constants/config";
+import { METRICS, API } from "../../constants/config";
 
 import Topbar from "../../components/Topbar/Topbar";
 import CandidateRow from "../../components/CandidateRow/CandidateRow";
@@ -9,8 +9,6 @@ import PdfViewer from "../../components/PdfViewer/PdfViewer";
 import ScoringPanel from "../../components/ScoringPanel/ScoringPanel";
 import Drawer from "../../components/Drawer/Drawer";
 import PastReviewDetailModal from "../../components/PastReviewDetailModal/PastReviewDetailModal";
-
-const API = "http://localhost:3000";
 
 export default function ScreenerPage() {
   const { token } = useAuth();
@@ -129,7 +127,7 @@ export default function ScreenerPage() {
                 Loading resume…
               </div>
             ) : resume?.file_url ? (
-              <PdfViewer url={`http://localhost:3000/view/pdf?url=${encodeURIComponent(resume.file_url)}`} authToken={token} />
+              <PdfViewer url={`${API}/view/pdf?url=${encodeURIComponent(resume.file_url)}`} authToken={token} />
             ) : (
               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.textGray, fontSize: 13 }}>No resume available</div>
             )}

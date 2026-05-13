@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
-import { METRICS } from "../../constants/config";
+import { METRICS, API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 
-const API = "http://localhost:3000";
 const serifFont = "Georgia, 'Times New Roman', serif";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
