@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
-import Topbar, { topbarGhostButtonStyle, topbarStatCircleStyle } from "../../components/Topbar/Topbar";
+import Topbar from "../../components/Topbar/Topbar";
 
 const API = "http://localhost:3000";
 const serifFont = "Georgia, 'Times New Roman', serif";
-const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
 
@@ -29,14 +28,14 @@ function FlagCard({ flag, onResolve, resolving }) {
   const flaggedBy = flag.flaggedBy?.name || flag.flaggedBy?.email || "Unknown reviewer";
 
   return (
-    <div style={{ background: "#FFF", border: "1px solid #E4E0D9", borderRadius: 14, padding: 20, boxShadow: "0 10px 30px rgba(17,24,39,0.04)" }}>
+    <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 20, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18 }}>
         <div style={{ display: "flex", gap: 14, minWidth: 0 }}>
-          <div style={{ width: 48, height: 48, borderRadius: "50%", background: cardGreen, color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, flexShrink: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: "50%", background: css.greenDark, color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
             {getInitials(candidate.name)}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontFamily: serifFont, fontSize: 20, color: "#111", margin: "0 0 4px", fontWeight: 600 }}>
+            <p style={{ fontFamily: serifFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500 }}>
               {candidate.name || "Unknown candidate"}
             </p>
             <p style={{ fontSize: 13, color: css.textGray, margin: 0 }}>
@@ -80,7 +79,7 @@ function FlagCard({ flag, onResolve, resolving }) {
         </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 18, borderTop: "1px solid #EAEAEA", paddingTop: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 18, borderTop: `1px solid ${css.borderLight}`, paddingTop: 14 }}>
         <div style={{ fontSize: 12, color: css.textGray }}>
           Resume: <span style={{ color: css.textDark, fontWeight: 700 }}>{flag.resume?.name || candidate.name || "Unknown"}</span>
         </div>
@@ -90,7 +89,7 @@ function FlagCard({ flag, onResolve, resolving }) {
               href={flag.resume.fileUrl}
               target="_blank"
               rel="noreferrer"
-              style={{ ...buttonStyle, background: "#FFF", color: css.textDark, border: `1px solid ${css.borderLight}`, textDecoration: "none" }}
+              style={{ ...buttonStyle, background: "#FFF", color: "#333", border: `1px solid ${css.borderLight}`, textDecoration: "none" }}
             >
               Open Resume
             </a>
@@ -99,7 +98,7 @@ function FlagCard({ flag, onResolve, resolving }) {
             type="button"
             onClick={() => onResolve(flag.id)}
             disabled={resolving}
-            style={{ ...buttonStyle, background: cardGreen, color: "#FFF", border: "none", opacity: resolving ? 0.7 : 1 }}
+            style={{ ...buttonStyle, background: css.greenDark, color: "#FFF", border: "none", opacity: resolving ? 0.7 : 1 }}
           >
             {resolving ? "Resolving..." : "Resolve Flag"}
           </button>
@@ -168,27 +167,61 @@ export default function FlaggedCandidatesPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "auto" }}>
-      <Topbar
-        phaseLabel="Admin · Flagged candidates"
-        activeLabel="Open queue"
-        rightSlot={(
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button type="button" style={topbarGhostButtonStyle} onClick={() => loadFlags()} aria-label="Refresh list">
-              Refresh
-            </button>
-            <div style={topbarStatCircleStyle}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: css.greenDark, lineHeight: 1 }}>{flags.length}</span>
-              <span style={{ fontSize: 7, fontWeight: 700, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.02em", marginTop: 1 }}>open</span>
-            </div>
-          </div>
-        )}
-      />
+      <Topbar phaseLabel="Admin · Flagged candidates" activeLabel="Open queue" rightSlot={<></>} />
 
       <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 22, margin: "0 0 6px", color: css.textDark, fontWeight: 700, letterSpacing: "-0.02em" }}>Flagged candidates</h1>
-          <div style={{ fontSize: 13, color: css.textGray }}>Open admin review queue for candidate flags</div>
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
+        <div style={{ maxWidth: 640, flex: "1 1 260px", minWidth: 0 }}>
+          <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>
+            Spring 2025 · Admin queue
+          </p>
+          <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
+            <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${css.greenDark} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{ margin: 0, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: css.textDark }}>Flagged </span>
+                <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>candidates</span>
+              </h1>
+              <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
+                Open flags that need an admin decision — use <strong style={{ fontWeight: 600, color: css.textDark }}>Refresh</strong> to reload the queue after changes elsewhere.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", flexShrink: 0, marginLeft: "auto" }}>
+          <button
+            type="button"
+            onClick={() => loadFlags()}
+            disabled={loading}
+            aria-label="Refresh flagged list"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              cursor: loading ? "wait" : "pointer",
+              padding: "10px 16px",
+              borderRadius: 8,
+              background: css.cardWhite,
+              color: css.textDark,
+              border: `1px solid ${css.borderLight}`,
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: "'DM Sans', sans-serif",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+              opacity: loading ? 0.75 : 1,
+            }}
+          >
+            <span style={{ display: "inline-flex", color: css.greenDark }} aria-hidden>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6" /><path d="M20.49 15a9 9 0 1 1-.2-7.98L23 10" /></svg>
+            </span>
+            Refresh
+          </button>
+          {flags.length > 0 && (
+            <span style={{ background: "rgba(40, 98, 65, 0.1)", color: css.greenDark, borderRadius: 20, fontSize: 11, fontWeight: 700, padding: "6px 12px" }}>
+              {flags.length} open
+            </span>
+          )}
         </div>
       </div>
 
@@ -204,18 +237,18 @@ export default function FlaggedCandidatesPage() {
         ))}
       </div>
 
-      <div style={{ padding: "0 0 48px", maxWidth: 1080, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ padding: "0 0 48px", maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
         {loading && <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading flagged candidates...</div>}
 
         {!loading && error && (
-          <div style={{ padding: 16, border: `1px solid rgba(226,75,74,0.24)`, background: "rgba(226,75,74,0.08)", color: css.red, borderRadius: 10 }}>
+          <div style={{ padding: 16, border: `1px solid rgba(226,75,74,0.24)`, background: "rgba(226,75,74,0.08)", color: css.red, borderRadius: 10, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
             {error}
           </div>
         )}
 
         {!loading && !error && flags.length === 0 && (
-          <div style={{ padding: 48, textAlign: "center", background: "#FFF", border: "1px solid #E4E0D9", borderRadius: 14, color: css.textGray }}>
-            <div style={{ width: 46, height: 46, background: "rgba(29,158,117,0.1)", color: cardMint, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontWeight: 800 }}>
+          <div style={{ padding: 48, textAlign: "center", background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, color: css.textGray, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
+            <div style={{ width: 44, height: 44, background: "rgba(40, 98, 65, 0.1)", color: css.greenDark, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontWeight: 800, fontSize: 18 }}>
               ✓
             </div>
             No open candidate flags.
@@ -238,7 +271,7 @@ export default function FlaggedCandidatesPage() {
 
 const detailBoxStyle = {
   background: "#F8FAF6",
-  border: "1px solid #E3E8DD",
+  border: `1px solid ${css.borderLight}`,
   borderRadius: 8,
   padding: "10px 12px",
   minWidth: 0,
@@ -268,9 +301,10 @@ const buttonStyle = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: "8px 14px",
-  borderRadius: 6,
+  padding: "8px 16px",
+  borderRadius: 4,
   fontSize: 13,
-  fontWeight: 700,
+  fontWeight: 600,
   cursor: "pointer",
+  fontFamily: "'DM Sans', sans-serif",
 };

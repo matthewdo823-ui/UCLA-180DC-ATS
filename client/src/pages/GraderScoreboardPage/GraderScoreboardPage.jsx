@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { METRICS } from "../../constants/config";
 import { css } from "../../theme/colors";
-import Topbar, { topbarGhostButtonStyle, topbarStatCircleStyle } from "../../components/Topbar/Topbar";
+import Topbar from "../../components/Topbar/Topbar";
 
 const API = "http://localhost:3000";
 const serifFont = "Georgia, 'Times New Roman', serif";
@@ -41,6 +41,29 @@ function progressColor(progress) {
   if (progress >= 75) return "#4CAF50";
   if (progress >= 50) return css.amber;
   return css.textGray;
+}
+
+const GRADER_STATUS_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "complete", label: "Complete" },
+  { id: "progress", label: "In progress" },
+  { id: "not_started", label: "Not started" },
+];
+
+function graderMatchesStatusFilter(grader, filterId) {
+  const n = grader.reviewCount ?? 0;
+  const expected = Number(grader.expectedReviews) || 0;
+  const complete = expected > 0 ? n >= expected : Number(grader.progressScore) >= 100;
+  switch (filterId) {
+    case "complete":
+      return complete;
+    case "progress":
+      return n > 0 && !complete;
+    case "not_started":
+      return n === 0;
+    default:
+      return true;
+  }
 }
 
 function ProgressTiles({ count, expected }) {
@@ -221,6 +244,7 @@ export default function GraderScoreboardPage() {
   const [data, setData] = useState({ stats: null, graders: [] });
   const [loading, setLoading] = useState(true);
   const [selectedGrader, setSelectedGrader] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     async function fetchGraders() {
@@ -242,37 +266,74 @@ export default function GraderScoreboardPage() {
 
   const graders = useMemo(() => data.graders ?? [], [data.graders]);
 
+  const filteredGraders = useMemo(
+    () => graders.filter(g => graderMatchesStatusFilter(g, statusFilter)),
+    [graders, statusFilter]
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "auto" }}>
-      <Topbar
-        phaseLabel="Round 1 · Grader scoreboard"
-        activeLabel="Leaderboard"
-        rightSlot={(
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button type="button" style={topbarGhostButtonStyle}>Export CSV</button>
-            <button type="button" style={topbarGhostButtonStyle}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
-              Filters
-            </button>
-            <div style={topbarStatCircleStyle}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: css.greenDark, lineHeight: 1 }}>{graders.length}</span>
-              <span style={{ fontSize: 7, fontWeight: 700, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.02em", marginTop: 1 }}>team</span>
-            </div>
-          </div>
-        )}
-      />
+      <style>{`
+        @keyframes scoreboardRowEnter {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      <Topbar phaseLabel="Round 1 · Grader scoreboard" activeLabel="Leaderboard" rightSlot={<></>} />
 
       <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 22, margin: "0 0 6px 0", color: css.textDark, fontWeight: 700, letterSpacing: "-0.02em" }}>Grader scoreboard</h1>
-          <div style={{ fontSize: 13, color: css.textGray }}>Spring 2025 cohort · ranked by resumes graded</div>
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
+        <div style={{ maxWidth: 640, flex: "1 1 260px", minWidth: 0 }}>
+          <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>
+            Spring 2025 · Grader roster
+          </p>
+          <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
+            <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${css.greenDark} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{ margin: 0, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: css.textDark }}>Grader </span>
+                <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>scoreboard</span>
+              </h1>
+              <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
+                Round 1 grading progress — use the status chips to focus on who is done, in progress, or not started yet.
+                {statusFilter !== "all" && (
+                  <span style={{ display: "block", marginTop: 8, fontSize: 13, color: css.greenDark, fontWeight: 600 }}>
+                    Showing {filteredGraders.length} of {graders.length} graders
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button type="button" style={{ background: css.greenDark, color: "#FFF", border: "none", padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>All</button>
-          <button type="button" style={filterButtonStyle}>Complete</button>
-          <button type="button" style={filterButtonStyle}>In progress</button>
-          <button type="button" style={filterButtonStyle}>Not started</button>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", flexShrink: 0, marginLeft: "auto", alignItems: "center" }}>
+          {GRADER_STATUS_FILTERS.map(({ id, label }) => {
+            const active = statusFilter === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setStatusFilter(id)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  cursor: "pointer",
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  background: active ? css.greenDark : css.cardWhite,
+                  color: active ? "#FFF" : css.textDark,
+                  border: `1px solid ${active ? css.greenDark : css.borderLight}`,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  fontFamily: "'DM Sans', sans-serif",
+                  boxShadow: active ? "0 2px 12px rgba(40, 98, 65, 0.1)" : "0 1px 2px rgba(0,0,0,0.04)",
+                  transition: "border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -301,8 +362,32 @@ export default function GraderScoreboardPage() {
 
         {loading && <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading graders...</div>}
 
-        {!loading && graders.map(grader => (
-          <div key={grader.id} style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "20px 20px", borderBottom: `1px solid ${css.borderLight}`, alignItems: "center", background: css.cardWhite }}>
+        {!loading && graders.length === 0 && (
+          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No graders yet.</div>
+        )}
+
+        {!loading && graders.length > 0 && filteredGraders.length === 0 && (
+          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No graders match this filter.</div>
+        )}
+
+        {!loading && filteredGraders.map((grader, index) => {
+          const staggerMs = 42;
+          const staggerCap = 36;
+          const enterMs = 520;
+          const delay = Math.min(index, staggerCap) * staggerMs;
+          return (
+          <div
+            key={`${statusFilter}-${grader.id}`}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px",
+              padding: "20px 20px",
+              borderBottom: `1px solid ${css.borderLight}`,
+              alignItems: "center",
+              background: css.cardWhite,
+              animation: `scoreboardRowEnter ${enterMs}ms cubic-bezier(0.22, 1, 0.36, 1) ${delay}ms backwards`,
+            }}
+          >
             <div style={{ color: css.greenDark, fontWeight: 700, fontSize: 14 }}>{grader.rank}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
@@ -334,13 +419,18 @@ export default function GraderScoreboardPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                 Details
               </button>
-              <button style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: "#FFF", color: "#333", border: `1px solid ${css.borderLight}`, fontSize: 13, cursor: "pointer" }}>
+              <button
+                type="button"
+                onClick={() => setSelectedGrader(grader)}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: "#FFF", color: "#333", border: `1px solid ${css.borderLight}`, fontSize: 13, cursor: "pointer" }}
+              >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                 Summary
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
         </div>
       </div>
       </div>
@@ -351,15 +441,3 @@ export default function GraderScoreboardPage() {
     </div>
   );
 }
-
-const filterButtonStyle = {
-  background: css.cardWhite,
-  color: css.textDark,
-  border: `1px solid ${css.borderLight}`,
-  padding: "6px 14px",
-  borderRadius: 20,
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: "pointer",
-  fontFamily: "'DM Sans', sans-serif",
-};
