@@ -253,7 +253,11 @@ exports.listMyReviews = async (req, res) => {
 
     const reviews = (data || []).map(mapMyReviewRow);
 
-    return res.json({ reviews, count: reviews.length });
+    return res.json({
+        reviews,
+        count: reviews.length,
+        expectedReviews: GRADER_REVIEW_GOAL,
+    });
 };
 
 /** Update one of the authenticated user's reviews (scores, notes, decision). */
