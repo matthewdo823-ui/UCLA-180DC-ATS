@@ -87,7 +87,7 @@ export default function DashboardPage() {
         180DC Recruitment
       </h1>
       <div style={{ fontSize: 15, color: css.textGray, fontWeight: 500, marginBottom: 40 }}>
-        Resume Screener Demo
+        Idk what to do with this page yet
       </div>
 
       {/* Main Card */}
