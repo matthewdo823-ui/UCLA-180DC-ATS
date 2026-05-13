@@ -522,15 +522,17 @@ export default function ScoreboardPage() {
   const [sortBy, setSortBy] = useState("performance_desc");
   const [listMotionKey, setListMotionKey] = useState(0);
   const filterWrapRef = useRef(null);
-  const skipListMotionRef = useRef(true);
+  /** After first data paint, bump key so sort/filter changes remount rows and replay stagger. */
+  const listStaggerBootstrappedRef = useRef(false);
 
   useEffect(() => {
-    if (skipListMotionRef.current) {
-      skipListMotionRef.current = false;
+    if (loading) return;
+    if (!listStaggerBootstrappedRef.current) {
+      listStaggerBootstrappedRef.current = true;
       return;
     }
     setListMotionKey(k => k + 1);
-  }, [sortBy, filters.major, filters.year, filters.reviews, filters.scoreBand]);
+  }, [loading, sortBy, filters.major, filters.year, filters.reviews, filters.scoreBand]);
 
   useEffect(() => {
     async function fetchScoreboard() {
@@ -593,8 +595,8 @@ export default function ScoreboardPage() {
           from { opacity: 0; transform: translateY(-6px) scale(0.98); }
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
-        @keyframes scoreboardListRefresh {
-          from { opacity: 0; transform: translateY(8px); }
+        @keyframes scoreboardRowEnter {
+          from { opacity: 0; transform: translateY(12px); }
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
@@ -796,12 +798,7 @@ export default function ScoreboardPage() {
           <div style={{ textAlign: "right" }}>ACTIONS</div>
         </div>
 
-        <div
-          key={listMotionKey}
-          style={{
-            animation: listMotionKey > 0 ? "scoreboardListRefresh 0.38s cubic-bezier(0.22, 1, 0.36, 1)" : "none",
-          }}
-        >
+        <div>
         {loading && <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading candidates...</div>}
 
         {!loading && candidates.length > 0 && filteredCandidates.length === 0 && (
@@ -812,8 +809,24 @@ export default function ScoreboardPage() {
           <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No candidates yet.</div>
         )}
 
-        {!loading && filteredCandidates.map((c, index) => (
-          <div key={c.id} style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "20px 20px", borderBottom: `1px solid ${css.borderLight}`, alignItems: "center", background: css.cardWhite }}>
+        {!loading && filteredCandidates.map((c, index) => {
+          const staggerMs = 42;
+          const staggerCap = 36;
+          const enterMs = 520;
+          const delay = Math.min(index, staggerCap) * staggerMs;
+          return (
+          <div
+            key={`${listMotionKey}-${c.id}`}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px",
+              padding: "20px 20px",
+              borderBottom: `1px solid ${css.borderLight}`,
+              alignItems: "center",
+              background: css.cardWhite,
+              animation: `scoreboardRowEnter ${enterMs}ms cubic-bezier(0.22, 1, 0.36, 1) ${delay}ms backwards`,
+            }}
+          >
             <div style={{ color: css.greenDark, fontWeight: 700, fontSize: 14 }}>{index + 1}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
@@ -849,7 +862,8 @@ export default function ScoreboardPage() {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
         </div>
         </div>
       </div>
