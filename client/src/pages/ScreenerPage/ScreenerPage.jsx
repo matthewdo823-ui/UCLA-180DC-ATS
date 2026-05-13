@@ -8,6 +8,7 @@ import CandidateRow from "../../components/CandidateRow/CandidateRow";
 import PdfViewer from "../../components/PdfViewer/PdfViewer";
 import ScoringPanel from "../../components/ScoringPanel/ScoringPanel";
 import Drawer from "../../components/Drawer/Drawer";
+import PastReviewDetailModal from "../../components/PastReviewDetailModal/PastReviewDetailModal";
 
 const API = "http://localhost:3000";
 
@@ -21,6 +22,7 @@ export default function ScreenerPage() {
   const [myReviews, setMyReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [pastReviewDetail, setPastReviewDetail] = useState(null);
   const panelRef = useRef(null);
 
   const scoringComplete = useMemo(
@@ -90,7 +92,7 @@ export default function ScreenerPage() {
       }
       await fetchMyReviews({ showLoading: false });
     } catch (e) {
-      console.warn("Could not get reviews:", e);
+      console.warn("Could not post review:", e);
       return;
     }
 
@@ -159,7 +161,19 @@ export default function ScreenerPage() {
         onClose={() => setDrawerOpen(false)}
         reviews={myReviews}
         loading={reviewsLoading}
+        onReviewClick={(r) => setPastReviewDetail(r)}
       />
+
+      {pastReviewDetail ? (
+        <PastReviewDetailModal
+          review={pastReviewDetail}
+          onClose={() => setPastReviewDetail(null)}
+          onSaved={(updated) => {
+            setMyReviews((prev) => prev.map((x) => (x.reviewId === updated.reviewId ? updated : x)));
+            setPastReviewDetail(updated);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

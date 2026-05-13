@@ -7,11 +7,10 @@ function yearBadgeConfig(yearRaw) {
   return YEAR_CFG[rawYear] || null;
 }
 
-export default function Drawer({ open, onClose, reviews, loading = false }) {
-  const passCount   = reviews.filter(r => r.decision === "pass").length;
-  const flagCount   = reviews.filter(r => r.decision === "flag").length;
-  const rejectCount = reviews.filter(r => r.decision === "reject").length;
-  const scoreColor = t => t >= MAX_SCORE * 0.75 ? css.greenDark : t >= MAX_SCORE * 0.5 ? css.amber : css.red;
+export default function Drawer({ open, onClose, reviews, loading = false, onReviewClick }) {
+  const passCount = reviews.filter((r) => r.decision === "pass").length;
+  const flagCount = reviews.filter((r) => r.decision === "flag").length;
+  const scoreColor = (t) => (t >= MAX_SCORE * 0.75 ? css.greenDark : t >= MAX_SCORE * 0.5 ? css.amber : css.red);
 
   return (
     <>
@@ -24,11 +23,14 @@ export default function Drawer({ open, onClose, reviews, loading = false }) {
           </div>
           <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: "50%", border: `1px solid ${css.borderLight}`, background: css.cardWhite, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 12, color: css.textGray }}>✕</button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, padding: "12px 20px", borderBottom: `1px solid ${css.borderLight}`, flexShrink: 0 }}>
-          {[["pass", passCount, css.greenDark, "Passed"], ["flag", flagCount, css.amber, "Flagged"], ["reject", rejectCount, css.red, "Skipped"]].map(([, val, color, lbl]) => (
-            <div key={lbl} style={{ textAlign: "center", padding: "10px 8px", background: css.cardWhite, borderRadius: 10, border: `1px solid ${css.borderLight}` }}>
-              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'DM Mono', monospace", color }}>{val}</div>
-              <div style={{ fontSize: 9, color: css.textGray, marginTop: 3, textTransform: "uppercase", letterSpacing: "0.05em" }}>{lbl}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "12px 20px", borderBottom: `1px solid ${css.borderLight}`, flexShrink: 0 }}>
+          {[
+            ["pass", passCount, css.greenDark, "Passed"],
+            ["flag", flagCount, css.amber, "Flagged"],
+          ].map(([, val, color, lbl]) => (
+            <div key={lbl} style={{ textAlign: "center", padding: "12px 10px", background: css.cardWhite, borderRadius: 12, border: `1px solid ${css.borderLight}` }}>
+              <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'DM Mono', monospace", color }}>{val}</div>
+              <div style={{ fontSize: 9, color: css.textGray, marginTop: 4, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lbl}</div>
             </div>
           ))}
         </div>
@@ -52,22 +54,72 @@ export default function Drawer({ open, onClose, reviews, loading = false }) {
               {reviews.map((r) => {
                 const yr = yearBadgeConfig(r.year);
                 const dec = DEC_STYLE[r.decision] || DEC_STYLE.pass;
+                const title = r.resumeName || r.candidateName || "Unnamed resume";
+                const subtitleParts = [];
+                if (yr) subtitleParts.push(yr.label.charAt(0).toUpperCase() + yr.label.slice(1));
+                if (r.major) subtitleParts.push(String(r.major));
+                const subtitle = subtitleParts.length ? subtitleParts.join(" · ") : null;
                 return (
-                  <div key={r.reviewId || r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${css.borderLight}`, background: css.cardWhite, marginBottom: 6, cursor: "default" }}>
-                    {yr && <div style={{ width: 3, height: 32, borderRadius: 2, background: yr.panelColor, flexShrink: 0 }} />}
+                  <div
+                    key={r.reviewId || r.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onReviewClick?.(r)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onReviewClick?.(r);
+                      }
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      border: `1px solid ${css.borderLight}`,
+                      background: css.cardWhite,
+                      marginBottom: 8,
+                      cursor: onReviewClick ? "pointer" : "default",
+                      outline: "none",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                      transition: "border-color 0.15s, box-shadow 0.15s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (onReviewClick) {
+                        e.currentTarget.style.borderColor = "rgba(40,98,65,0.35)";
+                        e.currentTarget.style.boxShadow = "0 2px 8px rgba(40,98,65,0.08)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = css.borderLight;
+                      e.currentTarget.style.boxShadow = "0 1px 2px rgba(0,0,0,0.03)";
+                    }}
+                  >
+                    {yr && <div style={{ width: 4, height: 36, borderRadius: 3, background: yr.panelColor, flexShrink: 0 }} />}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: css.textDark, fontFamily: r.resumeName ? "'DM Sans', sans-serif" : "'DM Mono', monospace" }}>
-                        {r.resumeName || r.id}
-                      </div>
-                      {r.resumeName ? (
-                        <div style={{ fontSize: 10, fontWeight: 500, fontFamily: "'DM Mono', monospace", color: css.textGray, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.id}>
-                          {r.id}
-                        </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: css.textDark, lineHeight: 1.25 }}>{title}</div>
+                      {subtitle ? (
+                        <div style={{ fontSize: 11, fontWeight: 500, color: css.textGray, marginTop: 3, lineHeight: 1.3 }}>{subtitle}</div>
                       ) : null}
-                      {yr ? <div style={{ fontSize: 10, fontWeight: 600, color: yr.panelColor, marginTop: 2 }}>{yr.label.charAt(0).toUpperCase() + yr.label.slice(1)}</div> : null}
                     </div>
-                    <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: scoreColor(r.total), width: 38, textAlign: "right" }}>{r.total}</span>
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 20, letterSpacing: "0.04em", textTransform: "uppercase", border: `1px solid ${dec.bd}`, background: dec.bg, color: dec.color, whiteSpace: "nowrap" }}>{dec.label}</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: scoreColor(r.total), minWidth: 36, textAlign: "right" }}>{r.total}</span>
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        padding: "3px 9px",
+                        borderRadius: 20,
+                        letterSpacing: "0.04em",
+                        textTransform: "uppercase",
+                        border: `1px solid ${dec.bd}`,
+                        background: dec.bg,
+                        color: dec.color,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {dec.label}
+                    </span>
                   </div>
                 );
               })}
