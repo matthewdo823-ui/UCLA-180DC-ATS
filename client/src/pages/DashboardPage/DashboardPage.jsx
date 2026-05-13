@@ -2,8 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
-
-const API = "http://localhost:3000";
+import { API } from "../../constants/config";
 
 export default function DashboardPage() {
   const navigate = useNavigate();

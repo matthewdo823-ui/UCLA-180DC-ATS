@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
-import { METRICS, MAX_SCORE, BUBBLE_COLORS } from "../../constants/config";
+import { METRICS, MAX_SCORE, BUBBLE_COLORS, API } from "../../constants/config";
 import { css } from "../../theme/colors";
-
-const API = "http://localhost:3000";
 const serifFont = "Georgia, 'Times New Roman', serif";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
