@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
+import { METRICS } from "../../constants/config";
 
 import Topbar from "../../components/Topbar/Topbar";
 import CandidateRow from "../../components/CandidateRow/CandidateRow";
@@ -22,6 +23,14 @@ export default function ScreenerPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const panelRef = useRef(null);
 
+  const scoringComplete = useMemo(
+    () =>
+      METRICS.every(
+        (m) => typeof scores[m] === "number" && scores[m] >= 1 && scores[m] <= 6
+      ),
+    [scores]
+  );
+
   const fetchNext = useCallback(async () => {
     try {
       setLoading(true);
@@ -42,6 +51,7 @@ export default function ScreenerPage() {
   useEffect(() => { fetchNext(); }, [fetchNext]);
 
   async function handleAction(type) {
+    if (!scoringComplete) return;
     const total_score = Object.values(scores).reduce((a, b) => a + b, 0);
 
     // Save review to history
@@ -97,16 +107,19 @@ export default function ScreenerPage() {
           </div>
 
           {/* ── Right: Scoring panel ── */}
-          <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", gap: 8, minHeight: 0 }}>
             {!loading && resume ? (
-              <ScoringPanel
-                resume={resume}
-                scores={scores}
-                onScore={(metric, val) => setScores(s => ({ ...s, [metric]: val }))}
-                notes={notes}
-                onNotes={setNotes}
-                onAction={handleAction}
-              />
+              <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                <ScoringPanel
+                  resume={resume}
+                  scores={scores}
+                  onScore={(metric, val) => setScores(s => ({ ...s, [metric]: val }))}
+                  notes={notes}
+                  onNotes={setNotes}
+                  onAction={handleAction}
+                  scoringComplete={scoringComplete}
+                />
+              </div>
             ) : (
               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.text3, fontSize: 13 }}>Loading…</div>
             )}
