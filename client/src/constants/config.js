@@ -1,3 +1,5 @@
+export const API = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 export const METRICS = ["experience", "leadership", "social impact", "communication"];
 export const METRIC_ICONS = {
   "experience": "💼",

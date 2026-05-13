@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-
-const API = "http://localhost:3000";
+import { API } from "../constants/config";
 const TOKEN_STORAGE_KEY = "resume_screener_jwt";
 
 const AuthContext = createContext(null);

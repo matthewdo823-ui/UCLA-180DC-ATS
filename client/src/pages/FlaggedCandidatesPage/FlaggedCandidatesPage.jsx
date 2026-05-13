@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-
-const API = "http://localhost:3000";
+import { API } from "../../constants/config";
 const serifFont = "Georgia, 'Times New Roman', serif";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
