@@ -51,6 +51,54 @@ function getReviewScore(scores = {}) {
     return Object.values(scores).reduce((total, value) => total + (Number(value) || 0), 0);
 }
 
+function validateScreeningScores(scores) {
+    if (!scores || typeof scores !== "object") {
+        return "scores must be an object";
+    }
+    for (const metric of SCORE_METRICS) {
+        const v = Number(scores[metric]);
+        if (!Number.isFinite(v) || v < 1 || v > 6) {
+            return `Each category must be scored 1–6 (${metric})`;
+        }
+    }
+    return null;
+}
+
+/** Canonical scores object for DB (integers 1–6 per rubric metric). */
+function normalizeScreeningScoresInput(scores) {
+    const err = validateScreeningScores(scores);
+    if (err) return { error: err };
+    const out = {};
+    for (const metric of SCORE_METRICS) {
+        out[metric] = Math.round(Number(scores[metric]));
+    }
+    return { scores: out };
+}
+
+function firstRel(rel) {
+    if (rel == null) return null;
+    return Array.isArray(rel) ? rel[0] : rel;
+}
+
+function mapMyReviewRow(row) {
+    const resume = firstRel(row.resumes);
+    const cand = firstRel(resume?.candidates);
+    return {
+        reviewId: row.id,
+        id: row.resume_id,
+        resumeName: resume?.name ?? null,
+        candidateName: cand?.name ?? null,
+        year: cand?.year ?? null,
+        major: cand?.major ?? null,
+        gpa: cand?.gpa ?? null,
+        scores: row.scores || {},
+        total: getReviewScore(row.scores),
+        decision: row.decision || "pass",
+        notes: row.notes || "",
+        submittedAt: row.submitted_at,
+    };
+}
+
 function getUserName(user = {}) {
     return [user.first_name, user.last_name].filter(Boolean).join(" ") || user.email || null;
 }
@@ -195,7 +243,7 @@ exports.listMyReviews = async (req, res) => {
             resumes (
                 id,
                 name,
-                candidates ( year )
+                candidates ( year, major, gpa, name )
             )
         `)
         .eq("graded_by", gradedBy)
@@ -203,19 +251,109 @@ exports.listMyReviews = async (req, res) => {
 
     if (error) return res.status(500).json({ error: error.message });
 
-    const reviews = (data || []).map((row) => ({
-        reviewId: row.id,
-        id: row.resume_id,
-        resumeName: row.resumes?.name ?? null,
-        year: row.resumes?.candidates?.year ?? null,
-        scores: row.scores || {},
-        total: getReviewScore(row.scores),
-        decision: row.decision || "pass",
-        notes: row.notes || "",
-        submittedAt: row.submitted_at,
-    }));
+    const reviews = (data || []).map(mapMyReviewRow);
 
     return res.json({ reviews, count: reviews.length });
+};
+
+/** Update one of the authenticated user's reviews (scores, notes, decision). */
+exports.patchMyReview = async (req, res) => {
+    const gradedBy = req.user?.user_id;
+    const reviewId = String(req.params.reviewId || "").trim();
+    if (!gradedBy) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!reviewId) {
+        return res.status(400).json({ error: "reviewId is required" });
+    }
+
+    const { scores, notes, decision } = req.body;
+    const { scores: normalizedScores, error: normErr } = normalizeScreeningScoresInput(scores);
+    if (normErr) {
+        return res.status(400).json({ error: normErr });
+    }
+
+    const rawDecision = VALID_REVIEW_DECISIONS.has(decision) ? decision : "pass";
+    const normalizedDecision = rawDecision === "flag" ? "flag" : "pass";
+
+    const { data: existing, error: fetchError } = await supabase
+        .from("resume_reviews")
+        .select("id, resume_id, decision, graded_by")
+        .eq("id", reviewId)
+        .eq("graded_by", gradedBy)
+        .maybeSingle();
+
+    if (fetchError) return res.status(500).json({ error: fetchError.message });
+    if (!existing) {
+        return res.status(404).json({ error: "Review not found" });
+    }
+
+    let flaggedResume = null;
+    if (normalizedDecision === "flag" && existing.decision !== "flag") {
+        const { data: resumeRow, error: resumeErr } = await supabase
+            .from("resumes")
+            .select("id, candidate_id")
+            .eq("id", existing.resume_id)
+            .maybeSingle();
+
+        if (resumeErr) return res.status(500).json({ error: resumeErr.message });
+        if (!resumeRow?.candidate_id) {
+            return res.status(400).json({ error: "Flagged resume is not linked to a candidate" });
+        }
+        flaggedResume = resumeRow;
+    }
+
+    const { error: updateError } = await supabase
+        .from("resume_reviews")
+        .update({
+            scores: normalizedScores,
+            notes: notes ?? "",
+            decision: normalizedDecision,
+        })
+        .eq("id", reviewId)
+        .eq("graded_by", gradedBy);
+
+    if (updateError) return res.status(500).json({ error: updateError.message });
+
+    if (flaggedResume) {
+        const { error: flagError } = await supabase
+            .from("candidate_flags")
+            .insert({
+                candidate_id: flaggedResume.candidate_id,
+                resume_id: flaggedResume.id,
+                flagged_by: gradedBy,
+                reason: notes || "Flagged during resume review",
+            });
+
+        if (flagError) {
+            if (flagError.code !== "23505") {
+                return res.status(500).json({ error: flagError.message });
+            }
+        }
+    }
+
+    const { data: row, error: readError } = await supabase
+        .from("resume_reviews")
+        .select(`
+            id,
+            resume_id,
+            scores,
+            notes,
+            decision,
+            submitted_at,
+            resumes (
+                id,
+                name,
+                candidates ( year, major, gpa, name )
+            )
+        `)
+        .eq("id", reviewId)
+        .maybeSingle();
+
+    if (readError) return res.status(500).json({ error: readError.message });
+    if (!row) return res.status(500).json({ error: "Failed to load updated review" });
+
+    return res.json({ review: mapMyReviewRow(row) });
 };
 
 exports.createCandidateFlag = async (req, res) => {
