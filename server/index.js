@@ -8,8 +8,12 @@ const { startFormsSyncCron } = require('./src/jobs/formsSyncCron');
 
 const app = express();
 
+
+
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: 'https://ucla-180dc-ats.onrender.com'
+  }));
 
 // Mount routes
 app.use('/auth', authRoutes);
