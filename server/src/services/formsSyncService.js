@@ -8,10 +8,10 @@
  */
 
 const fs = require("fs");
-const path = require("path");
 const { google } = require("googleapis");
 const supabase = require("../config/supabase");
 const { mapFormResponseToCandidate } = require("../utils/dataMapper");
+const { resolveFormConfigPath } = require("../utils/formConfigPath");
 
 const SCOPES = [
   "https://www.googleapis.com/auth/forms.responses.readonly",
@@ -20,13 +20,6 @@ const SCOPES = [
 
 function getKeyFilePath() {
   return process.env.GOOGLE_CLOUD_KEY_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS || "";
-}
-
-function resolveFormConfigPath() {
-  if (process.env.FORM_CONFIG_PATH) {
-    return path.resolve(process.env.FORM_CONFIG_PATH);
-  }
-  return path.join(__dirname, "..", "..", "form-config.json");
 }
 
 function loadFormConfig() {
