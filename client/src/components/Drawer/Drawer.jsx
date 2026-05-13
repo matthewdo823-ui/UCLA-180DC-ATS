@@ -19,7 +19,7 @@ export default function Drawer({ open, onClose, reviews, loading = false, onRevi
         <div style={{ padding: "18px 20px 14px", borderBottom: `1px solid ${css.borderLight}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: css.textDark }}>Past Reviews</div>
-            <div style={{ fontSize: 10, color: css.textGray, marginTop: 2 }}>Reviews you submitted on this account</div>
+            <div style={{ fontSize: 10, color: css.textGray, marginTop: 2 }}>Edit or take a gander at past reviews!</div>
           </div>
           <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: "50%", border: `1px solid ${css.borderLight}`, background: css.cardWhite, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 12, color: css.textGray }}>✕</button>
         </div>
