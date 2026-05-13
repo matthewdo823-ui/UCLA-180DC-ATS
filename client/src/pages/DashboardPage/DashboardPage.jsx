@@ -1,8 +1,51 @@
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
+
+const API = "http://localhost:3000";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const authedFetch = useAuthedFetch();
+  const [graded, setGraded] = useState(0);
+  const [expected, setExpected] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  const loadProgress = useCallback(async () => {
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const res = await authedFetch(`${API}/reviews`);
+      if (!res.ok) {
+        setGraded(0);
+        setExpected(null);
+        setLoadError(true);
+        return;
+      }
+      const data = await res.json();
+      const n = Number(data.count);
+      const goal = Number(data.expectedReviews);
+      setGraded(Number.isFinite(n) ? n : 0);
+      setExpected(Number.isFinite(goal) && goal > 0 ? goal : 15);
+    } catch {
+      setGraded(0);
+      setExpected(null);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [authedFetch]);
+
+  useEffect(() => {
+    loadProgress();
+  }, [loadProgress]);
+
+  const hasGoal = !loadError && expected != null;
+  const goal = expected ?? 0;
+  const progressPct =
+    hasGoal && goal > 0 ? Math.min(100, Math.round((graded / goal) * 100)) : 0;
 
   return (
     <div style={{
@@ -66,7 +109,11 @@ export default function DashboardPage() {
               <span>⭐</span> Today's Goal
             </span>
             <span style={{ fontSize: 18, fontWeight: 700 }}>
-              Grade 15 Resumes (this will be tracked with auth lol)
+              {loading
+                ? "Loading your goal…"
+                : loadError
+                  ? "Could not load your grading goal"
+                  : `Grade ${goal} resume${goal === 1 ? "" : "s"}`}
             </span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
@@ -74,14 +121,22 @@ export default function DashboardPage() {
               Progress
             </span>
             <span style={{ fontSize: 15, fontWeight: 700 }}>
-              3/15
+              {loading ? "—" : hasGoal ? `${graded}/${goal}` : "—"}
             </span>
           </div>
         </div>
 
         {/* Progress Bar */}
         <div style={{ height: 10, background: "#F3F4F6", borderRadius: 5, overflow: "hidden", marginBottom: 32 }}>
-          <div style={{ width: "20%", height: "100%", background: css.greenDark, borderRadius: 5 }} />
+          <div
+            style={{
+              width: !hasGoal || loading ? "0%" : `${progressPct}%`,
+              height: "100%",
+              background: css.greenDark,
+              borderRadius: 5,
+              transition: "width 0.35s ease",
+            }}
+          />
         </div>
 
         {/* Action Button */}
