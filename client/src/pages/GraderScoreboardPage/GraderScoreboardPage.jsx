@@ -3,37 +3,12 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-
-const serifFont = "Georgia, 'Times New Roman', serif";
+import { serifFont } from "../../theme/typography";
+import { formatDate, formatNumber, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
 const cardLime = "#C0DD97";
-
-function hasNumericValue(value) {
-  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
-}
-
-function getInitials(name) {
-  if (!name) return "??";
-  return name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
-}
-
-function titleCase(value) {
-  if (!value) return "";
-  return value.replace(/\w\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
-}
-
-function formatNumber(value) {
-  if (!hasNumericValue(value)) return "N/A";
-  const numeric = Number(value);
-  return Number.isInteger(numeric) ? numeric : numeric.toFixed(1);
-}
-
-function formatDate(value) {
-  if (!value) return "Not yet";
-  return new Date(value).toLocaleDateString();
-}
 
 function progressColor(progress) {
   if (progress >= 100) return css.greenDark;
@@ -84,7 +59,7 @@ function ProgressTiles({ count, expected }) {
 }
 
 function CategoryRow({ metric, value, maxPerCategory = 4 }) {
-  const pct = hasNumericValue(value) ? Math.max(0, Math.min(100, (Number(value) / maxPerCategory) * 100)) : 0;
+  const pct = hasNumericScore(value) ? Math.max(0, Math.min(100, (Number(value) / maxPerCategory) * 100)) : 0;
 
   return (
     <div style={{ marginBottom: 9 }}>
@@ -180,7 +155,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4 }) {
                 <p style={{ color: cardPale, fontSize: 18, fontFamily: serifFont, fontWeight: 600, margin: "0 0 3px", lineHeight: 1.15 }}>{grader.name}</p>
                 <p style={{ color: "#9FE1CB", fontSize: 12, margin: "0 0 2px" }}>{grader.email}</p>
                 <p style={{ color: "#5DCAA5", fontSize: 11, margin: 0 }}>
-                  Last login: {formatDate(grader.lastLogin)}
+                  Last login: {formatDate(grader.lastLogin, { fallback: "Not yet" })}
                 </p>
               </div>
             </div>
@@ -211,7 +186,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4 }) {
           <div style={{ margin: "6px 18px 0", padding: "10px 12px", background: "#F8FAF6", border: "1px solid #E3E8DD", borderRadius: 8 }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.05em", margin: "0 0 5px", fontWeight: 800 }}>SUMMARY</p>
             <p style={{ fontSize: 12, lineHeight: 1.45, color: css.textDark, margin: 0 }}>
-              Average normalized score given: {formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%. Raw avg: {formatNumber(grader.averageScore)} pts. Latest grading activity: {formatDate(grader.latestReviewAt)}.
+              Average normalized score given: {formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%. Raw avg: {formatNumber(grader.averageScore)} pts. Latest grading activity: {formatDate(grader.latestReviewAt, { fallback: "Not yet" })}.
             </p>
           </div>
 
@@ -223,7 +198,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4 }) {
               <div key={review.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{review.resumeName}</p>
-                  <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>{formatDate(review.submittedAt)}</p>
+                  <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>{formatDate(review.submittedAt, { fallback: "Not yet" })}</p>
                 </div>
                 <div style={{ fontSize: 12, color: cardGreen, fontWeight: 800 }}>{formatNumber(review.normalizedScore ?? review.score)}%</div>
               </div>

@@ -1,4 +1,5 @@
 const supabase = require("../config/supabase");
+const { getActiveCycleId } = require("../utils/cycleContext");
 const { DEFAULT_RUBRIC_CONFIG, validateRubricConfig } = require("../utils/rubric");
 const { syncFormResponsesToDatabase } = require("../services/formsSyncService");
 const {
@@ -56,17 +57,6 @@ function mapCycle(row, extras = {}) {
     hasFormConfig: Boolean(row.google_form_id && row.form_field_map),
     ...extras,
   };
-}
-
-async function getActiveCycleId() {
-  const { data, error } = await supabase
-    .from("app_settings")
-    .select("active_cycle_id")
-    .eq("id", 1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.active_cycle_id || null;
 }
 
 async function fetchCycleCounts(cycleIds) {

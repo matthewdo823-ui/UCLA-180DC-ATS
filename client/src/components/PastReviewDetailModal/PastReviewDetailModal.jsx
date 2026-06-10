@@ -3,28 +3,12 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { BUBBLE_COLORS, API, RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
 import { rubricFromSnapshot } from "../../utils/rubric";
 import { css } from "../../theme/colors";
-const serifFont = "Georgia, 'Times New Roman', serif";
+import { serifFont } from "../../theme/typography";
+import { formatScore, getInitials, titleCase } from "../../utils/format";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
 const cardLime = "#C0DD97";
-
-function getInitials(name) {
-  if (!name) return "??";
-  return name.split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();
-}
-
-function titleCase(value) {
-  if (!value) return "";
-  return value.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
-}
-
-function formatScore(value) {
-  if (value === null || value === undefined || value === "") return "—";
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return "—";
-  return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
-}
 
 function aggregateFromScores(scores, metrics = []) {
   return metrics.reduce((sum, m) => sum + (Number(scores[m]) || 0), 0);
@@ -71,7 +55,7 @@ function CategoryRowEdit({ metric, value, onScore, maxPerCategory = RUBRIC_MAX_P
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 6, alignItems: "center" }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: css.textDark }}>{titleCase(metric)}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: cardGreen, fontFamily: "'DM Mono', monospace" }}>
-          {formatScore(value)} <span style={{ color: css.textGray, fontWeight: 500 }}>/ {maxPerCategory}</span>
+          {formatScore(value, { fallback: "—" })} <span style={{ color: css.textGray, fontWeight: 500 }}>/ {maxPerCategory}</span>
         </span>
       </div>
       <div style={{ height: 6, background: "#E8EDE4", borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>

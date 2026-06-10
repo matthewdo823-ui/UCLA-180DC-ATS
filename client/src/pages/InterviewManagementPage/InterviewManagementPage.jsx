@@ -4,8 +4,8 @@ import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-
-const serifFont = "Georgia, 'Times New Roman', serif";
+import { serifFont } from "../../theme/typography";
+import { getInitials } from "../../utils/format";
 
 const DECISION_STYLE = {
   pending: { bg: "rgba(107,114,128,0.12)", color: "#6B7280", bd: "rgba(107,114,128,0.28)" },
@@ -13,11 +13,6 @@ const DECISION_STYLE = {
   fail: { bg: "rgba(226,75,74,0.10)", color: "#E24B4A", bd: "rgba(226,75,74,0.28)" },
   hold: { bg: "rgba(239,159,39,0.12)", color: "#C47D12", bd: "rgba(239,159,39,0.28)" },
 };
-
-function getInitials(name) {
-  if (!name) return "??";
-  return name.split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();
-}
 
 function toLocalInputValue(iso) {
   if (!iso) return "";
