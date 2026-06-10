@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
-import { METRICS, API } from "../../constants/config";
+import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 
@@ -83,15 +83,15 @@ function ProgressTiles({ count, expected }) {
   );
 }
 
-function CategoryRow({ metric, value }) {
-  const pct = hasNumericValue(value) ? Math.max(0, Math.min(100, (Number(value) / 6) * 100)) : 0;
+function CategoryRow({ metric, value, maxPerCategory = 4 }) {
+  const pct = hasNumericValue(value) ? Math.max(0, Math.min(100, (Number(value) / maxPerCategory) * 100)) : 0;
 
   return (
     <div style={{ marginBottom: 9 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
         <span style={{ fontSize: 12, color: css.textDark }}>{titleCase(metric)}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: cardGreen }}>
-          {formatNumber(value)} <span style={{ color: css.textGray, fontWeight: 400 }}>/ 6</span>
+          {formatNumber(value)} <span style={{ color: css.textGray, fontWeight: 400 }}>/ {maxPerCategory}</span>
         </span>
       </div>
       <div style={{ height: 5, background: "#EEF1EC", borderRadius: 3, overflow: "hidden" }}>
@@ -101,7 +101,7 @@ function CategoryRow({ metric, value }) {
   );
 }
 
-function GraderModal({ grader, onClose }) {
+function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4 }) {
   useEffect(() => {
     function onKeyDown(event) {
       if (event.key === "Escape") onClose();
@@ -203,15 +203,15 @@ function GraderModal({ grader, onClose }) {
 
           <div style={{ padding: "14px 18px 4px" }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 800 }}>AVERAGE SCORES GIVEN</p>
-            {METRICS.map(metric => (
-              <CategoryRow key={metric} metric={metric} value={grader.categoryScores?.[metric]} />
+            {metrics.map(metric => (
+              <CategoryRow key={metric} metric={metric} maxPerCategory={maxPerCategory} value={grader.categoryScores?.[metric]} />
             ))}
           </div>
 
           <div style={{ margin: "6px 18px 0", padding: "10px 12px", background: "#F8FAF6", border: "1px solid #E3E8DD", borderRadius: 8 }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.05em", margin: "0 0 5px", fontWeight: 800 }}>SUMMARY</p>
             <p style={{ fontSize: 12, lineHeight: 1.45, color: css.textDark, margin: 0 }}>
-              Average total score given: {formatNumber(grader.averageScore)} / {grader.maxScore}. Latest grading activity: {formatDate(grader.latestReviewAt)}.
+              Average normalized score given: {formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%. Raw avg: {formatNumber(grader.averageScore)} pts. Latest grading activity: {formatDate(grader.latestReviewAt)}.
             </p>
           </div>
 
@@ -225,7 +225,7 @@ function GraderModal({ grader, onClose }) {
                   <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{review.resumeName}</p>
                   <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>{formatDate(review.submittedAt)}</p>
                 </div>
-                <div style={{ fontSize: 12, color: cardGreen, fontWeight: 800 }}>{formatNumber(review.score)}/{grader.maxScore}</div>
+                <div style={{ fontSize: 12, color: cardGreen, fontWeight: 800 }}>{formatNumber(review.normalizedScore ?? review.score)}%</div>
               </div>
             ))}
             {grader.reviews?.length === 0 && (
@@ -240,7 +240,7 @@ function GraderModal({ grader, onClose }) {
 
 export default function GraderScoreboardPage() {
   const authedFetch = useAuthedFetch();
-  const [data, setData] = useState({ stats: null, graders: [] });
+  const [data, setData] = useState({ stats: null, graders: [], metrics: [], maxPerCategory: 4, context: null });
   const [loading, setLoading] = useState(true);
   const [selectedGrader, setSelectedGrader] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -264,6 +264,11 @@ export default function GraderScoreboardPage() {
   }, [authedFetch]);
 
   const graders = useMemo(() => data.graders ?? [], [data.graders]);
+  const metrics = useMemo(() => data.metrics ?? [], [data.metrics]);
+  const maxPerCategory = data.maxPerCategory ?? 4;
+  const scoreboardLabel = data.context?.cycle && data.context?.round
+    ? `${data.context.cycle.name} · ${data.context.round.name}`
+    : "Grader scoreboard";
 
   const filteredGraders = useMemo(
     () => graders.filter(g => graderMatchesStatusFilter(g, statusFilter)),
@@ -278,7 +283,7 @@ export default function GraderScoreboardPage() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      <Topbar phaseLabel="Round 1 · Grader scoreboard" activeLabel="Leaderboard" rightSlot={<></>} />
+      <Topbar phaseLabel={scoreboardLabel} activeLabel="Leaderboard" rightSlot={<></>} />
 
       <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
@@ -406,7 +411,7 @@ export default function GraderScoreboardPage() {
                 {grader.reviewCount} / {grader.expectedReviews}
               </div>
               <div style={{ fontSize: 11, color: css.textGray }}>
-                {grader.progressScore}% complete · avg score {formatNumber(grader.averageScore)} / {grader.maxScore}
+                {grader.progressScore}% complete · avg {formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%
               </div>
             </div>
 
@@ -435,7 +440,12 @@ export default function GraderScoreboardPage() {
       </div>
 
       {selectedGrader && (
-        <GraderModal grader={selectedGrader} onClose={() => setSelectedGrader(null)} />
+        <GraderModal
+          grader={selectedGrader}
+          metrics={metrics}
+          maxPerCategory={maxPerCategory}
+          onClose={() => setSelectedGrader(null)}
+        />
       )}
     </div>
   );

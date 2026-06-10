@@ -89,6 +89,76 @@ function validateRubricConfig(config) {
   return null;
 }
 
+function validateScreeningScores(scores, rubricForYear) {
+  if (!scores || typeof scores !== "object") {
+    return "scores must be an object";
+  }
+  if (!rubricForYear || !Array.isArray(rubricForYear.metrics) || !rubricForYear.metrics.length) {
+    return "rubric is not configured for this candidate year";
+  }
+
+  const max = rubricForYear.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
+  for (const metric of rubricForYear.metrics) {
+    const value = Number(scores[metric]);
+    if (!Number.isFinite(value) || value < 1 || value > max) {
+      return `Each category must be scored 1–${max} (${metric})`;
+    }
+  }
+  return null;
+}
+
+function normalizeScreeningScoresInput(scores, rubricForYear) {
+  const err = validateScreeningScores(scores, rubricForYear);
+  if (err) return { error: err };
+
+  const out = {};
+  for (const metric of rubricForYear.metrics) {
+    out[metric] = Math.round(Number(scores[metric]));
+  }
+  return { scores: out };
+}
+
+function buildRubricSnapshot(rubricConfig, yearRaw) {
+  const rubricForYear = getRubricForYear(rubricConfig, yearRaw);
+  return {
+    yearKey: normalizeYearKey(yearRaw),
+    label: rubricForYear.label,
+    metrics: rubricForYear.metrics,
+    maxPerCategory: rubricForYear.maxPerCategory,
+    maxScore: getRubricMaxScore(rubricForYear),
+    imageUrl: rubricForYear.imageUrl,
+  };
+}
+
+function computeRawScore(scores = {}, metrics = []) {
+  if (metrics.length) {
+    return metrics.reduce((sum, metric) => sum + (Number(scores[metric]) || 0), 0);
+  }
+  return Object.values(scores).reduce((sum, value) => sum + (Number(value) || 0), 0);
+}
+
+function computeNormalizedScore(scores, snapshot) {
+  const maxScore = Number(snapshot?.maxScore);
+  if (!Number.isFinite(maxScore) || maxScore <= 0) return null;
+  const metrics = snapshot?.metrics || Object.keys(scores || {});
+  const raw = computeRawScore(scores, metrics);
+  return Number(((raw / maxScore) * 100).toFixed(2));
+}
+
+function getMetricsFromRubricConfig(rubricConfig) {
+  const byYear = rubricConfig?.byYear || {};
+  const metrics = new Set();
+  Object.values(byYear).forEach((entry) => {
+    (entry?.metrics || []).forEach((metric) => metrics.add(metric));
+  });
+  return [...metrics];
+}
+
+function getLegacyNormalizedScore(scores) {
+  const raw = computeRawScore(scores);
+  return Number(((raw / 24) * 100).toFixed(2));
+}
+
 module.exports = {
   RUBRIC_MAX_PER_CATEGORY,
   DEFAULT_RUBRIC_CONFIG,
@@ -96,4 +166,11 @@ module.exports = {
   getRubricForYear,
   getRubricMaxScore,
   validateRubricConfig,
+  validateScreeningScores,
+  normalizeScreeningScoresInput,
+  buildRubricSnapshot,
+  computeRawScore,
+  computeNormalizedScore,
+  getMetricsFromRubricConfig,
+  getLegacyNormalizedScore,
 };

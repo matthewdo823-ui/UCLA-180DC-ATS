@@ -1,5 +1,5 @@
 import { css } from "../../theme/colors";
-import { YEAR_CFG, DEC_STYLE, MAX_SCORE } from "../../constants/config";
+import { YEAR_CFG, DEC_STYLE } from "../../constants/config";
 
 function yearBadgeConfig(yearRaw) {
   if (yearRaw == null || yearRaw === "") return null;
@@ -10,7 +10,11 @@ function yearBadgeConfig(yearRaw) {
 export default function Drawer({ open, onClose, reviews, loading = false, onReviewClick }) {
   const passCount = reviews.filter((r) => r.decision === "pass").length;
   const flagCount = reviews.filter((r) => r.decision === "flag").length;
-  const scoreColor = (t) => (t >= MAX_SCORE * 0.75 ? css.greenDark : t >= MAX_SCORE * 0.5 ? css.amber : css.red);
+  const scoreColor = (review) => {
+    const max = Number(review?.maxScore) || 12;
+    const total = Number(review?.total) || 0;
+    return total >= max * 0.75 ? css.greenDark : total >= max * 0.5 ? css.amber : css.red;
+  };
 
   return (
     <>
@@ -103,7 +107,9 @@ export default function Drawer({ open, onClose, reviews, loading = false, onRevi
                         <div style={{ fontSize: 11, fontWeight: 500, color: css.textGray, marginTop: 3, lineHeight: 1.3 }}>{subtitle}</div>
                       ) : null}
                     </div>
-                    <span style={{ fontSize: 15, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: scoreColor(r.total), minWidth: 36, textAlign: "right" }}>{r.total}</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: scoreColor(r), minWidth: 36, textAlign: "right" }}>
+                      {r.total}{r.maxScore ? <span style={{ fontSize: 11, color: css.textGray, fontWeight: 500 }}>/{r.maxScore}</span> : null}
+                    </span>
                     <span
                       style={{
                         fontSize: 9,

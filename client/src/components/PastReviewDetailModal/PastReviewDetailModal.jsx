@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
-import { METRICS, MAX_SCORE, BUBBLE_COLORS, API } from "../../constants/config";
+import { BUBBLE_COLORS, API, RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
+import { rubricFromSnapshot } from "../../utils/rubric";
 import { css } from "../../theme/colors";
 const serifFont = "Georgia, 'Times New Roman', serif";
 const cardGreen = "#085041";
@@ -25,8 +26,8 @@ function formatScore(value) {
   return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
 }
 
-function aggregateFromScores(scores) {
-  return METRICS.reduce((sum, m) => sum + (Number(scores[m]) || 0), 0);
+function aggregateFromScores(scores, metrics = []) {
+  return metrics.reduce((sum, m) => sum + (Number(scores[m]) || 0), 0);
 }
 
 async function readErrorBody(res) {
@@ -60,23 +61,24 @@ function ScoreTiles({ score, maxScore }) {
   );
 }
 
-function CategoryRowEdit({ metric, value, onScore }) {
+function CategoryRowEdit({ metric, value, onScore, maxPerCategory = RUBRIC_MAX_PER_CATEGORY }) {
   const num = Number(value);
   const has = Number.isFinite(num);
-  const pct = has ? Math.max(0, Math.min(100, (num / 6) * 100)) : 0;
+  const pct = has ? Math.max(0, Math.min(100, (num / maxPerCategory) * 100)) : 0;
+  const levels = Array.from({ length: maxPerCategory }, (_, i) => i + 1);
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 6, alignItems: "center" }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: css.textDark }}>{titleCase(metric)}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: cardGreen, fontFamily: "'DM Mono', monospace" }}>
-          {formatScore(value)} <span style={{ color: css.textGray, fontWeight: 500 }}>/ 6</span>
+          {formatScore(value)} <span style={{ color: css.textGray, fontWeight: 500 }}>/ {maxPerCategory}</span>
         </span>
       </div>
       <div style={{ height: 6, background: "#E8EDE4", borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
         <div style={{ height: "100%", width: `${pct}%`, background: cardMint, borderRadius: 3, transition: "width 0.25s ease" }} />
       </div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {[1, 2, 3, 4, 5, 6].map((n) => {
+        {levels.map((n) => {
           const sel = has && num === n;
           const c = BUBBLE_COLORS[n];
           return (
@@ -107,9 +109,9 @@ function CategoryRowEdit({ metric, value, onScore }) {
   );
 }
 
-function buildPayloadScores(scores) {
+function buildPayloadScores(scores, metrics = []) {
   const out = {};
-  for (const m of METRICS) {
+  for (const m of metrics) {
     out[m] = Math.round(Number(scores[m]));
   }
   return out;
@@ -127,6 +129,13 @@ export default function PastReviewDetailModal({ review, onClose, onSaved }) {
   const prevReviewIdRef = useRef(undefined);
 
   const displayName = review?.resumeName || review?.candidateName || "Resume";
+  const rubric = useMemo(
+    () => rubricFromSnapshot(review?.rubricSnapshot) || { metrics: review?.metrics || [], maxPerCategory: RUBRIC_MAX_PER_CATEGORY },
+    [review]
+  );
+  const metrics = rubric.metrics || [];
+  const maxPerCategory = rubric.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
+  const maxScore = rubric.maxScore || metrics.length * maxPerCategory;
 
   useEffect(() => {
     if (!review) return;
@@ -140,11 +149,13 @@ export default function PastReviewDetailModal({ review, onClose, onSaved }) {
     }
     prevReviewIdRef.current = rid;
 
+    const reviewMetrics = review.metrics || rubricFromSnapshot(review.rubricSnapshot)?.metrics || [];
+    const max = rubricFromSnapshot(review.rubricSnapshot)?.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
     const next = {};
-    for (const m of METRICS) {
+    for (const m of reviewMetrics) {
       const raw = review.scores?.[m];
       const n = Number(raw);
-      next[m] = Number.isFinite(n) && n >= 1 && n <= 6 ? Math.round(n) : null;
+      next[m] = Number.isFinite(n) && n >= 1 && n <= max ? Math.round(n) : null;
     }
     setScores(next);
     setNotes(review.notes ?? "");
@@ -171,21 +182,22 @@ export default function PastReviewDetailModal({ review, onClose, onSaved }) {
 
   const scoringComplete = useMemo(
     () =>
-      METRICS.every((m) => {
+      metrics.length > 0 &&
+      metrics.every((m) => {
         const v = Number(scores[m]);
-        return Number.isFinite(v) && v >= 1 && v <= 6;
+        return Number.isFinite(v) && v >= 1 && v <= maxPerCategory;
       }),
-    [scores]
+    [scores, metrics, maxPerCategory]
   );
 
-  const total = useMemo(() => aggregateFromScores(scores), [scores]);
+  const total = useMemo(() => aggregateFromScores(scores, metrics), [scores, metrics]);
 
   const handleSave = useCallback(async () => {
     if (!review?.reviewId || !scoringComplete) return;
     setSaving(true);
     setError("");
     try {
-      const payloadScores = buildPayloadScores(scores);
+      const payloadScores = buildPayloadScores(scores, metrics);
       const res = await authedFetch(`${API}/reviews/${encodeURIComponent(String(review.reviewId).trim())}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -322,19 +334,19 @@ export default function PastReviewDetailModal({ review, onClose, onSaved }) {
             <div>
               <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 4px", fontWeight: 800, letterSpacing: "0.06em" }}>TOTAL</p>
               <p style={{ fontSize: 28, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1, fontFamily: "'DM Mono', monospace" }}>
-                {formatScore(total)} <span style={{ fontSize: 14, color: "#3B6D11", fontWeight: 600 }}>/ {MAX_SCORE}</span>
+                {formatScore(total)} <span style={{ fontSize: 14, color: "#3B6D11", fontWeight: 600 }}>/ {maxScore}</span>
               </p>
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 800, letterSpacing: "0.06em" }}>{METRICS.length} categories</p>
-              <ScoreTiles score={total} maxScore={MAX_SCORE} />
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 800, letterSpacing: "0.06em" }}>{metrics.length} categories</p>
+              <ScoreTiles score={total} maxScore={maxScore} />
             </div>
           </div>
 
           <div style={{ padding: "18px 20px 8px" }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.08em", margin: "0 0 14px", fontWeight: 800 }}>SCORES</p>
-            {METRICS.map((metric) => (
-              <CategoryRowEdit key={metric} metric={metric} value={scores[metric]} onScore={(m, v) => setScores((s) => ({ ...s, [m]: v }))} />
+            {metrics.map((metric) => (
+              <CategoryRowEdit key={metric} metric={metric} value={scores[metric]} maxPerCategory={maxPerCategory} onScore={(m, v) => setScores((s) => ({ ...s, [m]: v }))} />
             ))}
           </div>
 

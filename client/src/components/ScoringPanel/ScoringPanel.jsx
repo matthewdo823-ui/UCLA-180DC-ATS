@@ -1,42 +1,57 @@
-import { useMemo } from "react";
 import { css } from "../../theme/colors";
-import { getRubricForYear, getRubricMaxScore, RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
+import { RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
+import { getRubricMaxScore } from "../../utils/rubric";
 import MetricRow from "./MetricRow";
 import ActionBtn from "./ActionBtn";
 
-export default function ScoringPanel({ resume, scores, onScore, notes, onNotes, onAction, scoringComplete = true }) {
-  const rubric = useMemo(
-    () => getRubricForYear(resume?.candidates?.year),
-    [resume?.candidates?.year]
-  );
+export default function ScoringPanel({
+  rubric,
+  scores,
+  onScore,
+  notes,
+  onNotes,
+  onAction,
+  scoringComplete = true,
+}) {
+  if (!rubric || !rubric.metrics?.length) {
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: css.textGray, fontSize: 13 }}>
+        No rubric configured for this candidate year.
+      </div>
+    );
+  }
+
+  const maxPerCategory = rubric.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
   const maxScore = getRubricMaxScore(rubric);
   const total = rubric.metrics.reduce((sum, m) => sum + (Number(scores[m]) || 0), 0);
   const scoredCount = rubric.metrics.filter((m) => {
     const v = Number(scores[m]);
-    return Number.isFinite(v) && v >= 1 && v <= RUBRIC_MAX_PER_CATEGORY;
+    return Number.isFinite(v) && v >= 1 && v <= maxPerCategory;
   }).length;
   const scoreColor = total >= maxScore * 0.75 ? css.greenDark : total >= maxScore * 0.5 ? css.amber : css.red;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", paddingBottom: 16, scrollbarWidth: "thin", scrollbarColor: `${css.borderLight} transparent` }}>
-      <div
-        style={{
-          background: css.cardWhite,
-          border: `1px solid ${css.borderLight}`,
-          borderRadius: 12,
-          padding: "12px 14px",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
-        }}
-      >
-        <div style={{ fontSize: 11, fontWeight: 800, color: css.greenDark, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 8 }}>
-          {rubric.label} rubric
+      {rubric.imageUrl ? (
+        <div
+          style={{
+            background: css.cardWhite,
+            border: `1px solid ${css.borderLight}`,
+            borderRadius: 12,
+            padding: "12px 14px",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 800, color: css.greenDark, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 8 }}>
+            {rubric.label} rubric
+          </div>
+          <img
+            src={rubric.imageUrl}
+            alt={`${rubric.label} scoring rubric`}
+            style={{ width: "100%", height: "auto", display: "block", borderRadius: 8, border: `1px solid ${css.borderLight}` }}
+          />
         </div>
-        <img
-          src={rubric.image}
-          alt={`${rubric.label} scoring rubric`}
-          style={{ width: "100%", height: "auto", display: "block", borderRadius: 8, border: `1px solid ${css.borderLight}` }}
-        />
-      </div>
+      ) : null}
 
       <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: "20px 24px", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -44,11 +59,11 @@ export default function ScoringPanel({ resume, scores, onScore, notes, onNotes, 
             <span style={{ fontSize: 14 }}>⚖️</span>
             SCORING RUBRIC
           </div>
-          <span style={{ fontSize: 11, color: css.textGray, fontWeight: 500 }}>Rate 1–{RUBRIC_MAX_PER_CATEGORY} per category</span>
+          <span style={{ fontSize: 11, color: css.textGray, fontWeight: 500 }}>Rate 1–{maxPerCategory} per category</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {rubric.metrics.map(m => (
-            <MetricRow key={m} metric={m} value={scores[m]} onScore={onScore} maxScore={RUBRIC_MAX_PER_CATEGORY} />
+            <MetricRow key={m} metric={m} value={scores[m]} onScore={onScore} maxScore={maxPerCategory} />
           ))}
         </div>
       </div>
@@ -96,7 +111,7 @@ export default function ScoringPanel({ resume, scores, onScore, notes, onNotes, 
             label={label}
             style={style}
             disabled={!scoringComplete}
-            title={!scoringComplete ? `Rate each rubric category from 1 to ${RUBRIC_MAX_PER_CATEGORY} first` : undefined}
+            title={!scoringComplete ? `Rate each rubric category from 1 to ${maxPerCategory} first` : undefined}
             onClick={() => onAction(type)}
           />
         ))}

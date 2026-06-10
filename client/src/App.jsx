@@ -8,6 +8,8 @@ import GraderScoreboardPage from "./pages/GraderScoreboardPage/GraderScoreboardP
 import LoginPage from "./pages/LoginPage/LoginPage";
 import NoAccessPage from "./pages/NoAccessPage/NoAccessPage";
 import ScreenerPage from "./pages/ScreenerPage/ScreenerPage";
+import InterviewManagementPage from "./pages/InterviewManagementPage/InterviewManagementPage";
+import GradingRouterPage from "./pages/GradingRouterPage/GradingRouterPage";
 import ScoreboardPage from "./pages/ScoreboardPage/ScoreboardPage";
 import Sidebar from "./components/Sidebar/Sidebar";
 
@@ -38,10 +40,26 @@ function AppShell() {
             )}
           />
           <Route
+            path="/grading"
+            element={(
+              <ProtectedRoute>
+                <GradingRouterPage />
+              </ProtectedRoute>
+            )}
+          />
+          <Route
             path="/resume-screener"
             element={(
               <ProtectedRoute>
                 <ScreenerPage />
+              </ProtectedRoute>
+            )}
+          />
+          <Route
+            path="/interviews"
+            element={(
+              <ProtectedRoute>
+                <InterviewManagementPage />
               </ProtectedRoute>
             )}
           />
