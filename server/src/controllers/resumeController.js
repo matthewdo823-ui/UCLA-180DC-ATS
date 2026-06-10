@@ -276,49 +276,24 @@ exports.saveReview = async (req, res) => {
     const rubricSnapshot = buildRubricSnapshot(screening.round.rubric_config, candidate?.year);
     const normalizedScore = computeNormalizedScore(normalizedScores, rubricSnapshot);
 
-    let flaggedResume = null;
-    if (normalizedDecision === "flag") {
-        if (!resumeRow.candidate_id) {
-            return res.status(400).json({ error: "Flagged resume is not linked to a candidate" });
-        }
-        flaggedResume = { id: resumeRow.id, candidate_id: resumeRow.candidate_id };
+    if (normalizedDecision === "flag" && !resumeRow.candidate_id) {
+        return res.status(400).json({ error: "Flagged resume is not linked to a candidate" });
     }
 
-    const { error: reviewError } = await supabase
-        .from('resume_reviews')
-        .insert({
-            resume_id,
-            scores: normalizedScores,
-            notes,
-            decision: normalizedDecision,
-            graded_by: gradedBy,
-            cycle_id: screening.cycle.id,
-            round_id: screening.round.id,
-            rubric_snapshot: rubricSnapshot,
-            normalized_score: normalizedScore,
-        });
+    const { error: saveError } = await supabase.rpc('save_resume_review', {
+        resume_id_input: resume_id,
+        scores_input: normalizedScores,
+        notes_input: notes,
+        decision_input: normalizedDecision,
+        graded_by_input: gradedBy,
+        cycle_id_input: screening.cycle.id,
+        round_id_input: screening.round.id,
+        rubric_snapshot_input: rubricSnapshot,
+        normalized_score_input: normalizedScore,
+        candidate_id_input: normalizedDecision === "flag" ? resumeRow.candidate_id : null,
+    });
 
-    if (reviewError) return res.status(500).json({ error: reviewError.message });
-
-    // increment
-    const { error: countError } = await supabase.rpc(
-        'increment_review_count', { resume_id_input: resume_id }
-    );
-
-    if (countError) return res.status(500).json({ error: countError.message });
-
-    if (flaggedResume) {
-        const { error: flagError } = await supabase
-            .from('candidate_flags')
-            .insert({
-                candidate_id: flaggedResume.candidate_id,
-                resume_id: flaggedResume.id,
-                flagged_by: gradedBy,
-                reason: notes || "Flagged during resume review",
-            });
-
-        if (flagError) return res.status(500).json({ error: flagError.message });
-    }
+    if (saveError) return res.status(500).json({ error: saveError.message });
 
     return res.json({ success: true });
 };

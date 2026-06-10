@@ -6,6 +6,7 @@ const authRoutes = require('./src/routes/authRoutes');
 const resumeRoutes = require('./src/routes/resumeRoutes');
 const cycleRoutes = require('./src/routes/cycleRoutes');
 const interviewRoutes = require('./src/routes/interviewRoutes');
+const userRoutes = require('./src/routes/userRoutes');
 const { startFormsSyncCron } = require('./src/jobs/formsSyncCron');
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/auth', authRoutes);
 app.use('/', cycleRoutes);
 app.use('/', interviewRoutes);
 app.use('/', resumeRoutes);
+app.use('/', userRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
