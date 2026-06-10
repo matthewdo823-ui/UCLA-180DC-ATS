@@ -27,7 +27,7 @@ export default function DashboardPage() {
       const n = Number(data.count);
       const goal = Number(data.expectedReviews);
       setGraded(Number.isFinite(n) ? n : 0);
-      setExpected(Number.isFinite(goal) && goal > 0 ? goal : 15);
+      setExpected(Number.isFinite(goal) && goal > 0 ? goal : 30);
     } catch {
       setGraded(0);
       setExpected(null);

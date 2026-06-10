@@ -88,7 +88,7 @@ export default function LoginPage() {
         <p style={{ fontSize: 14, color: css.textGray, marginBottom: 28 }}>
           {isCreateMode
             ? "New accounts start as applicants until an admin updates their role."
-            : "Use your ATS account to access resume screening."}
+            : "Log into your account to continue to the epic 180DC recruitment platform."}
         </p>
 
         {isCreateMode && (
