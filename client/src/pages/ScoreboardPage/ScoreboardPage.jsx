@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
-import { METRICS, MAX_SCORE, API } from "../../constants/config";
+import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 
@@ -237,19 +237,16 @@ function normalizeMetricScore(candidate, metric) {
   return hasNumericScore(value) ? Number(value) : null;
 }
 
-function getMaxScore(candidate) {
-  return candidate?.maxScore ?? MAX_SCORE;
+function getNormalizedScore(candidate) {
+  if (hasNumericScore(candidate?.normalizedScore)) return Number(candidate.normalizedScore);
+  if (hasNumericScore(candidate?.score)) return Number(candidate.score);
+  return null;
 }
 
 function getAggregateScore(candidate) {
   if (hasNumericScore(candidate?.aggregateScore)) {
     return Number(candidate.aggregateScore);
   }
-
-  if (hasNumericScore(candidate?.score)) {
-    return (Number(candidate.score) / 100) * getMaxScore(candidate);
-  }
-
   return null;
 }
 
@@ -308,15 +305,15 @@ function ScoreTiles({ score, maxScore }) {
   );
 }
 
-function CategoryRow({ metric, value }) {
-  const pct = hasNumericScore(value) ? Math.max(0, Math.min(100, (Number(value) / 6) * 100)) : 0;
+function CategoryRow({ metric, value, maxPerCategory = 4 }) {
+  const pct = hasNumericScore(value) ? Math.max(0, Math.min(100, (Number(value) / maxPerCategory) * 100)) : 0;
 
   return (
     <div style={{ marginBottom: 9 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
         <span style={{ fontSize: 12, color: css.textDark }}>{titleCase(metric)}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: cardGreen }}>
-          {formatScore(value)} <span style={{ color: css.textGray, fontWeight: 400 }}>/ 6</span>
+          {formatScore(value)} <span style={{ color: css.textGray, fontWeight: 400 }}>/ {maxPerCategory}</span>
         </span>
       </div>
       <div style={{ height: 5, background: "#EEF1EC", borderRadius: 3, overflow: "hidden" }}>
@@ -326,10 +323,10 @@ function CategoryRow({ metric, value }) {
   );
 }
 
-function ScorecardModal({ candidate, onClose }) {
+function ScorecardModal({ candidate, onClose, metrics = [], maxPerCategory = 4 }) {
   const [reviewersOpen, setReviewersOpen] = useState(false);
   const aggregateScore = getAggregateScore(candidate);
-  const maxScore = getMaxScore(candidate);
+  const normalizedScore = getNormalizedScore(candidate);
   const reviews = candidate?.reviews ?? [];
   const latestNote = [...reviews].reverse().find(review => review.notes)?.notes;
 
@@ -425,21 +422,26 @@ function ScorecardModal({ candidate, onClose }) {
 
           <div style={{ background: cardPale, padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #DCE7D2" }}>
             <div>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 800, letterSpacing: "0.05em" }}>AGGREGATE SCORE</p>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 800, letterSpacing: "0.05em" }}>NORMALIZED SCORE</p>
               <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
-                {formatScore(aggregateScore)} <span style={{ fontSize: 14, color: "#3B6D11" }}>/ {maxScore}</span>
+                {formatScore(normalizedScore)}<span style={{ fontSize: 14, color: "#3B6D11" }}>%</span>
               </p>
+              {aggregateScore != null ? (
+                <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
+                  Raw avg: {formatScore(aggregateScore)} pts
+                </p>
+              ) : null}
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 800, letterSpacing: "0.05em" }}>{METRICS.length} CATEGORIES</p>
-              <ScoreTiles score={aggregateScore} maxScore={maxScore} />
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 800, letterSpacing: "0.05em" }}>{metrics.length} CATEGORIES</p>
+              <ScoreTiles score={normalizedScore} maxScore={100} />
             </div>
           </div>
 
           <div style={{ padding: "14px 18px 4px" }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 800 }}>CATEGORY BREAKDOWN</p>
-            {METRICS.map(metric => (
-              <CategoryRow key={metric} metric={metric} value={normalizeMetricScore(candidate, metric)} />
+            {metrics.map(metric => (
+              <CategoryRow key={metric} metric={metric} maxPerCategory={maxPerCategory} value={normalizeMetricScore(candidate, metric)} />
             ))}
           </div>
 
@@ -513,7 +515,7 @@ const selectStyle = {
 
 export default function ScoreboardPage() {
   const authedFetch = useAuthedFetch();
-  const [data, setData] = useState({ stats: null, candidates: [] });
+  const [data, setData] = useState({ stats: null, candidates: [], metrics: [], maxPerCategory: 4, context: null });
   const [loading, setLoading] = useState(true);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -569,6 +571,11 @@ export default function ScoreboardPage() {
   }, [filtersOpen]);
 
   const candidates = useMemo(() => data.candidates ?? [], [data.candidates]);
+  const metrics = useMemo(() => data.metrics ?? [], [data.metrics]);
+  const maxPerCategory = data.maxPerCategory ?? 4;
+  const scoreboardLabel = data.context?.cycle && data.context?.round
+    ? `${data.context.cycle.name} · ${data.context.round.name}`
+    : "Candidate scoreboard";
 
   const majorOptions = useMemo(
     () => uniqueSortedStrings(candidates.map(c => c.major || "Undeclared")),
@@ -599,7 +606,7 @@ export default function ScoreboardPage() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      <Topbar phaseLabel="Round 1 · Candidate scoreboard" activeLabel="Live roster" rightSlot={<></>} />
+      <Topbar phaseLabel={scoreboardLabel} activeLabel="Live roster" rightSlot={<></>} />
 
       <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
@@ -845,9 +852,9 @@ export default function ScoreboardPage() {
             </div>
 
             <div>
-              <div style={{ color: scoreColor(c.score), fontSize: 18, fontFamily: serifFont, fontWeight: 600 }}>{formatScore(c.score)}</div>
+              <div style={{ color: scoreColor(c.score), fontSize: 18, fontFamily: serifFont, fontWeight: 600 }}>{formatScore(c.score)}%</div>
               <div style={{ fontSize: 11, color: css.textGray }}>
-                {formatScore(getAggregateScore(c))} / {getMaxScore(c)} · {c.numReviews ?? c.reviews?.length ?? 0} {(c.numReviews ?? c.reviews?.length ?? 0) === 1 ? "review" : "reviews"}
+                {formatScore(getAggregateScore(c))} raw pts · {c.numReviews ?? c.reviews?.length ?? 0} {(c.numReviews ?? c.reviews?.length ?? 0) === 1 ? "review" : "reviews"}
               </div>
             </div>
 
@@ -873,7 +880,12 @@ export default function ScoreboardPage() {
       </div>
 
       {selectedCandidate && (
-        <ScorecardModal candidate={selectedCandidate} onClose={() => setSelectedCandidate(null)} />
+        <ScorecardModal
+          candidate={selectedCandidate}
+          metrics={metrics}
+          maxPerCategory={maxPerCategory}
+          onClose={() => setSelectedCandidate(null)}
+        />
       )}
     </div>
   );
