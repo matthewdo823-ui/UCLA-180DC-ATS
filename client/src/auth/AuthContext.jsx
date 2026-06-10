@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { API } from "../constants/config";
+import { isStaffRole } from "../utils/auth";
+
 const TOKEN_STORAGE_KEY = "resume_screener_jwt";
 
 const AuthContext = createContext(null);
@@ -14,14 +16,6 @@ function storeToken(token) {
   } else {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
   }
-}
-
-function normalizeRole(role) {
-  return String(role || "").trim().toLowerCase();
-}
-
-function isStaffRole(role) {
-  return normalizeRole(role) === "admin" || normalizeRole(role) === "member";
 }
 
 export function AuthProvider({ children }) {

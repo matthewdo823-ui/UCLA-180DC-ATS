@@ -1,19 +1,8 @@
 const jwt = require('jsonwebtoken');
 const supabase = require('../config/supabase');
+const { normalizeRole, getJwtSecret } = require('../utils/auth');
 
 const USER_FIELDS = 'user_id, email, role, first_name, last_name, created_at, last_login';
-
-function normalizeRole(role) {
-    return String(role || '').trim().toLowerCase();
-}
-
-function getJwtSecret() {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-        throw new Error('JWT_SECRET is not configured');
-    }
-    return secret;
-}
 
 async function authenticateToken(req, res, next) {
     const authHeader = req.headers.authorization || '';

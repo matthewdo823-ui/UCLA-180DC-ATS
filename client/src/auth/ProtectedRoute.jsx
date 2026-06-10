@@ -1,12 +1,9 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { css } from "../theme/colors";
+import { normalizeRole } from "../utils/auth";
 import { useAuth } from "./AuthContext";
 
 const staffRoles = ["admin", "member"];
-
-function normalizeRole(role) {
-  return String(role || "").trim().toLowerCase();
-}
 
 function LoadingSession() {
   return (

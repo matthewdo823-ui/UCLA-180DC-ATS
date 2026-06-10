@@ -1,19 +1,7 @@
 const supabase = require('../config/supabase');
 const { USER_FIELDS } = require('../middleware/authMiddleware');
-
-const VALID_ROLES = ['applicant', 'member', 'admin'];
-
-function serializeUser(user) {
-    return {
-        user_id: user.user_id,
-        email: user.email,
-        role: user.role,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        created_at: user.created_at,
-        last_login: user.last_login,
-    };
-}
+const { VALID_ROLES } = require('../utils/auth');
+const { serializeUser } = require('../utils/userDisplay');
 
 exports.listUsers = async (req, res) => {
     try {

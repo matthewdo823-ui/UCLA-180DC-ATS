@@ -3,28 +3,12 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-
-const serifFont = "Georgia, 'Times New Roman', serif";
+import { serifFont } from "../../theme/typography";
+import { displayName, formatDate } from "../../utils/format";
 const ASSIGNABLE_ROLES = [
   { value: "member", label: "Member" },
   { value: "admin", label: "Admin" },
 ];
-
-function formatDate(value) {
-  if (!value) return "Never";
-  return new Date(value).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function displayName(user) {
-  const name = [user.first_name, user.last_name].filter(Boolean).join(" ");
-  return name || user.email;
-}
 
 function roleBadgeStyle(role) {
   switch (role) {
@@ -221,7 +205,7 @@ export default function UserManagementPage() {
                       </td>
                       <td style={tdStyle}>{user.email}</td>
                       <td style={tdStyle}><RoleBadge role={user.role} /></td>
-                      <td style={{ ...tdStyle, color: css.textGray, fontSize: 13 }}>{formatDate(user.last_login)}</td>
+                      <td style={{ ...tdStyle, color: css.textGray, fontSize: 13 }}>{formatDate(user.last_login, { fallback: "Never", style: "datetime" })}</td>
                       <td style={{ ...tdStyle, textAlign: "right" }}>
                         <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                           <select

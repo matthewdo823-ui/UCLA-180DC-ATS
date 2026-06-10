@@ -1,16 +1,12 @@
 import { css } from "../../theme/colors";
 import { YEAR_CFG } from "../../constants/config";
+import { getInitials } from "../../utils/format";
 
 export default function CandidateRow({ resume }) {
   if (!resume || !resume.candidates) return null;
 
   const rawYear = resume.candidates.year?.toLowerCase().replace(/\s/g, '');
   const year = YEAR_CFG[rawYear];
-
-  const getInitials = (name) => {
-    if (!name) return "??";
-    return name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
-  };
 
   return (
     <div style={{

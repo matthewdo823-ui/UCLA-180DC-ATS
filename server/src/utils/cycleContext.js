@@ -1,7 +1,7 @@
 const supabase = require("../config/supabase");
 
-async function getActiveCycleId() {
-  const { data, error } = await supabase
+async function getActiveCycleId(client = supabase) {
+  const { data, error } = await client
     .from("app_settings")
     .select("active_cycle_id")
     .eq("id", 1)

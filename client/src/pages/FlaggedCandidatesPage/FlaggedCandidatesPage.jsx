@@ -3,24 +3,10 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import { API } from "../../constants/config";
-const serifFont = "Georgia, 'Times New Roman', serif";
+import { serifFont } from "../../theme/typography";
+import { formatDate, getInitials } from "../../utils/format";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
-
-function getInitials(name) {
-  if (!name) return "??";
-  return name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
-}
-
-function formatDate(value) {
-  if (!value) return "Unknown";
-  return new Date(value).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 function FlagCard({ flag, onResolve, resolving }) {
   const candidate = flag.candidate || {};
@@ -68,7 +54,7 @@ function FlagCard({ flag, onResolve, resolving }) {
         </div>
         <div style={detailBoxStyle}>
           <span style={detailLabelStyle}>Flagged At</span>
-          <span style={detailValueStyle}>{formatDate(flag.createdAt)}</span>
+          <span style={detailValueStyle}>{formatDate(flag.createdAt, { fallback: "Unknown", style: "compact" })}</span>
         </div>
       </div>
 

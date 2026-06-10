@@ -8,6 +8,7 @@
  */
 
 const supabase = require("../config/supabase");
+const { getActiveCycleId } = require("../utils/cycleContext");
 const { mapFormResponseToCandidate } = require("../utils/dataMapper");
 const { isGoogleDriveFileUrl } = require("../utils/drive");
 const { resolveFormConfigPath } = require("../utils/formConfigPath");
@@ -18,17 +19,6 @@ const {
   isGoogleFormsConfigured,
   getKeyFilePath,
 } = require("../utils/googleForm");
-
-async function getActiveCycleId(client = supabase) {
-  const { data, error } = await client
-    .from("app_settings")
-    .select("active_cycle_id")
-    .eq("id", 1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.active_cycle_id || null;
-}
 
 async function fetchCyclesWithFormConfig(client = supabase) {
   const { data, error } = await client

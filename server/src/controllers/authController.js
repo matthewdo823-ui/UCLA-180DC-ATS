@@ -2,30 +2,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const supabase = require('../config/supabase');
 const { USER_FIELDS } = require('../middleware/authMiddleware');
+const { getJwtSecret } = require('../utils/auth');
+const { serializeUser } = require('../utils/userDisplay');
 
 const LOGIN_USER_FIELDS = `${USER_FIELDS}, password_hash`;
-
-function getJwtSecret() {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-        throw new Error('JWT_SECRET is not configured');
-    }
-    return secret;
-}
-
-function serializeUser(user) {
-    if (!user) return null;
-
-    return {
-        user_id: user.user_id,
-        email: user.email,
-        role: user.role,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        created_at: user.created_at,
-        last_login: user.last_login,
-    };
-}
 
 function createToken(user) {
     return jwt.sign(
