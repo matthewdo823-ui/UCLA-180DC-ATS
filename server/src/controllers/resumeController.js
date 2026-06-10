@@ -6,7 +6,7 @@ const SCORE_METRICS = ["experience", "leadership", "social impact", "communicati
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
-    : 15;
+    : 30;
 const REVIEWER_NAME_FIELDS = [
     "name",
     "full_name",
