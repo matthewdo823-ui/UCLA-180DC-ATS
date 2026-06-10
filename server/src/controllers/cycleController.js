@@ -1,5 +1,15 @@
 const supabase = require("../config/supabase");
 const { DEFAULT_RUBRIC_CONFIG, validateRubricConfig } = require("../utils/rubric");
+const { syncFormResponsesToDatabase } = require("../services/formsSyncService");
+const {
+  CANDIDATE_COLUMNS,
+  parseGoogleFormId,
+  discoverFormQuestions,
+  buildSuggestedFieldMap,
+  inferFileQuestionIds,
+  validateFieldMap,
+  isGoogleFormsConfigured,
+} = require("../utils/googleForm");
 
 const CYCLE_STATUSES = new Set(["draft", "active", "archived"]);
 const ROUND_STATUSES = new Set(["draft", "active", "closed"]);
@@ -38,6 +48,12 @@ function mapCycle(row, extras = {}) {
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     createdAt: row.created_at,
+    googleFormId: row.google_form_id || null,
+    formFieldMap: row.form_field_map || null,
+    formResumeQuestionId: row.form_resume_question_id || null,
+    formHeadshotQuestionId: row.form_headshot_question_id || null,
+    lastFormSyncAt: row.last_form_sync_at || null,
+    hasFormConfig: Boolean(row.google_form_id && row.form_field_map),
     ...extras,
   };
 }
@@ -269,6 +285,33 @@ exports.patchCycle = async (req, res) => {
   if (req.body?.endsAt !== undefined) {
     updates.ends_at = req.body.endsAt || null;
   }
+  if (req.body?.formUrl !== undefined || req.body?.googleFormId !== undefined) {
+    const raw = req.body.formUrl ?? req.body.googleFormId ?? "";
+    if (raw === null || raw === "") {
+      updates.google_form_id = null;
+    } else {
+      const formId = parseGoogleFormId(raw);
+      if (!formId) {
+        return res.status(400).json({
+          error: "Invalid Google Form URL or ID. Use the form edit URL (docs.google.com/forms/d/.../edit).",
+        });
+      }
+      updates.google_form_id = formId;
+    }
+  }
+  if (req.body?.fieldMap !== undefined) {
+    const fieldMapError = validateFieldMap(req.body.fieldMap);
+    if (fieldMapError) {
+      return res.status(400).json({ error: fieldMapError });
+    }
+    updates.form_field_map = req.body.fieldMap;
+  }
+  if (req.body?.resumeQuestionId !== undefined) {
+    updates.form_resume_question_id = req.body.resumeQuestionId || null;
+  }
+  if (req.body?.headshotQuestionId !== undefined) {
+    updates.form_headshot_question_id = req.body.headshotQuestionId || null;
+  }
 
   if (!Object.keys(updates).length) {
     return res.status(400).json({ error: "No valid fields to update" });
@@ -431,6 +474,109 @@ exports.activateRound = async (req, res) => {
   } catch (err) {
     console.error("activateRound error:", err);
     return res.status(500).json({ error: err.message });
+  }
+};
+
+exports.discoverCycleFormFields = async (req, res) => {
+  const cycleId = String(req.params.cycleId || "").trim();
+  if (!cycleId) {
+    return res.status(400).json({ error: "cycleId is required" });
+  }
+  if (!isGoogleFormsConfigured()) {
+    return res.status(503).json({
+      error: "Google Forms sync is not configured. Set GOOGLE_CLOUD_KEY_PATH on the server.",
+    });
+  }
+
+  try {
+    const { data: cycle, error: cycleError } = await supabase
+      .from("cycles")
+      .select("id, google_form_id")
+      .eq("id", cycleId)
+      .maybeSingle();
+
+    if (cycleError) return res.status(500).json({ error: cycleError.message });
+    if (!cycle) return res.status(404).json({ error: "Cycle not found" });
+
+    const formInput = req.body?.formUrl ?? req.body?.googleFormId ?? cycle.google_form_id;
+    const formId = parseGoogleFormId(formInput);
+    if (!formId) {
+      return res.status(400).json({
+        error: "Provide a Google Form edit URL or save one on this cycle first.",
+      });
+    }
+
+    const discovered = await discoverFormQuestions(formId);
+    const suggestedFieldMap = buildSuggestedFieldMap(discovered.questions);
+    const { resumeQuestionId, headshotQuestionId } = inferFileQuestionIds(
+      discovered.questions,
+      suggestedFieldMap
+    );
+
+    return res.json({
+      formId: discovered.formId,
+      formTitle: discovered.formTitle,
+      questions: discovered.questions,
+      suggestedFieldMap,
+      resumeQuestionId: resumeQuestionId || null,
+      headshotQuestionId: headshotQuestionId || null,
+      candidateColumns: CANDIDATE_COLUMNS,
+    });
+  } catch (err) {
+    console.error("discoverCycleFormFields error:", err);
+    return res.status(500).json({ error: err.message || "Could not discover form fields" });
+  }
+};
+
+exports.syncCycleForm = async (req, res) => {
+  const cycleId = String(req.params.cycleId || "").trim();
+  if (!cycleId) {
+    return res.status(400).json({ error: "cycleId is required" });
+  }
+  if (!isGoogleFormsConfigured()) {
+    return res.status(503).json({
+      error: "Google Forms sync is not configured. Set GOOGLE_CLOUD_KEY_PATH on the server.",
+    });
+  }
+
+  try {
+    const { data: cycle, error: cycleError } = await supabase
+      .from("cycles")
+      .select("id, google_form_id, form_field_map")
+      .eq("id", cycleId)
+      .maybeSingle();
+
+    if (cycleError) return res.status(500).json({ error: cycleError.message });
+    if (!cycle) return res.status(404).json({ error: "Cycle not found" });
+    if (!cycle.google_form_id || !cycle.form_field_map) {
+      return res.status(400).json({ error: "Save a Google Form URL and field map on this cycle first" });
+    }
+
+    const result = await syncFormResponsesToDatabase(cycleId);
+    const activeCycleId = await getActiveCycleId();
+    const roundsByCycle = await fetchRoundsForCycles([cycleId]);
+    const countsByCycle = await fetchCycleCounts([cycleId]);
+
+    const { data: refreshed, error: refreshError } = await supabase
+      .from("cycles")
+      .select("*")
+      .eq("id", cycleId)
+      .maybeSingle();
+
+    if (refreshError) return res.status(500).json({ error: refreshError.message });
+
+    return res.json({
+      processed: result.processed,
+      errors: result.errors,
+      cycle: mapCycle(refreshed, {
+        isActive: refreshed.id === activeCycleId,
+        counts: countsByCycle[cycleId] || { candidates: 0, resumes: 0, reviews: 0 },
+        rounds: roundsByCycle[cycleId] || [],
+      }),
+    });
+  } catch (err) {
+    console.error("syncCycleForm error:", err);
+    return res.status(500).json({ error: err.message || "Form sync failed" });
   }
 };
 

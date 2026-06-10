@@ -10,6 +10,8 @@ router.use(authenticateToken, requireRoles("admin"));
 router.get("/cycles", cycleController.listCycles);
 router.post("/cycles", cycleController.createCycle);
 router.patch("/cycles/:cycleId", cycleController.patchCycle);
+router.post("/cycles/:cycleId/discover-form-fields", cycleController.discoverCycleFormFields);
+router.post("/cycles/:cycleId/sync-form", cycleController.syncCycleForm);
 router.post("/cycles/:cycleId/activate", cycleController.activateCycle);
 router.patch("/rounds/:roundId", cycleController.patchRound);
 router.post("/rounds/:roundId/activate", cycleController.activateRound);
