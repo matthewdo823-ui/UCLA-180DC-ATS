@@ -7,16 +7,20 @@ const resumeRoutes = require('./src/routes/resumeRoutes');
 const cycleRoutes = require('./src/routes/cycleRoutes');
 const interviewRoutes = require('./src/routes/interviewRoutes');
 const userRoutes = require('./src/routes/userRoutes');
+const cronRoutes = require('./src/routes/cronRoutes');
 const { startFormsSyncCron } = require('./src/jobs/formsSyncCron');
 
 const app = express();
 
-
+function parseAllowedOrigins() {
+  const raw = process.env.CORS_ALLOWED_ORIGINS || '';
+  return raw.split(',').map((origin) => origin.trim()).filter(Boolean);
+}
 
 app.use(express.json());
 app.use(cors({
     origin(origin, callback) {
-      const allowed = ['https://ucla-180-dc-ats.vercel.app'];
+      const allowed = parseAllowedOrigins();
       if (!origin || allowed.includes(origin) || /^http:\/\/localhost:\d+$/.test(origin)) {
         callback(null, true);
       } else {
@@ -26,6 +30,7 @@ app.use(cors({
   }));
 
 // Mount routes
+app.use(cronRoutes);
 app.use('/auth', authRoutes);
 app.use('/', cycleRoutes);
 app.use('/', interviewRoutes);
