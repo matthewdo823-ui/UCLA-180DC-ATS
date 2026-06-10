@@ -3,16 +3,12 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-
-const serifFont = "Georgia, 'Times New Roman', serif";
+import { serifFont } from "../../theme/typography";
+import { formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
 const cardLime = "#C0DD97";
-
-function hasNumericScore(value) {
-  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
-}
 
 function scoreColor(score) {
   if (!hasNumericScore(score)) return css.textGray;
@@ -21,11 +17,6 @@ function scoreColor(score) {
   if (numeric >= 80) return "#4CAF50";
   if (numeric >= 70) return css.amber;
   return css.textGray;
-}
-
-function getInitials(name) {
-  if (!name) return "??";
-  return name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
 }
 
 function getReviewerLabel(review, index) {
@@ -41,17 +32,6 @@ function getReviewerInitials(review, index) {
 function getReviewTotal(review) {
   if (Number.isFinite(Number(review?.score))) return Number(review.score);
   return Object.values(review?.scores ?? {}).reduce((total, value) => total + (Number(value) || 0), 0);
-}
-
-function titleCase(value) {
-  if (!value) return "";
-  return value.replace(/\w\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
-}
-
-function formatScore(value) {
-  if (!hasNumericScore(value)) return "N/A";
-  const numeric = Number(value);
-  return Number.isInteger(numeric) ? numeric : numeric.toFixed(1);
 }
 
 function uniqueSortedStrings(items) {

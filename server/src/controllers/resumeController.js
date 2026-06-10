@@ -16,6 +16,8 @@ const {
     getMetricsFromRubricConfig,
     resolveReviewNormalizedValue,
 } = require('../utils/rubric');
+const { firstRel } = require('../utils/supabaseHelpers');
+const { getUserName } = require('../utils/userDisplay');
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
@@ -78,11 +80,6 @@ function buildCategoryScores(categoryTotals = {}, categoryCounts = {}) {
     return acc;
 }
 
-function firstRel(rel) {
-    if (rel == null) return null;
-    return Array.isArray(rel) ? rel[0] : rel;
-}
-
 function mapMyReviewRow(row, rubricConfig = null) {
     const resume = firstRel(row.resumes);
     const cand = firstRel(resume?.candidates);
@@ -110,10 +107,6 @@ function mapMyReviewRow(row, rubricConfig = null) {
         notes: row.notes || "",
         submittedAt: row.submitted_at,
     };
-}
-
-function getUserName(user = {}) {
-    return [user.first_name, user.last_name].filter(Boolean).join(" ") || user.email || null;
 }
 
 /** Map graded_by (users.user_id) → display name/email for scoreboard rows. */

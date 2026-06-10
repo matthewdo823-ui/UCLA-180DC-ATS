@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
+import { isStaffRole } from "../../utils/auth";
 
 export default function LoginPage() {
   const { login, createAccount, user, loading, isStaff } = useAuth();
@@ -40,9 +41,7 @@ export default function LoginPage() {
       const loggedInUser = isCreateMode
         ? await createAccount({ email, password, first_name: firstName, last_name: lastName })
         : await login({ email, password });
-      const role = String(loggedInUser?.role || "").trim().toLowerCase();
-      const canAccessApp = role === "admin" || role === "member";
-      navigate(canAccessApp ? redirectTo : "/no-access", { replace: true });
+      navigate(isStaffRole(loggedInUser?.role) ? redirectTo : "/no-access", { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

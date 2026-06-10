@@ -9,8 +9,8 @@ import {
   cloneRubricConfig,
   validateRubricDraft,
 } from "../../utils/rubric";
-
-const serifFont = "Georgia, 'Times New Roman', serif";
+import { formatDate } from "../../utils/format";
+import { serifFont } from "../../theme/typography";
 
 const CYCLE_STATUS_STYLE = {
   active: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
@@ -42,11 +42,6 @@ function StatusBadge({ status, styles }) {
       {status}
     </span>
   );
-}
-
-function formatDate(value) {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
 }
 
 function ActionButton({ label, onClick, disabled, variant = "secondary" }) {
@@ -241,7 +236,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
             ) : (
               <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
                 {cycle.hasFormConfig
-                  ? `${fieldCount} field mappings${cycle.lastFormSyncAt ? ` · Last sync ${formatDate(cycle.lastFormSyncAt)}` : ""}`
+                  ? `${fieldCount} field mappings${cycle.lastFormSyncAt ? ` · Last sync ${formatDate(cycle.lastFormSyncAt, { style: "short" })}` : ""}`
                   : "Not configured — click to set up"}
               </p>
             )}
@@ -297,7 +292,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
 
       {cycle.lastFormSyncAt ? (
         <p style={{ margin: "0 0 10px", fontSize: 11, color: css.textGray }}>
-          Last sync: {formatDate(cycle.lastFormSyncAt)}
+          Last sync: {formatDate(cycle.lastFormSyncAt, { style: "short" })}
         </p>
       ) : null}
 
@@ -660,7 +655,7 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
               ) : null}
             </div>
             <p style={{ margin: "0 0 8px", fontSize: 12, color: css.textGray }}>
-              Slug: {cycle.slug} · Created {formatDate(cycle.createdAt)}
+              Slug: {cycle.slug} · Created {formatDate(cycle.createdAt, { style: "short" })}
             </p>
             <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
               {cycle.counts?.candidates ?? 0} candidates · {cycle.counts?.resumes ?? 0} resumes · {cycle.counts?.reviews ?? 0} reviews
