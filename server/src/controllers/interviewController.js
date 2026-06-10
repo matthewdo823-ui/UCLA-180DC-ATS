@@ -1,0 +1,261 @@
+const supabase = require("../config/supabase");
+const {
+  getActiveCycleRow,
+  getActiveInterviewRound,
+  getResumeScreenRoundForCycle,
+  requireActiveInterviewRound,
+} = require("../utils/cycleContext");
+
+const VALID_DECISIONS = new Set(["pending", "pass", "fail", "hold"]);
+
+function mapEvaluation(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    candidateId: row.candidate_id,
+    cycleId: row.cycle_id,
+    roundId: row.round_id,
+    decision: row.decision,
+    scheduledAt: row.scheduled_at,
+    notes: row.notes || "",
+    evaluatedBy: row.evaluated_by,
+    submittedAt: row.submitted_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function getReviewNormalizedValue(review) {
+  if (Number.isFinite(Number(review?.normalized_score))) {
+    return Number(review.normalized_score);
+  }
+  const scores = review?.scores || {};
+  const snapshot = review?.rubric_snapshot;
+  const max = Number(snapshot?.maxScore) || 24;
+  const metrics = snapshot?.metrics || Object.keys(scores);
+  const raw = metrics.reduce((sum, m) => sum + (Number(scores[m]) || 0), 0);
+  return max > 0 ? Number(((raw / max) * 100).toFixed(2)) : null;
+}
+
+exports.listInterviewCandidates = async (req, res) => {
+  try {
+    const ctx = await requireActiveInterviewRound();
+    if (ctx.error) {
+      return res.status(ctx.status).json({ error: ctx.error });
+    }
+
+    const resumeRound = await getResumeScreenRoundForCycle(ctx.cycle.id);
+    if (!resumeRound) {
+      return res.json({
+        context: {
+          cycle: { id: ctx.cycle.id, name: ctx.cycle.name },
+          round: { id: ctx.round.id, name: ctx.round.name },
+        },
+        stats: { total: 0, pending: 0, pass: 0, fail: 0, hold: 0 },
+        candidates: [],
+      });
+    }
+
+    const { data: candidates, error: candError } = await supabase
+      .from("candidates")
+      .select("id, name, email, major, year, gpa, cycle_id")
+      .eq("cycle_id", ctx.cycle.id)
+      .order("name", { ascending: true });
+
+    if (candError) return res.status(500).json({ error: candError.message });
+
+    const candidateIds = (candidates || []).map((c) => c.id);
+    if (!candidateIds.length) {
+      return res.json({
+        context: {
+          cycle: { id: ctx.cycle.id, name: ctx.cycle.name },
+          round: { id: ctx.round.id, name: ctx.round.name },
+        },
+        stats: { total: 0, pending: 0, pass: 0, fail: 0, hold: 0 },
+        candidates: [],
+      });
+    }
+
+    const { data: resumes, error: resumeError } = await supabase
+      .from("resumes")
+      .select("id, candidate_id, name, file_url")
+      .eq("cycle_id", ctx.cycle.id)
+      .in("candidate_id", candidateIds);
+
+    if (resumeError) return res.status(500).json({ error: resumeError.message });
+
+    const resumeIds = (resumes || []).map((r) => r.id);
+
+    const { data: reviews, error: reviewError } = resumeIds.length
+      ? await supabase
+        .from("resume_reviews")
+        .select("id, resume_id, scores, normalized_score, rubric_snapshot, decision, submitted_at")
+        .eq("cycle_id", ctx.cycle.id)
+        .eq("round_id", resumeRound.id)
+        .in("resume_id", resumeIds)
+      : { data: [], error: null };
+
+    if (reviewError) return res.status(500).json({ error: reviewError.message });
+
+    const { data: evaluations, error: evalError } = await supabase
+      .from("interview_evaluations")
+      .select("*")
+      .eq("round_id", ctx.round.id);
+
+    if (evalError) return res.status(500).json({ error: evalError.message });
+
+    const resumeByCandidate = {};
+    (resumes || []).forEach((r) => {
+      resumeByCandidate[r.candidate_id] = r;
+    });
+
+    const reviewsByResume = {};
+    (reviews || []).forEach((review) => {
+      if (!reviewsByResume[review.resume_id]) reviewsByResume[review.resume_id] = [];
+      reviewsByResume[review.resume_id].push(review);
+    });
+
+    const evalByCandidate = {};
+    (evaluations || []).forEach((row) => {
+      evalByCandidate[row.candidate_id] = row;
+    });
+
+    const pool = (candidates || []).filter((candidate) => {
+      const resume = resumeByCandidate[candidate.id];
+      if (!resume) return false;
+      const resumeReviews = reviewsByResume[resume.id] || [];
+      return resumeReviews.length > 0;
+    });
+
+    const mapped = pool.map((candidate) => {
+      const resume = resumeByCandidate[candidate.id];
+      const resumeReviews = reviewsByResume[resume.id] || [];
+      const normalizedScores = resumeReviews
+        .map(getReviewNormalizedValue)
+        .filter((v) => Number.isFinite(v));
+      const avgResumeScore = normalizedScores.length
+        ? Number((normalizedScores.reduce((a, b) => a + b, 0) / normalizedScores.length).toFixed(1))
+        : null;
+      const evaluation = mapEvaluation(evalByCandidate[candidate.id]);
+
+      return {
+        id: candidate.id,
+        name: candidate.name,
+        email: candidate.email,
+        major: candidate.major,
+        year: candidate.year,
+        gpa: candidate.gpa,
+        resumeId: resume.id,
+        resumeName: resume.name,
+        resumeFileUrl: resume.file_url,
+        resumeReviewCount: resumeReviews.length,
+        avgResumeScore,
+        evaluation: evaluation || {
+          decision: "pending",
+          scheduledAt: null,
+          notes: "",
+        },
+      };
+    });
+
+    const stats = { total: mapped.length, pending: 0, pass: 0, fail: 0, hold: 0 };
+    mapped.forEach((c) => {
+      const d = c.evaluation?.decision || "pending";
+      if (stats[d] !== undefined) stats[d] += 1;
+    });
+
+    return res.json({
+      context: {
+        cycle: { id: ctx.cycle.id, name: ctx.cycle.name },
+        round: { id: ctx.round.id, name: ctx.round.name },
+      },
+      stats,
+      candidates: mapped,
+    });
+  } catch (err) {
+    console.error("listInterviewCandidates error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+exports.upsertInterviewEvaluation = async (req, res) => {
+  const candidateId = String(req.body?.candidate_id || "").trim();
+  const decision = VALID_DECISIONS.has(req.body?.decision) ? req.body.decision : "pending";
+  const notes = typeof req.body?.notes === "string" ? req.body.notes.slice(0, 1000) : "";
+  const scheduledAt = req.body?.scheduled_at || null;
+  const evaluatedBy = req.user?.user_id;
+
+  if (!candidateId) {
+    return res.status(400).json({ error: "candidate_id is required" });
+  }
+
+  try {
+    const ctx = await requireActiveInterviewRound();
+    if (ctx.error) {
+      return res.status(ctx.status).json({ error: ctx.error });
+    }
+
+    const { data: candidate, error: candError } = await supabase
+      .from("candidates")
+      .select("id, cycle_id")
+      .eq("id", candidateId)
+      .maybeSingle();
+
+    if (candError) return res.status(500).json({ error: candError.message });
+    if (!candidate) return res.status(404).json({ error: "Candidate not found" });
+    if (candidate.cycle_id !== ctx.cycle.id) {
+      return res.status(400).json({ error: "Candidate is not in the active cycle" });
+    }
+
+    const payload = {
+      candidate_id: candidateId,
+      cycle_id: ctx.cycle.id,
+      round_id: ctx.round.id,
+      decision,
+      notes,
+      scheduled_at: scheduledAt,
+      evaluated_by: evaluatedBy,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("interview_evaluations")
+      .upsert(payload, { onConflict: "candidate_id,round_id" })
+      .select("*")
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    return res.json({ evaluation: mapEvaluation(data) });
+  } catch (err) {
+    console.error("upsertInterviewEvaluation error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getInterviewStats = async (req, res) => {
+  try {
+    const activeRound = await getActiveInterviewRound();
+    if (!activeRound) {
+      return res.json({ evaluated: 0, total: 0, pending: 0 });
+    }
+
+    const { data: evaluations, error } = await supabase
+      .from("interview_evaluations")
+      .select("decision")
+      .eq("round_id", activeRound.id);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const rows = evaluations || [];
+    const evaluated = rows.filter((r) => r.decision && r.decision !== "pending").length;
+
+    return res.json({
+      evaluated,
+      total: rows.length,
+      pending: rows.filter((r) => !r.decision || r.decision === "pending").length,
+    });
+  } catch (err) {
+    console.error("getInterviewStats error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};

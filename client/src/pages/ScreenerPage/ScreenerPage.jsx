@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
-import { API, getRubricForYear, RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
+import { API } from "../../constants/config";
+import { useActiveCycle } from "../../hooks/useActiveCycle";
 
 import Topbar from "../../components/Topbar/Topbar";
 import CandidateRow from "../../components/CandidateRow/CandidateRow";
@@ -13,10 +14,12 @@ import PastReviewDetailModal from "../../components/PastReviewDetailModal/PastRe
 export default function ScreenerPage() {
   const { token } = useAuth();
   const authedFetch = useAuthedFetch();
+  const { activeRound, loading: cycleLoading, error: cycleError, getYearRubric, phaseLabel, isResumeRound } = useActiveCycle();
   const [resume, setResume] = useState(null);
   const [scores, setScores] = useState({});
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState("");
   const [myReviews, setMyReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -24,16 +27,19 @@ export default function ScreenerPage() {
   const panelRef = useRef(null);
 
   const rubric = useMemo(
-    () => getRubricForYear(resume?.candidates?.year),
-    [resume?.candidates?.year]
+    () => getYearRubric(resume?.candidates?.year),
+    [getYearRubric, resume?.candidates?.year]
   );
+
+  const maxPerCategory = rubric?.maxPerCategory || 4;
 
   const scoringComplete = useMemo(
     () =>
+      Boolean(rubric?.metrics?.length) &&
       rubric.metrics.every(
-        (m) => typeof scores[m] === "number" && scores[m] >= 1 && scores[m] <= RUBRIC_MAX_PER_CATEGORY
+        (m) => typeof scores[m] === "number" && scores[m] >= 1 && scores[m] <= maxPerCategory
       ),
-    [scores, rubric]
+    [scores, rubric, maxPerCategory]
   );
 
   const fetchMyReviews = useCallback(async (opts = {}) => {
@@ -56,23 +62,36 @@ export default function ScreenerPage() {
   }, [authedFetch]);
 
   const fetchNext = useCallback(async () => {
+    if (!activeRound) {
+      setResume(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      setFetchError("");
       const res = await authedFetch(`${API}/next-resume`);
-      if (!res.ok) { setResume(null); return; }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setFetchError(body.error || "No resumes available");
+        setResume(null);
+        return;
+      }
       const data = await res.json();
       setResume(data);
       setScores({});
       setNotes("");
     } catch (e) {
       console.error("Fetch failed:", e);
+      setFetchError("Could not load next resume");
       setResume(null);
     } finally {
       setLoading(false);
     }
-  }, [authedFetch]);
+  }, [authedFetch, activeRound]);
 
-  useEffect(() => { fetchNext(); }, [fetchNext]);
+  useEffect(() => { if (!cycleLoading) fetchNext(); }, [fetchNext, cycleLoading]);
   useEffect(() => { fetchMyReviews({ showLoading: false }); }, [fetchMyReviews]);
 
   useEffect(() => {
@@ -99,7 +118,6 @@ export default function ScreenerPage() {
       return;
     }
 
-    // Animate out → fetch next → animate in
     if (panelRef.current) panelRef.current.style.animation = "cardFlyOut 0.28s ease forwards";
     await new Promise(r => setTimeout(r, 280));
     await fetchNext();
@@ -111,9 +129,12 @@ export default function ScreenerPage() {
     }
   }
 
+  const screeningBlocked = !cycleLoading && (!activeRound || cycleError || !isResumeRound);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "hidden" }}>
       <Topbar
+        phaseLabel={phaseLabel}
         reviewed={myReviews.length}
         onHistory={() => setDrawerOpen(true)}
         historyCount={myReviews.length}
@@ -122,41 +143,50 @@ export default function ScreenerPage() {
       <div style={{ flex: 1, overflow: "hidden", padding: "14px 22px 0", display: "flex", flexDirection: "column", gap: 12 }}>
         <CandidateRow resume={resume} />
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.35fr", gap: 14, flex: 1, minHeight: 0, overflow: "hidden" }}>
-          {/* ── Left: Resume panel ── */}
-          <div ref={panelRef} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {/* PDF view */}
-            {loading ? (
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, color: css.textGray, fontSize: 13 }}>
-                <div style={{ width: 36, height: 36, border: `3px solid ${css.borderLight}`, borderTopColor: css.greenDark, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                Loading resume…
-              </div>
-            ) : resume?.file_url ? (
-              <PdfViewer url={`${API}/view/pdf?url=${encodeURIComponent(resume.file_url)}`} authToken={token} />
-            ) : (
-              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.textGray, fontSize: 13 }}>No resume available</div>
-            )}
+        {screeningBlocked ? (
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <div style={{ maxWidth: 420, textAlign: "center", color: css.textGray, fontSize: 14, lineHeight: 1.5 }}>
+              {cycleError || (activeRound && !isResumeRound
+                ? "Resume screening is closed. The active round is interview management — use Grading in the sidebar."
+                : "Resume screening is not open. An admin must activate a cycle and its resume round.")}
+            </div>
           </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.35fr", gap: 14, flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <div ref={panelRef} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              {loading || cycleLoading ? (
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, color: css.textGray, fontSize: 13 }}>
+                  <div style={{ width: 36, height: 36, border: `3px solid ${css.borderLight}`, borderTopColor: css.greenDark, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                  Loading resume…
+                </div>
+              ) : resume?.file_url ? (
+                <PdfViewer url={`${API}/view/pdf?url=${encodeURIComponent(resume.file_url)}`} authToken={token} />
+              ) : (
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.textGray, fontSize: 13, padding: 24, textAlign: "center" }}>
+                  {fetchError || "No resume available"}
+                </div>
+              )}
+            </div>
 
-          {/* ── Right: Scoring panel ── */}
-          <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", gap: 8, minHeight: 0 }}>
-            {!loading && resume ? (
-              <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                <ScoringPanel
-                  resume={resume}
-                  scores={scores}
-                  onScore={(metric, val) => setScores(s => ({ ...s, [metric]: val }))}
-                  notes={notes}
-                  onNotes={setNotes}
-                  onAction={handleAction}
-                  scoringComplete={scoringComplete}
-                />
-              </div>
-            ) : (
-              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.text3, fontSize: 13 }}>Loading…</div>
-            )}
+            <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", gap: 8, minHeight: 0 }}>
+              {!loading && !cycleLoading && resume ? (
+                <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                  <ScoringPanel
+                    rubric={rubric}
+                    scores={scores}
+                    onScore={(metric, val) => setScores(s => ({ ...s, [metric]: val }))}
+                    notes={notes}
+                    onNotes={setNotes}
+                    onAction={handleAction}
+                    scoringComplete={scoringComplete}
+                  />
+                </div>
+              ) : (
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.text3, fontSize: 13 }}>Loading…</div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <Drawer
