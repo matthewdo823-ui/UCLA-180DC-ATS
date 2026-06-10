@@ -3,6 +3,8 @@
  * @see https://developers.google.com/forms/api/reference/rest/v1/forms.responses#FormResponse
  */
 
+const { isGoogleDriveFileUrl } = require('./drive');
+
 const DEFAULT_TEXT = "";
 
 const VALID_YEAR = new Set([
@@ -98,11 +100,22 @@ function extractFileUrlFromAnswer(answer) {
  * @param {import('googleapis').forms_v1.Schema$Answer} answer
  * @param {string} columnName Supabase column (e.g. resume_file_url).
  */
+function sanitizeResumeFileUrl(url) {
+  if (!url || typeof url !== 'string') return DEFAULT_TEXT;
+  const trimmed = url.trim();
+  return isGoogleDriveFileUrl(trimmed) ? trimmed : DEFAULT_TEXT;
+}
+
 function extractValueForColumn(answer, columnName) {
   const fileFields = new Set(["resume_file_url", "headshot"]);
   if (fileFields.has(columnName)) {
     const fileUrl = extractFileUrlFromAnswer(answer);
-    if (fileUrl) return fileUrl;
+    if (fileUrl) {
+      return columnName === 'resume_file_url' ? sanitizeResumeFileUrl(fileUrl) : fileUrl;
+    }
+    if (columnName === 'resume_file_url') {
+      return sanitizeResumeFileUrl(extractTextFromAnswer(answer));
+    }
   }
   return extractTextFromAnswer(answer);
 }
@@ -171,7 +184,10 @@ function mapFormResponseToCandidate(response, config) {
 
   const resumeQ = config.resumeQuestionId;
   if (resumeQ && answers[resumeQ]) {
-    columnValues.resume_file_url = extractFileUrlFromAnswer(answers[resumeQ]) || columnValues.resume_file_url || "";
+    const resumeUrl = extractFileUrlFromAnswer(answers[resumeQ]) || columnValues.resume_file_url || "";
+    columnValues.resume_file_url = sanitizeResumeFileUrl(resumeUrl);
+  } else if (columnValues.resume_file_url) {
+    columnValues.resume_file_url = sanitizeResumeFileUrl(columnValues.resume_file_url);
   }
 
   const headQ = config.headshotQuestionId;

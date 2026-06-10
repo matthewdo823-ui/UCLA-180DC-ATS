@@ -9,6 +9,7 @@
 
 const supabase = require("../config/supabase");
 const { mapFormResponseToCandidate } = require("../utils/dataMapper");
+const { isGoogleDriveFileUrl } = require("../utils/drive");
 const { resolveFormConfigPath } = require("../utils/formConfigPath");
 const {
   getFormsClient,
@@ -61,6 +62,13 @@ async function upsertCandidateAndResume(client, mapped, cycleId) {
   if (!resumeDerived.file_url) {
     console.warn(
       `[formsSync] No resume file URL for response ${mapped.google_form_response_id}; skipping resumes row.`
+    );
+    return;
+  }
+
+  if (!isGoogleDriveFileUrl(resumeDerived.file_url)) {
+    console.warn(
+      `[formsSync] Resume URL is not a Google Drive link for response ${mapped.google_form_response_id}; skipping resumes row.`
     );
     return;
   }
