@@ -3,6 +3,12 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
+import {
+  RUBRIC_IMAGE_OPTIONS,
+  RUBRIC_YEAR_KEYS,
+  cloneRubricConfig,
+  validateRubricDraft,
+} from "../../utils/rubric";
 
 const serifFont = "Georgia, 'Times New Roman', serif";
 
@@ -68,14 +74,431 @@ function ActionButton({ label, onClick, disabled, variant = "secondary" }) {
   );
 }
 
+const COLUMN_OPTIONS = [
+  { value: "", label: "— Skip —" },
+  { value: "name", label: "Name" },
+  { value: "email", label: "Email" },
+  { value: "phone_number", label: "Phone" },
+  { value: "major", label: "Major" },
+  { value: "gpa", label: "GPA" },
+  { value: "year", label: "Year" },
+  { value: "pronouns", label: "Pronouns" },
+  { value: "urm", label: "URM" },
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "gm", label: "GM interest" },
+  { value: "newbie_training", label: "Newbie training" },
+  { value: "why_consulting", label: "Why consulting" },
+  { value: "why_180dc", label: "Why 180DC" },
+  { value: "why_social_impact", label: "Why social impact" },
+  { value: "resume_file_url", label: "Resume upload" },
+  { value: "extenuating_circumstances", label: "Extenuating circumstances" },
+  { value: "headshot", label: "Headshot" },
+];
+
+function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
+  const [formUrl, setFormUrl] = useState(cycle.googleFormId ? `https://docs.google.com/forms/d/${cycle.googleFormId}/edit` : "");
+  const [questions, setQuestions] = useState([]);
+  const [fieldMap, setFieldMap] = useState(cycle.formFieldMap || {});
+  const [resumeQuestionId, setResumeQuestionId] = useState(cycle.formResumeQuestionId || "");
+  const [headshotQuestionId, setHeadshotQuestionId] = useState(cycle.formHeadshotQuestionId || "");
+  const [formTitle, setFormTitle] = useState("");
+  const [panelError, setPanelError] = useState("");
+  const [panelMessage, setPanelMessage] = useState("");
+  const [discovering, setDiscovering] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    setFormUrl(cycle.googleFormId ? `https://docs.google.com/forms/d/${cycle.googleFormId}/edit` : "");
+    setFieldMap(cycle.formFieldMap || {});
+    setResumeQuestionId(cycle.formResumeQuestionId || "");
+    setHeadshotQuestionId(cycle.formHeadshotQuestionId || "");
+    setPanelError("");
+    setPanelMessage("");
+  }, [cycle.id, cycle.googleFormId, cycle.formFieldMap, cycle.formResumeQuestionId, cycle.formHeadshotQuestionId]);
+
+  async function handleDiscover() {
+    setDiscovering(true);
+    setPanelError("");
+    setPanelMessage("");
+    try {
+      const res = await authedFetch(`${API}/cycles/${cycle.id}/discover-form-fields`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formUrl: formUrl.trim() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Could not discover form fields");
+
+      setQuestions(body.questions || []);
+      setFieldMap(body.suggestedFieldMap || {});
+      setResumeQuestionId(body.resumeQuestionId || "");
+      setHeadshotQuestionId(body.headshotQuestionId || "");
+      setFormTitle(body.formTitle || "");
+      setPanelMessage(`Found ${body.questions?.length || 0} questions. Review mappings, then save.`);
+    } catch (e) {
+      setPanelError(e.message || "Discovery failed");
+    } finally {
+      setDiscovering(false);
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setPanelError("");
+    setPanelMessage("");
+    try {
+      const cleanedMap = {};
+      Object.entries(fieldMap).forEach(([qid, col]) => {
+        if (col) cleanedMap[qid] = col;
+      });
+
+      const res = await authedFetch(`${API}/cycles/${cycle.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          formUrl: formUrl.trim(),
+          fieldMap: cleanedMap,
+          resumeQuestionId: resumeQuestionId || null,
+          headshotQuestionId: headshotQuestionId || null,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Could not save form config");
+      setPanelMessage("Form config saved.");
+      await onSaved();
+    } catch (e) {
+      setPanelError(e.message || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSync() {
+    setSyncing(true);
+    setPanelError("");
+    setPanelMessage("");
+    try {
+      const res = await authedFetch(`${API}/cycles/${cycle.id}/sync-form`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Sync failed");
+      setPanelMessage(`Sync complete. ${body.processed ?? 0} responses processed, ${body.errors ?? 0} errors.`);
+      await onSaved();
+    } catch (e) {
+      setPanelError(e.message || "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  const mappedQuestions = questions.length
+    ? questions
+    : Object.keys(fieldMap).map((questionId) => ({ questionId, title: questionId }));
+
+  const panelBusy = busy || discovering || saving || syncing;
+
+  return (
+    <div style={{
+      border: `1px solid ${css.borderLight}`,
+      borderRadius: 12,
+      padding: 16,
+      background: "#FFF",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
+        <div>
+          <h4 style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 700, color: css.textDark }}>Google Form sync</h4>
+          <p style={{ margin: 0, fontSize: 12, color: css.textGray, lineHeight: 1.45 }}>
+            Paste the form <strong>edit</strong> URL for this cycle. Share the form with your service account email as editor.
+            Use a separate form copy per cycle.
+          </p>
+        </div>
+        {cycle.hasFormConfig ? (
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#1D9E75", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+            Configured
+          </span>
+        ) : null}
+      </div>
+
+      <input
+        type="url"
+        value={formUrl}
+        onChange={(e) => setFormUrl(e.target.value)}
+        placeholder="https://docs.google.com/forms/d/.../edit"
+        style={{
+          width: "100%",
+          padding: "10px 12px",
+          borderRadius: 8,
+          border: `1px solid ${css.borderLight}`,
+          fontSize: 13,
+          boxSizing: "border-box",
+          marginBottom: 10,
+        }}
+      />
+
+      {formTitle ? (
+        <p style={{ margin: "0 0 10px", fontSize: 12, color: css.textGray }}>Form: {formTitle}</p>
+      ) : null}
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+        <ActionButton label={discovering ? "Discovering…" : "Discover fields"} onClick={handleDiscover} disabled={panelBusy || !formUrl.trim()} variant="primary" />
+        <ActionButton label={saving ? "Saving…" : "Save config"} onClick={handleSave} disabled={panelBusy || !formUrl.trim()} />
+        <ActionButton label={syncing ? "Syncing…" : "Sync now"} onClick={handleSync} disabled={panelBusy || !cycle.hasFormConfig} variant="primary" />
+      </div>
+
+      {cycle.lastFormSyncAt ? (
+        <p style={{ margin: "0 0 10px", fontSize: 11, color: css.textGray }}>
+          Last sync: {formatDate(cycle.lastFormSyncAt)}
+        </p>
+      ) : null}
+
+      {panelError ? (
+        <p style={{ margin: "0 0 10px", fontSize: 12, color: css.red }}>{panelError}</p>
+      ) : null}
+      {panelMessage ? (
+        <p style={{ margin: "0 0 10px", fontSize: 12, color: "#1D9E75" }}>{panelMessage}</p>
+      ) : null}
+
+      {mappedQuestions.length ? (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: css.textGray }}>
+                <th style={{ padding: "6px 8px", borderBottom: `1px solid ${css.borderLight}` }}>Question</th>
+                <th style={{ padding: "6px 8px", borderBottom: `1px solid ${css.borderLight}` }}>Maps to</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mappedQuestions.map((q) => (
+                <tr key={q.questionId}>
+                  <td style={{ padding: "8px", borderBottom: `1px solid ${css.borderLight}`, verticalAlign: "top" }}>
+                    {q.title}
+                    <div style={{ fontSize: 10, color: css.textGray, marginTop: 2 }}>{q.questionId}</div>
+                  </td>
+                  <td style={{ padding: "8px", borderBottom: `1px solid ${css.borderLight}`, minWidth: 180 }}>
+                    <select
+                      value={fieldMap[q.questionId] || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setFieldMap((prev) => {
+                          const next = { ...prev };
+                          if (value) next[q.questionId] = value;
+                          else delete next[q.questionId];
+                          return next;
+                        });
+                        if (value === "resume_file_url") setResumeQuestionId(q.questionId);
+                        if (value === "headshot") setHeadshotQuestionId(q.questionId);
+                      }}
+                      style={{ width: "100%", padding: "6px 8px", borderRadius: 6, border: `1px solid ${css.borderLight}` }}
+                    >
+                      {COLUMN_OPTIONS.map((opt) => (
+                        <option key={opt.value || "skip"} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : cycle.formFieldMap && Object.keys(cycle.formFieldMap).length ? (
+        <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
+          {Object.keys(cycle.formFieldMap).length} field mappings saved. Click &quot;Discover fields&quot; to edit.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function RubricEditor({ draft, onChange, error }) {
+  function updateYear(yearKey, patch) {
+    onChange({
+      ...draft,
+      byYear: {
+        ...draft.byYear,
+        [yearKey]: { ...draft.byYear[yearKey], ...patch },
+      },
+    });
+  }
+
+  function updateMetric(yearKey, index, value) {
+    const metrics = [...draft.byYear[yearKey].metrics];
+    metrics[index] = value;
+    updateYear(yearKey, { metrics });
+  }
+
+  function addMetric(yearKey) {
+    updateYear(yearKey, { metrics: [...draft.byYear[yearKey].metrics, ""] });
+  }
+
+  function removeMetric(yearKey, index) {
+    const metrics = draft.byYear[yearKey].metrics.filter((_, i) => i !== index);
+    updateYear(yearKey, { metrics });
+  }
+
+  const inputStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    borderRadius: 6,
+    border: `1px solid ${css.borderLight}`,
+    fontSize: 13,
+    boxSizing: "border-box",
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 12px",
+        borderRadius: 8,
+        background: "#FFF",
+        border: `1px solid ${css.borderLight}`,
+      }}>
+        <label style={{ fontSize: 12, fontWeight: 700, color: css.textDark, whiteSpace: "nowrap" }}>
+          Max score per category
+        </label>
+        <input
+          type="number"
+          min={1}
+          max={10}
+          value={draft.maxPerCategory}
+          onChange={(e) => onChange({ ...draft, maxPerCategory: Number(e.target.value) })}
+          style={{ ...inputStyle, width: 72 }}
+        />
+        <span style={{ fontSize: 12, color: css.textGray }}>Typically 4 for 1–4 scoring</span>
+      </div>
+
+      {RUBRIC_YEAR_KEYS.map(({ key, title }) => {
+        const entry = draft.byYear[key];
+        const maxScore = entry.metrics.filter((m) => m.trim()).length * (draft.maxPerCategory || 4);
+        return (
+          <div
+            key={key}
+            style={{
+              padding: 14,
+              borderRadius: 10,
+              border: `1px solid ${css.borderLight}`,
+              background: "#FFF",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: css.textDark }}>{title}</span>
+              <span style={{ fontSize: 11, color: css.textGray }}>Max total: {maxScore || "—"}</span>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: css.textGray, marginBottom: 4 }}>
+                  Display label
+                </label>
+                <input
+                  type="text"
+                  value={entry.label}
+                  onChange={(e) => updateYear(key, { label: e.target.value })}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: css.textGray, marginBottom: 4 }}>
+                  Rubric image
+                </label>
+                <select
+                  value={entry.imageUrl}
+                  onChange={(e) => updateYear(key, { imageUrl: e.target.value })}
+                  style={inputStyle}
+                >
+                  {RUBRIC_IMAGE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {entry.imageUrl ? (
+              <img
+                src={entry.imageUrl}
+                alt={`${title} rubric`}
+                style={{
+                  width: "100%",
+                  maxHeight: 120,
+                  objectFit: "contain",
+                  borderRadius: 8,
+                  border: `1px solid ${css.borderLight}`,
+                  marginBottom: 12,
+                  background: "#FAFBFA",
+                }}
+              />
+            ) : null}
+
+            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: css.textGray, marginBottom: 6 }}>
+              Scoring categories
+            </label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {entry.metrics.map((metric, index) => (
+                <div key={`${key}-${index}`} style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="text"
+                    value={metric}
+                    placeholder={`Category ${index + 1}`}
+                    onChange={(e) => updateMetric(key, index, e.target.value)}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeMetric(key, index)}
+                    disabled={entry.metrics.length <= 1}
+                    style={{
+                      border: `1px solid ${css.borderLight}`,
+                      background: "#FFF",
+                      color: entry.metrics.length <= 1 ? css.textGray : css.red,
+                      borderRadius: 6,
+                      padding: "0 10px",
+                      fontSize: 12,
+                      cursor: entry.metrics.length <= 1 ? "not-allowed" : "pointer",
+                      opacity: entry.metrics.length <= 1 ? 0.5 : 1,
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => addMetric(key)}
+              style={{
+                marginTop: 8,
+                border: `1px dashed ${css.borderLight}`,
+                background: "transparent",
+                color: css.textGray,
+                borderRadius: 6,
+                padding: "6px 10px",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              + Add category
+            </button>
+          </div>
+        );
+      })}
+
+      {error ? (
+        <p style={{ margin: 0, fontSize: 12, color: css.red }}>{error}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric }) {
   const [editingRubric, setEditingRubric] = useState(false);
-  const [rubricText, setRubricText] = useState("");
+  const [rubricDraft, setRubricDraft] = useState(() => cloneRubricConfig(round.rubricConfig));
   const [rubricError, setRubricError] = useState("");
 
   useEffect(() => {
     if (!editingRubric) {
-      setRubricText(round.rubricConfig ? JSON.stringify(round.rubricConfig, null, 2) : "");
+      setRubricDraft(cloneRubricConfig(round.rubricConfig));
       setRubricError("");
     }
   }, [round.rubricConfig, editingRubric]);
@@ -115,46 +538,43 @@ function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric }) {
         </div>
       </div>
 
+      {isResumeRound && !editingRubric && round.rubricConfig ? (
+        <p style={{ margin: "12px 0 0", fontSize: 12, color: css.textGray }}>
+          Rubric configured for {RUBRIC_YEAR_KEYS.length} year groups · max {round.rubricConfig.maxPerCategory ?? 4} per category
+        </p>
+      ) : null}
+
       {isResumeRound && editingRubric ? (
         <div style={{ marginTop: 14 }}>
-          <p style={{ margin: "0 0 8px", fontSize: 11, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-            Rubric config (JSON)
-          </p>
-          <textarea
-            value={rubricText}
-            onChange={(e) => {
-              setRubricText(e.target.value);
+          <RubricEditor
+            draft={rubricDraft}
+            onChange={(next) => {
+              setRubricDraft(next);
               setRubricError("");
             }}
-            style={{
-              width: "100%",
-              minHeight: 220,
-              padding: 12,
-              borderRadius: 8,
-              border: `1px solid ${css.borderLight}`,
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 12,
-              boxSizing: "border-box",
-              resize: "vertical",
-            }}
+            error={rubricError}
           />
-          {rubricError ? (
-            <p style={{ margin: "8px 0 0", fontSize: 12, color: css.red }}>{rubricError}</p>
-          ) : null}
-          <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
             <ActionButton
               label="Save rubric"
               variant="primary"
               disabled={busy}
               onClick={async () => {
-                try {
-                  const parsed = JSON.parse(rubricText);
-                  setRubricError("");
-                  await onSaveRubric(round.id, parsed);
-                  setEditingRubric(false);
-                } catch {
-                  setRubricError("Invalid JSON. Check syntax and try again.");
+                const cleaned = cloneRubricConfig(rubricDraft);
+                cleaned.byYear = Object.fromEntries(
+                  Object.entries(cleaned.byYear).map(([yearKey, entry]) => [
+                    yearKey,
+                    { ...entry, metrics: entry.metrics.map((m) => m.trim()).filter(Boolean) },
+                  ])
+                );
+                const validationError = validateRubricDraft(cleaned);
+                if (validationError) {
+                  setRubricError(validationError);
+                  return;
                 }
+                setRubricError("");
+                await onSaveRubric(round.id, cleaned);
+                setEditingRubric(false);
               }}
             />
           </div>
@@ -164,7 +584,7 @@ function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric }) {
   );
 }
 
-function CycleCard({ cycle, busy, onActivate, onArchive, onActivateRound, onCloseRound, onSaveRubric }) {
+function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, onActivateRound, onCloseRound, onSaveRubric }) {
   const [expanded, setExpanded] = useState(cycle.isActive);
 
   return (
@@ -208,6 +628,7 @@ function CycleCard({ cycle, busy, onActivate, onArchive, onActivateRound, onClos
 
       {expanded ? (
         <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 12, background: "#FCFDFC" }}>
+          <FormConfigPanel cycle={cycle} busy={busy} authedFetch={authedFetch} onSaved={onReload} />
           {(cycle.rounds || []).map((round) => (
             <RoundCard
               key={round.id}
@@ -303,7 +724,7 @@ export default function CycleManagementPage() {
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontFamily: serifFont, fontSize: 30, margin: "0 0 8px", color: css.textDark }}>Cycle management</h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
-            Create recruiting cycles (e.g. Winter 26), activate one site-wide, and manage rounds within each cycle.
+            Create recruiting cycles (e.g. Winter 26), link a Google Form per cycle, and manage rounds within each cycle.
             Only one cycle is active at a time. Close a round before activating the next.
           </p>
         </div>
@@ -386,6 +807,8 @@ export default function CycleManagementPage() {
                 key={cycle.id}
                 cycle={cycle}
                 busy={busy}
+                authedFetch={authedFetch}
+                onReload={loadCycles}
                 onActivate={(id) => runAction(async () => {
                   const res = await authedFetch(`${API}/cycles/${id}/activate`, { method: "POST" });
                   if (!res.ok) {

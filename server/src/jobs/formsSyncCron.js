@@ -23,7 +23,7 @@ async function runFormsSync(source) {
 function startFormsSyncCron() {
   if (!isSyncConfigured()) {
     console.log(
-      "[formsSync] Skipping cron: set GOOGLE_CLOUD_KEY_PATH (or GOOGLE_APPLICATION_CREDENTIALS) and FORM_CONFIG_PATH or add server/form-config.json."
+      "[formsSync] Skipping cron: set GOOGLE_CLOUD_KEY_PATH (or GOOGLE_APPLICATION_CREDENTIALS) and configure a Google Form on at least one cycle."
     );
     return null;
   }
