@@ -6,6 +6,8 @@ node_modules/
 server/node_modules/
 client/node_modules/
 
+**/.DS_Store
+
 # Google Forms sync (secrets / local config)
 server/form-config.json
 *-sa.json
