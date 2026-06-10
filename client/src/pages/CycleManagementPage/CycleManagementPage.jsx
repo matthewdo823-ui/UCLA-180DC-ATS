@@ -96,6 +96,7 @@ const COLUMN_OPTIONS = [
 ];
 
 function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
+  const [expanded, setExpanded] = useState(!cycle.hasFormConfig);
   const [formUrl, setFormUrl] = useState(cycle.googleFormId ? `https://docs.google.com/forms/d/${cycle.googleFormId}/edit` : "");
   const [questions, setQuestions] = useState([]);
   const [fieldMap, setFieldMap] = useState(cycle.formFieldMap || {});
@@ -166,6 +167,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "Could not save form config");
       setPanelMessage("Form config saved.");
+      setExpanded(false);
       await onSaved();
     } catch (e) {
       setPanelError(e.message || "Save failed");
@@ -196,29 +198,74 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
     : Object.keys(fieldMap).map((questionId) => ({ questionId, title: questionId }));
 
   const panelBusy = busy || discovering || saving || syncing;
+  const fieldCount = Object.keys(cycle.formFieldMap || fieldMap).filter((k) => (cycle.formFieldMap || fieldMap)[k]).length;
 
   return (
     <div style={{
-      border: `1px solid ${css.borderLight}`,
+      border: `1px solid ${cycle.hasFormConfig ? "rgba(29,158,117,0.22)" : css.borderLight}`,
       borderRadius: 12,
-      padding: 16,
+      padding: expanded ? 16 : "12px 14px",
       background: "#FFF",
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
-        <div>
-          <h4 style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 700, color: css.textDark }}>Google Form sync</h4>
-          <p style={{ margin: 0, fontSize: 12, color: css.textGray, lineHeight: 1.45 }}>
-            Paste the form <strong>edit</strong> URL for this cycle. Share the form with your service account email as editor.
-            Use a separate form copy per cycle.
-          </p>
-        </div>
-        {cycle.hasFormConfig ? (
-          <span style={{ fontSize: 10, fontWeight: 800, color: "#1D9E75", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-            Configured
-          </span>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: expanded ? "flex-start" : "center", marginBottom: expanded ? 10 : 0 }}>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            border: "none",
+            background: "transparent",
+            padding: 0,
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          <span style={{ fontSize: 12, color: css.textGray, lineHeight: 1 }}>{expanded ? "▾" : "▸"}</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: css.textDark }}>Google Form sync</h4>
+              {cycle.hasFormConfig ? (
+                <span style={{ fontSize: 10, fontWeight: 800, color: "#1D9E75", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  Configured
+                </span>
+              ) : null}
+            </div>
+            {expanded ? (
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray, lineHeight: 1.45 }}>
+                Paste the form <strong>edit</strong> URL for this cycle. Share the form with your service account email as editor.
+                Use a separate form copy per cycle.
+              </p>
+            ) : (
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
+                {cycle.hasFormConfig
+                  ? `${fieldCount} field mappings${cycle.lastFormSyncAt ? ` · Last sync ${formatDate(cycle.lastFormSyncAt)}` : ""}`
+                  : "Not configured — click to set up"}
+              </p>
+            )}
+          </div>
+        </button>
+        {!expanded ? (
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            {cycle.hasFormConfig ? (
+              <ActionButton label={syncing ? "Syncing…" : "Sync now"} onClick={handleSync} disabled={panelBusy} variant="primary" />
+            ) : null}
+            <ActionButton label="Edit" onClick={() => setExpanded(true)} disabled={panelBusy} />
+          </div>
         ) : null}
       </div>
 
+      {!expanded ? (
+        <>
+          {panelError ? <p style={{ margin: "8px 0 0", fontSize: 12, color: css.red }}>{panelError}</p> : null}
+          {panelMessage ? <p style={{ margin: "8px 0 0", fontSize: 12, color: "#1D9E75" }}>{panelMessage}</p> : null}
+        </>
+      ) : null}
+
+      {expanded ? (
+        <>
       <input
         type="url"
         value={formUrl}
@@ -243,6 +290,9 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
         <ActionButton label={discovering ? "Discovering…" : "Discover fields"} onClick={handleDiscover} disabled={panelBusy || !formUrl.trim()} variant="primary" />
         <ActionButton label={saving ? "Saving…" : "Save config"} onClick={handleSave} disabled={panelBusy || !formUrl.trim()} />
         <ActionButton label={syncing ? "Syncing…" : "Sync now"} onClick={handleSync} disabled={panelBusy || !cycle.hasFormConfig} variant="primary" />
+        {cycle.hasFormConfig ? (
+          <ActionButton label="Collapse" onClick={() => setExpanded(false)} disabled={panelBusy} />
+        ) : null}
       </div>
 
       {cycle.lastFormSyncAt ? (
@@ -304,6 +354,8 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
         <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
           {Object.keys(cycle.formFieldMap).length} field mappings saved. Click &quot;Discover fields&quot; to edit.
         </p>
+      ) : null}
+        </>
       ) : null}
     </div>
   );
