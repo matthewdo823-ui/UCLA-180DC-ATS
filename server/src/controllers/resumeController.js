@@ -1,6 +1,6 @@
 const supabase = require('../config/supabase');
 const axios = require('axios');
-const { extractDriveFileID, toDownloadURL } = require('../utils/drive');
+const { extractDriveFileID, toDownloadURL, isGoogleDriveFileUrl } = require('../utils/drive');
 const {
     getActiveCycleId,
     getActiveCycleRow,
@@ -182,43 +182,56 @@ async function getReviewerLookup(reviewIds) {
 
 // Gets next resume row
 exports.getNextResume = async (req, res) => {
-    console.log("HIT /next-resume");
+    const gradedBy = req.user?.user_id;
 
     const screening = await requireActiveResumeScreening();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
 
-    const { data, error } = await supabase
+    let reviewedResumeIds = [];
+    if (gradedBy) {
+        const { data: reviewedRows, error: reviewedError } = await supabase
+            .from('resume_reviews')
+            .select('resume_id')
+            .eq('graded_by', gradedBy)
+            .eq('cycle_id', screening.cycle.id);
+
+        if (reviewedError) return res.status(500).json({ error: reviewedError.message });
+        reviewedResumeIds = [...new Set((reviewedRows || []).map((row) => row.resume_id).filter(Boolean))];
+    }
+
+    let query = supabase
         .from('resumes')
         .select(`*,
             candidates(year)
         `)
         .eq('cycle_id', screening.cycle.id)
         .order('review_count', { ascending: true })
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .order('created_at', { ascending: true });
 
-    console.log("DATA:", data);
-    console.log("ERROR:", error);
-
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data) return res.status(404).json({ error: "No resumes found for the active cycle" });
-
-    const fileID = extractDriveFileID(data.file_url);
-
-    if (!fileID) {
-        return res.status(400).json({ error: "Could not parse Google Drive ID" });
+    if (reviewedResumeIds.length) {
+        query = query.not('id', 'in', `(${reviewedResumeIds.join(',')})`);
     }
 
-    const accessable_file_url = toDownloadURL(fileID);
+    const { data: resumeCandidates, error } = await query.limit(100);
 
-    console.log("abouta pass file url: " + accessable_file_url);
-    return res.json({
-        ...data,
-        "file_url": accessable_file_url
-    });
+    if (error) return res.status(500).json({ error: error.message });
+
+    for (const row of resumeCandidates || []) {
+        if (!isGoogleDriveFileUrl(row.file_url)) {
+            console.warn(`[getNextResume] Skipping resume ${row.id}: not a valid Google Drive URL`);
+            continue;
+        }
+
+        const fileID = extractDriveFileID(row.file_url);
+        return res.json({
+            ...row,
+            file_url: toDownloadURL(fileID),
+        });
+    }
+
+    return res.status(404).json({ error: "No resumes available" });
 };
 
 // Saves review 
@@ -632,12 +645,11 @@ exports.getResumeFile = async (req, res) => {
 
     if (error) return res.status(404).json({ error: error.message });
 
-    const fileID = extractDriveFileID(data.file_url);
-
-    if (!fileID) {
-        return res.status(400).json({ error: "Could not parse Google Drive ID" });
+    if (!isGoogleDriveFileUrl(data.file_url)) {
+        return res.status(400).json({ error: "Resume file must be a Google Drive link" });
     }
 
+    const fileID = extractDriveFileID(data.file_url);
     const accessable_file_url = toDownloadURL(fileID);
 
     return res.json({
@@ -650,10 +662,16 @@ exports.getResumeFile = async (req, res) => {
 exports.viewPdf = async (req, res) => {
     const fileUrl = req.query.url;
     if (!fileUrl) return res.status(400).send("No URL provided");
+    if (!isGoogleDriveFileUrl(fileUrl)) {
+        return res.status(400).send("Only Google Drive PDF URLs are allowed");
+    }
+
+    const downloadUrl = toDownloadURL(extractDriveFileID(fileUrl));
+
     try {
         const response = await axios({
             method: 'get',
-            url: fileUrl,
+            url: downloadUrl,
             responseType: 'stream',
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'

@@ -1,3 +1,18 @@
+const GOOGLE_DRIVE_HOSTS = new Set(['drive.google.com', 'docs.google.com']);
+
+function isGoogleDriveFileUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+
+  try {
+    const parsed = new URL(url.trim());
+    const host = parsed.hostname.replace(/^www\./, '');
+    if (!GOOGLE_DRIVE_HOSTS.has(host)) return false;
+    return Boolean(extractDriveFileID(url));
+  } catch {
+    return false;
+  }
+}
+
 function extractDriveFileID(url) {
   if (!url || typeof url !== 'string') return null;
 
@@ -33,6 +48,7 @@ function toDownloadURL(fileID) {
 }
 
 module.exports = {
+  isGoogleDriveFileUrl,
   extractDriveFileID,
-  toDownloadURL
+  toDownloadURL,
 };
