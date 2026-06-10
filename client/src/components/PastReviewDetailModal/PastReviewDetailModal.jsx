@@ -342,7 +342,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved }) {
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.08em", margin: "0 0 10px", fontWeight: 800 }}>DECISION</p>
             <div style={{ display: "flex", borderRadius: 12, overflow: "hidden", border: `1px solid ${css.borderLight}`, background: "#F3F4F2" }}>
               {[
-                { key: "pass", label: "Advance" },
+                { key: "pass", label: "Complete" },
                 { key: "flag", label: "Flag" },
               ].map(({ key, label }) => {
                 const sel = decision === key;

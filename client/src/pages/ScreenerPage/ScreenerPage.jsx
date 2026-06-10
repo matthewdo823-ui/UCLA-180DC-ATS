@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
-import { METRICS, API } from "../../constants/config";
+import { API, getRubricForYear, RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
 
 import Topbar from "../../components/Topbar/Topbar";
 import CandidateRow from "../../components/CandidateRow/CandidateRow";
@@ -23,12 +23,17 @@ export default function ScreenerPage() {
   const [pastReviewDetail, setPastReviewDetail] = useState(null);
   const panelRef = useRef(null);
 
+  const rubric = useMemo(
+    () => getRubricForYear(resume?.candidates?.year),
+    [resume?.candidates?.year]
+  );
+
   const scoringComplete = useMemo(
     () =>
-      METRICS.every(
-        (m) => typeof scores[m] === "number" && scores[m] >= 1 && scores[m] <= 6
+      rubric.metrics.every(
+        (m) => typeof scores[m] === "number" && scores[m] >= 1 && scores[m] <= RUBRIC_MAX_PER_CATEGORY
       ),
-    [scores]
+    [scores, rubric]
   );
 
   const fetchMyReviews = useCallback(async (opts = {}) => {

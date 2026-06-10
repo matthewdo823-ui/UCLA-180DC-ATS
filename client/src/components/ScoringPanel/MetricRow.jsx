@@ -1,15 +1,17 @@
 import { css } from "../../theme/colors";
 import { BUBBLE_COLORS, METRIC_ICONS } from "../../constants/config";
 
-export default function MetricRow({ metric, value, onScore }) {
+export default function MetricRow({ metric, value, onScore, maxScore = 4 }) {
+  const levels = Array.from({ length: maxScore }, (_, i) => i + 1);
+
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: css.textDark, textTransform: "capitalize", display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 16, background: css.bgLight, borderRadius: "50%", padding: 4, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>{METRIC_ICONS[metric]}</span>
+        <span style={{ fontSize: 16, background: css.bgLight, borderRadius: "50%", padding: 4, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>{METRIC_ICONS[metric] || "📋"}</span>
         {metric}
       </span>
       <div style={{ display: "flex", gap: 6 }}>
-        {[1, 2, 3, 4, 5, 6].map(n => {
+        {levels.map(n => {
           const sel = value === n;
           const c = BUBBLE_COLORS[n];
           return (
