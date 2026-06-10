@@ -22,45 +22,7 @@ const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
     : 30;
-const REVIEWER_NAME_FIELDS = [
-    "name",
-    "full_name",
-    "first_name",
-    "last_name",
-    "reviewer_name",
-    "reviewer",
-    "reviewed_by",
-    "reviewer_email",
-    "user_email",
-    "user_name",
-    "created_by_name",
-    "created_by",
-    "user_id"
-];
-const REVIEWER_EMAIL_FIELDS = ["email", "reviewer_email", "user_email"];
-const REVIEWER_JOIN_TABLES = ["reviewers", "resume_reviewers", "review_assignments"];
-const REVIEWER_REVIEW_ID_FIELDS = ["review_id", "resume_review_id", "resume_reviews_id"];
 const VALID_REVIEW_DECISIONS = new Set(["pass", "flag", "reject"]);
-
-function getReviewerName(review) {
-    if (review.first_name || review.last_name) {
-        return [review.first_name, review.last_name].filter(Boolean).join(" ");
-    }
-
-    for (const field of REVIEWER_NAME_FIELDS) {
-        if (review[field]) return review[field];
-    }
-
-    return null;
-}
-
-function getReviewerEmail(review) {
-    for (const field of REVIEWER_EMAIL_FIELDS) {
-        if (review[field]) return review[field];
-    }
-
-    return null;
-}
 
 function getReviewScore(scores = {}, metrics = null) {
     return computeRawScore(scores, metrics);
@@ -131,36 +93,6 @@ async function getGradedByUserLookup(gradedByIds) {
             email: user.email || null,
         };
     });
-
-    return lookup;
-}
-
-async function getReviewerLookup(reviewIds) {
-    const lookup = {};
-    if (!reviewIds.length) return lookup;
-
-    for (const table of REVIEWER_JOIN_TABLES) {
-        for (const reviewIdField of REVIEWER_REVIEW_ID_FIELDS) {
-            const { data, error } = await supabase
-                .from(table)
-                .select('*')
-                .in(reviewIdField, reviewIds);
-
-            if (error) continue;
-
-            (data || []).forEach(row => {
-                const reviewId = row[reviewIdField];
-                if (!reviewId || lookup[reviewId]) return;
-
-                lookup[reviewId] = {
-                    name: getReviewerName(row),
-                    email: getReviewerEmail(row)
-                };
-            });
-
-            if (Object.keys(lookup).length) return lookup;
-        }
-    }
 
     return lookup;
 }
@@ -732,7 +664,6 @@ exports.getScoreboard = async (req, res) => {
             
         if (reviewError) throw reviewError;
 
-        const reviewerLookup = await getReviewerLookup((reviews || []).map(review => review.id));
         const gradedByUserLookup = await getGradedByUserLookup((reviews || []).map(review => review.graded_by));
 
         const candidateMap = {};
@@ -826,16 +757,8 @@ exports.getScoreboard = async (req, res) => {
                 score: reviewScore,
                 normalizedScore: reviewNormalized,
                 maxScore: snapshot?.maxScore ?? null,
-                reviewerName:
-                    getReviewerName(review) ||
-                    reviewerLookup[review.id]?.name ||
-                    graderFromUsers?.name ||
-                    null,
-                reviewerEmail:
-                    getReviewerEmail(review) ||
-                    reviewerLookup[review.id]?.email ||
-                    graderFromUsers?.email ||
-                    null,
+                reviewerName: graderFromUsers?.name || null,
+                reviewerEmail: graderFromUsers?.email || null,
                 notes: review.notes || '',
                 submittedAt: review.submitted_at
             });

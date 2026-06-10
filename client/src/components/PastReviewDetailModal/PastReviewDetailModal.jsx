@@ -318,7 +318,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved }) {
             <div>
               <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 4px", fontWeight: 800, letterSpacing: "0.06em" }}>TOTAL</p>
               <p style={{ fontSize: 28, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1, fontFamily: "'DM Mono', monospace" }}>
-                {formatScore(total)} <span style={{ fontSize: 14, color: "#3B6D11", fontWeight: 600 }}>/ {maxScore}</span>
+                {formatScore(total, { fallback: "—" })} <span style={{ fontSize: 14, color: "#3B6D11", fontWeight: 600 }}>/ {maxScore}</span>
               </p>
             </div>
             <div style={{ textAlign: "right" }}>
