@@ -1,6 +1,5 @@
 export const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-export const METRICS = ["experience", "leadership", "social impact", "communication"];
 export const METRIC_ICONS = {
   "experience": "💼",
   "leadership": "👑",
@@ -11,53 +10,7 @@ export const METRIC_ICONS = {
   "leadership/work experience": "💼",
   "business or social impact": "🤝",
 };
-export const MAX_SCORE = METRICS.length * 6;
 export const RUBRIC_MAX_PER_CATEGORY = 4;
-
-const TWO_CATEGORY_METRICS = ["leadership/work experience", "business or social impact"];
-const SOPHOMORE_METRICS = ["work experience", "leadership experience", "social impact"];
-
-export const RUBRIC_CFG = {
-  freshman: {
-    image: "/rubrics/FreshmanRubric.png",
-    label: "Freshman",
-    metrics: TWO_CATEGORY_METRICS,
-  },
-  sophomore: {
-    image: "/rubrics/SophomoreRubric.png",
-    label: "Sophomore",
-    metrics: SOPHOMORE_METRICS,
-  },
-  junior: {
-    image: "/rubrics/OthersRubric.png",
-    label: "Junior & Senior",
-    metrics: TWO_CATEGORY_METRICS,
-  },
-  juniortransfer: {
-    image: "/rubrics/OthersRubric.png",
-    label: "Junior & Senior",
-    metrics: TWO_CATEGORY_METRICS,
-  },
-  senior: {
-    image: "/rubrics/OthersRubric.png",
-    label: "Junior & Senior",
-    metrics: TWO_CATEGORY_METRICS,
-  },
-};
-
-export function normalizeYearKey(yearRaw) {
-  if (yearRaw == null || yearRaw === "") return null;
-  return String(yearRaw).toLowerCase().replace(/\s/g, "");
-}
-
-export function getRubricForYear(yearRaw) {
-  const key = normalizeYearKey(yearRaw);
-  return (key && RUBRIC_CFG[key]) || RUBRIC_CFG.sophomore;
-}
-
-export function getRubricMaxScore(rubric) {
-  return rubric.metrics.length * RUBRIC_MAX_PER_CATEGORY;
-}
 
 export const YEAR_CFG = {
   freshman: {
