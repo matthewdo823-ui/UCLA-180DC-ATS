@@ -14,7 +14,7 @@ const {
     computeRawScore,
     computeNormalizedScore,
     getMetricsFromRubricConfig,
-    getLegacyNormalizedScore,
+    resolveReviewNormalizedValue,
 } = require('../utils/rubric');
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
@@ -64,17 +64,6 @@ function getReviewScore(scores = {}, metrics = null) {
     return computeRawScore(scores, metrics);
 }
 
-function getReviewNormalizedValue(review) {
-    if (Number.isFinite(Number(review?.normalized_score))) {
-        return Number(review.normalized_score);
-    }
-    const snapshot = review?.rubric_snapshot;
-    if (snapshot) {
-        return computeNormalizedScore(review.scores || {}, snapshot);
-    }
-    return getLegacyNormalizedScore(review?.scores || {});
-}
-
 function buildCategoryScores(categoryTotals = {}, categoryCounts = {}) {
     const keys = new Set([
         ...Object.keys(categoryTotals),
@@ -94,7 +83,7 @@ function firstRel(rel) {
     return Array.isArray(rel) ? rel[0] : rel;
 }
 
-function mapMyReviewRow(row) {
+function mapMyReviewRow(row, rubricConfig = null) {
     const resume = firstRel(row.resumes);
     const cand = firstRel(resume?.candidates);
     const snapshot = row.rubric_snapshot || null;
@@ -113,7 +102,10 @@ function mapMyReviewRow(row) {
         metrics,
         total: rawTotal,
         maxScore: snapshot?.maxScore ?? null,
-        normalizedScore: getReviewNormalizedValue(row),
+        normalizedScore: resolveReviewNormalizedValue(row, {
+            rubricConfig,
+            candidateYear: cand?.year,
+        }),
         decision: row.decision || "pass",
         notes: row.notes || "",
         submittedAt: row.submitted_at,
@@ -306,6 +298,10 @@ exports.listMyReviews = async (req, res) => {
     }
 
     const activeCycleId = await getActiveCycleId();
+    const resumeRound = activeCycleId
+        ? await getResumeScreenRoundForCycle(activeCycleId)
+        : null;
+    const rubricConfig = resumeRound?.rubric_config || null;
 
     let reviewQuery = supabase
         .from("resume_reviews")
@@ -335,7 +331,7 @@ exports.listMyReviews = async (req, res) => {
 
     if (error) return res.status(500).json({ error: error.message });
 
-    const reviews = (data || []).map(mapMyReviewRow);
+    const reviews = (data || []).map((row) => mapMyReviewRow(row, rubricConfig));
 
     return res.json({
         reviews,
@@ -381,21 +377,27 @@ exports.patchMyReview = async (req, res) => {
         return res.status(404).json({ error: "Review not found" });
     }
 
+    const screening = await requireActiveResumeScreening();
+    if (screening.error) {
+        return res.status(screening.status).json({ error: screening.error });
+    }
+
     const snapshot = existing.rubric_snapshot;
     const candidate = firstRel(firstRel(existing.resumes)?.candidates);
+    const cycleRubricConfig = screening.round.rubric_config;
     const rubricForYear = snapshot
         ? {
             metrics: snapshot.metrics || [],
             maxPerCategory: snapshot.maxPerCategory || 4,
         }
-        : getRubricForYear(null, candidate?.year);
+        : getRubricForYear(cycleRubricConfig, candidate?.year);
 
     const { scores: normalizedScores, error: normErr } = normalizeScreeningScoresInput(scores, rubricForYear);
     if (normErr) {
         return res.status(400).json({ error: normErr });
     }
 
-    const rubricSnapshot = snapshot || buildRubricSnapshot(null, candidate?.year);
+    const rubricSnapshot = snapshot || buildRubricSnapshot(cycleRubricConfig, candidate?.year);
     const normalizedScore = computeNormalizedScore(normalizedScores, rubricSnapshot);
 
     let flaggedResume = null;
@@ -467,7 +469,7 @@ exports.patchMyReview = async (req, res) => {
     if (readError) return res.status(500).json({ error: readError.message });
     if (!row) return res.status(500).json({ error: "Failed to load updated review" });
 
-    return res.json({ review: mapMyReviewRow(row) });
+    return res.json({ review: mapMyReviewRow(row, cycleRubricConfig) });
 };
 
 exports.createCandidateFlag = async (req, res) => {
@@ -507,6 +509,14 @@ exports.createCandidateFlag = async (req, res) => {
 
 exports.getCandidateFlags = async (req, res) => {
     try {
+        const activeCycleId = await getActiveCycleId();
+        if (!activeCycleId) {
+            return res.json({
+                stats: { openFlags: 0, candidates: 0 },
+                flags: [],
+            });
+        }
+
         const { data, error } = await supabase
             .from('candidate_flags')
             .select(`
@@ -518,7 +528,7 @@ exports.getCandidateFlags = async (req, res) => {
                 status,
                 created_at,
                 resolved_at,
-                candidates (
+                candidates!inner (
                     id,
                     name,
                     email,
@@ -530,7 +540,8 @@ exports.getCandidateFlags = async (req, res) => {
                     linkedin,
                     gm,
                     newbie_training,
-                    extenuating_circumstances
+                    extenuating_circumstances,
+                    cycle_id
                 ),
                 resumes (
                     id,
@@ -545,6 +556,7 @@ exports.getCandidateFlags = async (req, res) => {
                 )
             `)
             .eq('status', 'open')
+            .eq('candidates.cycle_id', activeCycleId)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -767,8 +779,12 @@ exports.getScoreboard = async (req, res) => {
             const metrics = snapshot?.metrics || Object.keys(review.scores || {});
             metrics.forEach((metric) => metricSet.add(metric));
 
+            const candidateYear = firstRel(review.resumes?.candidates)?.year;
             const reviewScore = getReviewScore(review.scores, metrics);
-            const reviewNormalized = getReviewNormalizedValue(review);
+            const reviewNormalized = resolveReviewNormalizedValue(review, {
+                rubricConfig: resumeRound.rubric_config,
+                candidateYear,
+            });
 
             totalNormalizedSum += reviewNormalized;
             reviewCount++;
@@ -928,7 +944,8 @@ exports.getGraderScoreboard = async (req, res) => {
                 normalized_score,
                 resumes (
                     id,
-                    name
+                    name,
+                    candidates ( year )
                 )
             `)
             .not('graded_by', 'is', null);
@@ -973,8 +990,12 @@ exports.getGraderScoreboard = async (req, res) => {
             const metrics = snapshot?.metrics || Object.keys(review.scores || {});
             metrics.forEach((metric) => metricSet.add(metric));
 
+            const candidateYear = firstRel(review.resumes?.candidates)?.year;
             const reviewScore = getReviewScore(review.scores, metrics);
-            const reviewNormalized = getReviewNormalizedValue(review);
+            const reviewNormalized = resolveReviewNormalizedValue(review, {
+                rubricConfig: resumeRound?.rubric_config,
+                candidateYear,
+            });
             grader.reviewCount++;
             grader.totalScore += reviewScore;
             grader.totalNormalized += reviewNormalized;

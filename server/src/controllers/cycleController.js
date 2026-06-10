@@ -328,6 +328,16 @@ exports.patchCycle = async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
     if (!data) return res.status(404).json({ error: "Cycle not found" });
 
+    if (updates.status === "archived") {
+      const { error: closeRoundsError } = await supabase
+        .from("rounds")
+        .update({ status: "closed" })
+        .eq("cycle_id", cycleId)
+        .in("status", ["active", "draft"]);
+
+      if (closeRoundsError) return res.status(500).json({ error: closeRoundsError.message });
+    }
+
     const activeCycleId = await getActiveCycleId();
     const roundsByCycle = await fetchRoundsForCycles([cycleId]);
     const countsByCycle = await fetchCycleCounts([cycleId]);

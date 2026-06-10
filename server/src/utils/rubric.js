@@ -159,6 +159,26 @@ function getLegacyNormalizedScore(scores) {
   return Number(((raw / 24) * 100).toFixed(2));
 }
 
+function resolveReviewNormalizedValue(review, options = {}) {
+  if (Number.isFinite(Number(review?.normalized_score))) {
+    return Number(review.normalized_score);
+  }
+
+  const scores = review?.scores || {};
+  const snapshot = review?.rubric_snapshot;
+  if (snapshot) {
+    return computeNormalizedScore(scores, snapshot);
+  }
+
+  const { rubricConfig, candidateYear } = options;
+  if (rubricConfig) {
+    const dynamicSnapshot = buildRubricSnapshot(rubricConfig, candidateYear);
+    return computeNormalizedScore(scores, dynamicSnapshot);
+  }
+
+  return getLegacyNormalizedScore(scores);
+}
+
 module.exports = {
   RUBRIC_MAX_PER_CATEGORY,
   DEFAULT_RUBRIC_CONFIG,
@@ -173,4 +193,5 @@ module.exports = {
   computeNormalizedScore,
   getMetricsFromRubricConfig,
   getLegacyNormalizedScore,
+  resolveReviewNormalizedValue,
 };
