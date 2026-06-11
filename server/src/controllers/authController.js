@@ -4,6 +4,7 @@ const supabase = require('../config/supabase');
 const { USER_FIELDS } = require('../middleware/authMiddleware');
 const { getJwtSecret } = require('../utils/auth');
 const { serializeUser } = require('../utils/userDisplay');
+const { respondWithServerError } = require('../utils/httpErrors');
 
 const LOGIN_USER_FIELDS = `${USER_FIELDS}, password_hash`;
 
@@ -36,7 +37,7 @@ exports.login = async (req, res) => {
             .eq('email', email)
             .maybeSingle();
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return respondWithServerError(res, error, 'login lookup');
 
         const passwordMatches = user
             ? await bcrypt.compare(password, user.password_hash)
@@ -53,15 +54,14 @@ exports.login = async (req, res) => {
             .select(USER_FIELDS)
             .single();
 
-        if (updateError) return res.status(500).json({ error: updateError.message });
+        if (updateError) return respondWithServerError(res, updateError, 'login last_login update');
 
         return res.json({
             token: createToken(updatedUser),
             user: serializeUser(updatedUser),
         });
     } catch (err) {
-        console.error('Login error:', err.message);
-        return res.status(500).json({ error: 'Login failed' });
+        return respondWithServerError(res, err, 'login', 'Login failed');
     }
 };
 
@@ -86,7 +86,7 @@ exports.register = async (req, res) => {
             .eq('email', email)
             .maybeSingle();
 
-        if (lookupError) return res.status(500).json({ error: lookupError.message });
+        if (lookupError) return respondWithServerError(res, lookupError, 'register lookup');
 
         if (existingUser) {
             return res.status(409).json({ error: 'An account already exists for this email' });
@@ -113,7 +113,7 @@ exports.register = async (req, res) => {
                 return res.status(409).json({ error: 'An account already exists for this email' });
             }
 
-            return res.status(500).json({ error: error.message });
+            return respondWithServerError(res, error, 'register insert');
         }
 
         return res.status(201).json({
@@ -121,8 +121,7 @@ exports.register = async (req, res) => {
             user: serializeUser(user),
         });
     } catch (err) {
-        console.error('Register error:', err.message);
-        return res.status(500).json({ error: 'Account creation failed' });
+        return respondWithServerError(res, err, 'register', 'Account creation failed');
     }
 };
 

@@ -5,9 +5,9 @@ function logServerError(context, err) {
     console.error(`${context}:`, message);
 }
 
-function respondWithServerError(res, err, context = 'Request failed') {
+function respondWithServerError(res, err, context = 'Request failed', clientMessage = GENERIC_SERVER_ERROR) {
     logServerError(context, err);
-    return res.status(500).json({ error: GENERIC_SERVER_ERROR });
+    return res.status(500).json({ error: clientMessage });
 }
 
 module.exports = {

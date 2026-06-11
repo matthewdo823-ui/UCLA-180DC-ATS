@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const supabase = require('../config/supabase');
 const { normalizeRole, getJwtSecret } = require('../utils/auth');
+const { respondWithServerError } = require('../utils/httpErrors');
 
 const USER_FIELDS = 'user_id, email, role, first_name, last_name, created_at, last_login';
 
@@ -20,7 +21,7 @@ async function authenticateToken(req, res, next) {
             .eq('user_id', payload.sub)
             .maybeSingle();
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return respondWithServerError(res, error, 'authenticateToken');
         if (!user) return res.status(401).json({ error: 'User no longer exists' });
 
         req.user = user;
@@ -30,8 +31,7 @@ async function authenticateToken(req, res, next) {
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
 
-        console.error('Auth middleware error:', err.message);
-        return res.status(500).json({ error: 'Authentication failed' });
+        return respondWithServerError(res, err, 'authenticateToken', 'Authentication failed');
     }
 }
 
