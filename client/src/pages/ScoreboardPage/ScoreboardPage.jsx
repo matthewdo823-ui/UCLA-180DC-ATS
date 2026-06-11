@@ -803,7 +803,7 @@ export default function ScoreboardPage() {
       const list = filteredCandidates;
       if (!list.length) return;
 
-      let index = list.findIndex(c => c.id === focusedCandidateId);
+      let index = list.findIndex(c => String(c.id) === String(focusedCandidateId));
       if (index < 0) index = 0;
 
       if (event.key === "ArrowDown") {
@@ -841,14 +841,21 @@ export default function ScoreboardPage() {
   }, [deliberationMode, filteredCandidates, focusedCandidateId, isStaff, saveDecision]);
 
   useEffect(() => {
+    if (!deliberationMode) {
+      setFocusedCandidateId(null);
+      return;
+    }
     if (!filteredCandidates.length) {
       setFocusedCandidateId(null);
       return;
     }
-    if (!focusedCandidateId || !filteredCandidates.some(c => c.id === focusedCandidateId)) {
-      setFocusedCandidateId(filteredCandidates[0].id);
+    if (
+      focusedCandidateId != null
+      && !filteredCandidates.some(c => String(c.id) === String(focusedCandidateId))
+    ) {
+      setFocusedCandidateId(null);
     }
-  }, [filteredCandidates, focusedCandidateId]);
+  }, [deliberationMode, filteredCandidates, focusedCandidateId]);
 
   const activeFilterCount = countActiveFilters(
     deliberationMode ? filters : { ...filters, decision: "all" }
@@ -865,7 +872,10 @@ export default function ScoreboardPage() {
 
   function toggleDeliberationMode() {
     setDeliberationMode(on => {
-      if (on) setFilters(f => ({ ...f, decision: "all" }));
+      if (on) {
+        setFilters(f => ({ ...f, decision: "all" }));
+        setFocusedCandidateId(null);
+      }
       setDecisionError("");
       return !on;
     });
@@ -924,7 +934,7 @@ export default function ScoreboardPage() {
               </h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: t.textMuted, lineHeight: 1.45 }}>
                 {deliberationMode ? (
-                  <>Live committee — pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>. Press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> on the focused row; press again to clear.</>
+                  <>Live committee — pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>. Click a row to focus it; press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> to decide (again to clear).</>
                 ) : (
                   <>Round 1 resume reviews — use <strong style={{ fontWeight: 600, color: t.text }}>Sort &amp; filters</strong> to change order and narrow who appears in the table.</>
                 )}
@@ -1244,7 +1254,7 @@ export default function ScoreboardPage() {
           const delay = Math.min(index, staggerCap) * staggerMs;
           const decisionStatus = getCandidateDecisionStatus(c);
           const decisionStyle = DECISION_STYLE[decisionStatus];
-          const isFocused = deliberationMode && focusedCandidateId === c.id;
+          const isFocused = deliberationMode && focusedCandidateId != null && String(focusedCandidateId) === String(c.id);
           const rowSaving = savingDecisionId === c.id;
           const rowBg = isFocused
             ? t.rowFocus
@@ -1255,7 +1265,10 @@ export default function ScoreboardPage() {
           return (
           <div
             key={`${listMotionKey}-${c.id}`}
-            onClick={() => deliberationMode && setFocusedCandidateId(c.id)}
+            onClick={() => {
+              if (!deliberationMode) return;
+              setFocusedCandidateId(prev => (String(prev) === String(c.id) ? null : c.id));
+            }}
             style={{
               display: "grid",
               gridTemplateColumns: gridColumns,
@@ -1272,7 +1285,7 @@ export default function ScoreboardPage() {
               <div style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: decisionStatus === "pending" ? "transparent" : decisionStyle.color, minHeight: 44 }} aria-hidden />
             ) : null}
 
-            <div style={{ color: t.accent, fontWeight: 700, fontSize: 14 }}>{index + 1}</div>
+            <div style={{ color: isFocused ? t.accent : t.textMuted, fontWeight: 700, fontSize: 14 }}>{index + 1}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
               <CandidateAvatar name={c.name} headshot={c.headshot} size={44} background={deliberationMode ? t.accent : css.greenDark} />
