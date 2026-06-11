@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
+import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
 import { serifFont } from "../../theme/typography";
 import { formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
@@ -367,14 +368,14 @@ function ScorecardModal({ candidate, onClose, metrics = [], maxPerCategory = 4 }
         </button>
 
         <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", color: "#FFF", textAlign: "center", margin: "0 0 10px" }}>
-          ROUND 1
+          ROUND 1 · RESUME SCREEN
         </p>
 
         <div style={{ borderRadius: 16, border: `2px solid ${cardGreen}`, overflow: "hidden", background: "#FFF", boxShadow: "0 24px 70px rgba(0,0,0,0.26)" }}>
           <div style={{ background: cardGreen, padding: "18px 18px 16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
               <span style={{ background: "#04342C", color: "#9FE1CB", fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 20, letterSpacing: "0.04em" }}>
-                ROUND 1 · RESUME
+                ROUND 1 · RESUME SCREEN
               </span>
               <span style={{ background: "rgba(255,255,255,0.1)", color: cardLime, fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 20, border: `1px solid ${cardMint}` }}>
                 ACTIVE
@@ -382,9 +383,15 @@ function ScorecardModal({ candidate, onClose, metrics = [], maxPerCategory = 4 }
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", background: cardMint, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 700, color: cardPale, flexShrink: 0, border: "2px solid #5DCAA5" }}>
-                {getInitials(candidate.name)}
-              </div>
+              <CandidateAvatar
+                name={candidate.name}
+                headshot={candidate.headshot}
+                size={56}
+                background={cardMint}
+                color={cardPale}
+                border="2px solid #5DCAA5"
+                fontSize={17}
+              />
               <div style={{ minWidth: 0 }}>
                 <p style={{ color: cardPale, fontSize: 18, fontFamily: serifFont, fontWeight: 600, margin: "0 0 3px", lineHeight: 1.15 }}>{candidate.name}</p>
                 <p style={{ color: "#9FE1CB", fontSize: 12, margin: "0 0 2px" }}>{candidate.major || "Undeclared"}</p>
@@ -822,9 +829,7 @@ export default function ScoreboardPage() {
             <div style={{ color: css.greenDark, fontWeight: 700, fontSize: 14 }}>{index + 1}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-              <div style={{ width: 44, height: 44, background: css.greenDark, color: "#FFF", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
-                {getInitials(c.name)}
-              </div>
+              <CandidateAvatar name={c.name} headshot={c.headshot} size={44} background={css.greenDark} />
               <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                 <span style={{ fontSize: 16, fontWeight: 500, fontFamily: serifFont, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
                 <span style={{ fontSize: 13, color: "#888", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
