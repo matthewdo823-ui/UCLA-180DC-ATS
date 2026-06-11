@@ -12,6 +12,8 @@ const { startFormsSyncCron } = require('./src/jobs/formsSyncCron');
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 function parseAllowedOrigins() {
   const raw = process.env.CORS_ALLOWED_ORIGINS || '';
   return raw.split(',').map((origin) => origin.trim()).filter(Boolean);
