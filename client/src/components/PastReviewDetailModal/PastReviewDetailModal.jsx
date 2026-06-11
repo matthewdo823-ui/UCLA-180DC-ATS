@@ -101,11 +101,10 @@ function buildPayloadScores(scores, metrics = []) {
   return out;
 }
 
-export default function PastReviewDetailModal({ review, onClose, onSaved }) {
+export default function PastReviewDetailModal({ review, onClose, onSaved, onOpenInScreener }) {
   const authedFetch = useAuthedFetch();
   const [scores, setScores] = useState({});
   const [notes, setNotes] = useState("");
-  const [decision, setDecision] = useState("pass");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -143,7 +142,6 @@ export default function PastReviewDetailModal({ review, onClose, onSaved }) {
     }
     setScores(next);
     setNotes(review.notes ?? "");
-    setDecision(review.decision === "flag" ? "flag" : "pass");
     setError("");
   }, [review]);
 
@@ -185,7 +183,11 @@ export default function PastReviewDetailModal({ review, onClose, onSaved }) {
       const res = await authedFetch(`${API}/reviews/${encodeURIComponent(String(review.reviewId).trim())}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scores: payloadScores, notes, decision }),
+        body: JSON.stringify({
+          scores: payloadScores,
+          notes,
+          decision: review.decision === "flag" ? "flag" : "pass",
+        }),
       });
       if (!res.ok) {
         const msg = await readErrorBody(res);
@@ -215,7 +217,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved }) {
     } finally {
       setSaving(false);
     }
-  }, [authedFetch, review?.reviewId, scores, notes, decision, scoringComplete, onSaved]);
+  }, [authedFetch, review?.reviewId, review?.decision, scores, notes, scoringComplete, onSaved]);
 
   if (!review) return null;
 
@@ -312,6 +314,42 @@ export default function PastReviewDetailModal({ review, onClose, onSaved }) {
                 ) : null}
               </div>
             </div>
+            {onOpenInScreener && (review.resumeId || review.id || review.reviewId) ? (
+              <button
+                type="button"
+                onClick={() => onOpenInScreener(review)}
+                style={{
+                  marginTop: 16,
+                  width: "100%",
+                  padding: "12px 16px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.4)",
+                  background: "rgba(255,255,255,0.16)",
+                  color: "#FFF",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  letterSpacing: "0.01em",
+                  boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+                  transition: "background 0.15s, border-color 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(255,255,255,0.24)";
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.55)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "rgba(255,255,255,0.16)";
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)";
+                }}
+              >
+                View full application
+                <span aria-hidden style={{ fontSize: 15, lineHeight: 1 }}>→</span>
+              </button>
+            ) : null}
           </div>
 
           <div style={{ background: cardPale, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, borderBottom: "1px solid #D4DECC" }}>
@@ -332,38 +370,6 @@ export default function PastReviewDetailModal({ review, onClose, onSaved }) {
             {metrics.map((metric) => (
               <CategoryRowEdit key={metric} metric={metric} value={scores[metric]} maxPerCategory={maxPerCategory} onScore={(m, v) => setScores((s) => ({ ...s, [m]: v }))} />
             ))}
-          </div>
-
-          <div style={{ padding: "0 20px 16px" }}>
-            <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.08em", margin: "0 0 10px", fontWeight: 800 }}>DECISION</p>
-            <div style={{ display: "flex", borderRadius: 12, overflow: "hidden", border: `1px solid ${css.borderLight}`, background: "#F3F4F2" }}>
-              {[
-                { key: "pass", label: "Complete" },
-                { key: "flag", label: "Flag" },
-              ].map(({ key, label }) => {
-                const sel = decision === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setDecision(key)}
-                    style={{
-                      flex: 1,
-                      padding: "11px 12px",
-                      border: "none",
-                      background: sel ? (key === "pass" ? css.greenDark : css.amber) : "transparent",
-                      color: sel ? "#FFF" : css.textGray,
-                      fontSize: 13,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      transition: "background 0.15s, color 0.15s",
-                    }}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           <div style={{ margin: "0 20px 16px", padding: "14px 14px", background: "#FAFBF9", border: `1px solid ${css.borderLight}`, borderRadius: 12 }}>
