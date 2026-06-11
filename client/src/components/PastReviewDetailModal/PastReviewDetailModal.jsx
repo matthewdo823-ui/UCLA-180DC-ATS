@@ -3,8 +3,9 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { BUBBLE_COLORS, API, RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
 import { rubricFromSnapshot } from "../../utils/rubric";
 import { css } from "../../theme/colors";
-import { serifFont } from "../../theme/typography";
 import { formatScore, getInitials, titleCase } from "../../utils/format";
+
+const monoFont = "'DM Mono', monospace";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
@@ -225,6 +226,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
 
   return (
     <div
+      className="scorecard-backdrop"
       role="dialog"
       aria-modal="true"
       aria-label="Review detail"
@@ -244,10 +246,12 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
       }}
     >
       <div
+        className="scorecard-shell"
         onMouseDown={(e) => e.stopPropagation()}
         style={{
           width: "min(400px, 100%)",
           position: "relative",
+          perspective: 900,
           maxHeight: "min(90vh, 680px)",
           overflowY: "auto",
           borderRadius: 20,
@@ -305,7 +309,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
                 {getInitials(displayName)}
               </div>
               <div style={{ minWidth: 0 }}>
-                <p style={{ color: "#FFF", fontSize: 17, fontFamily: serifFont, fontWeight: 600, margin: "0 0 4px", lineHeight: 1.2 }}>{displayName}</p>
+                <p style={{ color: "#FFF", fontSize: 17, fontFamily: monoFont, fontWeight: 600, margin: "0 0 4px", lineHeight: 1.2 }}>{displayName}</p>
                 <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 12, margin: 0, lineHeight: 1.35 }}>
                   {[review.major, review.year ? titleCase(String(review.year)) : null, review.gpa ? `GPA ${review.gpa}` : null].filter(Boolean).join(" · ") || "Round 1 resume screen"}
                 </p>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import logo180 from "@images/180logo.webp";
 import { useAuth } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
 import { isStaffRole } from "../../utils/auth";
@@ -72,14 +73,11 @@ export default function LoginPage() {
           padding: 32,
         }}
       >
-        <div style={{ width: 48, height: 48, borderRadius: 14, background: css.greenDark, color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 22 }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-            <path d="M4 22h16" />
-            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-          </svg>
-        </div>
+        <img
+          src={logo180}
+          alt="180 Degrees Consulting"
+          style={{ width: 48, height: 48, objectFit: "contain", display: "block", marginBottom: 22, borderRadius: 14 }}
+        />
 
         <h1 style={{ fontSize: 26, margin: "0 0 8px", letterSpacing: "-0.03em" }}>
           {isCreateMode ? "Create account" : "Sign in"}
