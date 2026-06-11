@@ -12,6 +12,7 @@ function mapRoundDecision(row) {
       notes: "",
       decidedBy: null,
       updatedAt: null,
+      provisional: true,
     };
   }
 
@@ -20,6 +21,7 @@ function mapRoundDecision(row) {
     notes: row.notes || "",
     decidedBy: row.decided_by ?? null,
     updatedAt: row.updated_at || row.submitted_at || null,
+    provisional: true,
   };
 }
 

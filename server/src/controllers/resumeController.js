@@ -1202,6 +1202,7 @@ exports.getScoreboard = async (req, res) => {
                 score: reviewScore,
                 normalizedScore: reviewNormalized,
                 maxScore: snapshot?.maxScore ?? null,
+                gradedBy: review.graded_by ?? null,
                 reviewerName: graderFromUsers?.name || null,
                 reviewerEmail: graderFromUsers?.email || null,
                 notes: review.notes || '',
