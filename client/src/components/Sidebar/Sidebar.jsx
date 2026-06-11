@@ -75,6 +75,9 @@ function isLinkActive(pathname, path) {
   if (path === "/grading") {
     return ["/grading", "/resume-screener", "/interviews"].includes(pathname);
   }
+  if (path === "/scoreboard") {
+    return pathname === "/scoreboard" || pathname.startsWith("/scoreboard/");
+  }
   return pathname === path;
 }
 

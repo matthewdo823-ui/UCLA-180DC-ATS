@@ -818,6 +818,34 @@ exports.getResumeFile = async (req, res) => {
     }
 };
 
+// Reverse proxy for image streaming (streams drive image to frontend)
+exports.viewImage = async (req, res) => {
+    const fileUrl = req.query.url;
+    if (!fileUrl) return res.status(400).send("No URL provided");
+    if (!isGoogleDriveFileUrl(fileUrl)) {
+        return res.status(400).send("Only Google Drive image URLs are allowed");
+    }
+
+    const downloadUrl = toDownloadURL(extractDriveFileID(fileUrl));
+
+    try {
+        const response = await axios({
+            method: 'get',
+            url: downloadUrl,
+            responseType: 'stream',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        });
+        const contentType = response.headers['content-type'] || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        response.data.pipe(res);
+    } catch (err) {
+        console.error("Proxy error: ", err.message);
+        res.status(500).send("Error fetching image from drive");
+    }
+};
+
 // Reverse proxy for file streaming (streams drive pdf to frontend)
 exports.viewPdf = async (req, res) => {
     const fileUrl = req.query.url;
@@ -1075,6 +1103,185 @@ exports.getScoreboard = async (req, res) => {
 
     } catch (err) {
         return respondWithServerError(res, err, 'getScoreboard');
+    }
+};
+
+function mapApplicationCandidate(candidate) {
+    if (!candidate) return null;
+    return {
+        id: candidate.id,
+        name: candidate.name || '',
+        email: candidate.email || '',
+        phoneNumber: candidate.phone_number || '',
+        major: candidate.major || '',
+        gpa: candidate.gpa || '',
+        year: candidate.year || '',
+        pronouns: candidate.pronouns || '',
+        urm: candidate.urm || '',
+        linkedin: candidate.linkedin || '',
+        gm: candidate.gm || '',
+        newbieTraining: candidate.newbie_training || '',
+        whyConsulting: candidate.why_consulting || '',
+        why180dc: candidate.why_180dc || '',
+        whySocialImpact: candidate.why_social_impact || '',
+        extenuatingCircumstances: candidate.extenuating_circumstances || '',
+        headshot: candidate.headshot || '',
+        resumeFileUrl: candidate.resume_file_url || '',
+        appliedAt: candidate.created_at || null,
+    };
+}
+
+// Full application record for one scoreboard candidate (resume id).
+exports.getScoreboardApplication = async (req, res) => {
+    try {
+        const resumeId = String(req.params.resumeId || '').trim();
+        if (!resumeId) {
+            return res.status(400).json({ error: 'resumeId is required' });
+        }
+
+        const activeCycle = await getActiveCycleRow();
+        const activeCycleId = activeCycle?.id || null;
+        const resumeRound = activeCycleId
+            ? await getResumeScreenRoundForCycle(activeCycleId)
+            : null;
+
+        if (!activeCycleId || !resumeRound) {
+            return res.status(503).json({ error: 'No active resume screening cycle' });
+        }
+
+        const { data: resumeRow, error: resumeError } = await supabase
+            .from('resumes')
+            .select(`
+                id,
+                name,
+                file_url,
+                review_count,
+                created_at,
+                cycle_id,
+                candidates (
+                    id,
+                    name,
+                    email,
+                    phone_number,
+                    major,
+                    gpa,
+                    year,
+                    pronouns,
+                    urm,
+                    linkedin,
+                    gm,
+                    newbie_training,
+                    why_consulting,
+                    why_180dc,
+                    why_social_impact,
+                    extenuating_circumstances,
+                    headshot,
+                    resume_file_url,
+                    created_at,
+                    cycle_id
+                )
+            `)
+            .eq('id', resumeId)
+            .maybeSingle();
+
+        if (resumeError) return respondWithServerError(res, resumeError, 'getScoreboardApplication resume');
+        if (!resumeRow) {
+            return res.status(404).json({ error: 'Candidate not found' });
+        }
+
+        if (resumeRow.cycle_id !== activeCycleId) {
+            return res.status(404).json({ error: 'Candidate is not in the active cycle' });
+        }
+
+        const candidate = firstRel(resumeRow.candidates);
+        if (!candidate || candidate.cycle_id !== activeCycleId) {
+            return res.status(404).json({ error: 'Candidate is not in the active cycle' });
+        }
+
+        const { data: reviews, error: reviewError } = await supabase
+            .from('resume_reviews')
+            .select('id, scores, notes, submitted_at, graded_by, rubric_snapshot, decision')
+            .eq('resume_id', resumeId)
+            .eq('cycle_id', activeCycleId)
+            .eq('round_id', resumeRound.id)
+            .order('submitted_at', { ascending: true });
+
+        if (reviewError) return respondWithServerError(res, reviewError, 'getScoreboardApplication reviews');
+
+        const gradedByUserLookup = await getGradedByUserLookup((reviews || []).map(review => review.graded_by));
+        const metricSet = new Set(getMetricsFromRubricConfig(resumeRound.rubric_config));
+        const categoryTotals = {};
+        const categoryCounts = {};
+        let totalScore = 0;
+        let totalNormalized = 0;
+
+        const mappedReviews = (reviews || []).map(review => {
+            const snapshot = review.rubric_snapshot || null;
+            const metrics = snapshot?.metrics || Object.keys(review.scores || {});
+            metrics.forEach((metric) => metricSet.add(metric));
+
+            const reviewScore = getReviewScore(review.scores, metrics);
+            const reviewNormalized = resolveReviewNormalizedValue(review, {
+                rubricConfig: resumeRound.rubric_config,
+                candidateYear: candidate.year,
+            });
+
+            totalScore += reviewScore;
+            totalNormalized += reviewNormalized;
+
+            Object.entries(review.scores || {}).forEach(([metric, value]) => {
+                const numericValue = Number(value) || 0;
+                categoryTotals[metric] = (categoryTotals[metric] || 0) + numericValue;
+                categoryCounts[metric] = (categoryCounts[metric] || 0) + 1;
+            });
+
+            const graderFromUsers = review.graded_by != null ? gradedByUserLookup[review.graded_by] : null;
+
+            return {
+                id: review.id,
+                scores: review.scores || {},
+                score: reviewScore,
+                normalizedScore: reviewNormalized,
+                maxScore: snapshot?.maxScore ?? null,
+                decision: review.decision || 'pass',
+                reviewerName: graderFromUsers?.name || null,
+                reviewerEmail: graderFromUsers?.email || null,
+                notes: review.notes || '',
+                submittedAt: review.submitted_at,
+            };
+        });
+
+        const numReviews = mappedReviews.length;
+        const aggregateScore = numReviews > 0 ? Number((totalScore / numReviews).toFixed(1)) : null;
+        const normalizedScore = numReviews > 0 ? Number((totalNormalized / numReviews).toFixed(1)) : null;
+        const resumeFileUrl = resumeRow.file_url || candidate.resume_file_url || '';
+
+        return res.json({
+            context: {
+                cycle: { id: activeCycle.id, name: activeCycle.name },
+                round: { id: resumeRound.id, name: resumeRound.name },
+            },
+            resume: {
+                id: resumeRow.id,
+                name: resumeRow.name || candidate.name || 'Unknown',
+                fileUrl: resumeFileUrl,
+                reviewCount: resumeRow.review_count ?? numReviews,
+                submittedAt: resumeRow.created_at,
+            },
+            candidate: mapApplicationCandidate(candidate),
+            scoring: {
+                metrics: [...metricSet],
+                maxPerCategory: resumeRound.rubric_config?.maxPerCategory || 4,
+                numReviews,
+                aggregateScore,
+                normalizedScore,
+                score: normalizedScore === null ? null : Math.round(normalizedScore),
+                categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
+                reviews: mappedReviews,
+            },
+        });
+    } catch (err) {
+        return respondWithServerError(res, err, 'getScoreboardApplication');
     }
 };
 

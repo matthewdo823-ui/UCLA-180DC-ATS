@@ -16,6 +16,8 @@ router.get('/candidate-flags', requireRoles('admin'), resumeController.getCandid
 router.patch('/candidate-flags/:id/resolve', requireRoles('admin'), resumeController.resolveCandidateFlag);
 router.get('/resume/:id/file', resumeController.getResumeFile);
 router.get('/view/pdf', resumeController.viewPdf);
+router.get('/view/image', resumeController.viewImage);
+router.get('/scoreboard/:resumeId/application', resumeController.getScoreboardApplication);
 router.get('/scoreboard', resumeController.getScoreboard);
 router.get('/grader-scoreboard', requireRoles('admin'), resumeController.getGraderScoreboard);
 
