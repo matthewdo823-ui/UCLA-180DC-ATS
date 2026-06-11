@@ -80,6 +80,18 @@ exports.register = async (req, res) => {
     }
 
     try {
+        const { data: existingUser, error: lookupError } = await supabase
+            .from('users')
+            .select('user_id')
+            .eq('email', email)
+            .maybeSingle();
+
+        if (lookupError) return res.status(500).json({ error: lookupError.message });
+
+        if (existingUser) {
+            return res.status(409).json({ error: 'An account already exists for this email' });
+        }
+
         const passwordHash = await bcrypt.hash(password, 12);
         const now = new Date().toISOString();
 
