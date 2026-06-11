@@ -1,6 +1,6 @@
 const supabase = require('../config/supabase');
-const axios = require('axios');
 const { extractDriveFileID, toDownloadURL, isGoogleDriveFileUrl } = require('../utils/drive');
+const { streamDriveFileToResponse } = require('../utils/driveStream');
 const {
     getActiveCycleId,
     getActiveCycleRow,
@@ -19,6 +19,19 @@ const {
 const { firstRel } = require('../utils/supabaseHelpers');
 const { getUserName } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
+const {
+    normalizeRoundDecision,
+    mapRoundDecision,
+    buildDecisionLookup,
+    resolveCandidateDecision,
+    countDecisions,
+    buildDecisionsCsv,
+} = require('../utils/roundDecisions');
+const {
+    buildCandidateLinkLookups,
+    resolveCandidateLink,
+    pickCandidateFields,
+} = require('../utils/candidateLink');
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
@@ -818,6 +831,18 @@ exports.getResumeFile = async (req, res) => {
     }
 };
 
+function sendDriveProxyError(res, err, label) {
+    console.error(`Proxy error (${label}):`, err.message);
+    if (err.code === 'INVALID_URL' || err.code === 'DRIVE_INACCESSIBLE') {
+        return res.status(404).send(err.message);
+    }
+    const upstreamStatus = err.response?.status;
+    if (upstreamStatus === 404) {
+        return res.status(404).send('Drive file not found');
+    }
+    return res.status(502).send(`Error fetching ${label} from Drive`);
+}
+
 // Reverse proxy for image streaming (streams drive image to frontend)
 exports.viewImage = async (req, res) => {
     const fileUrl = req.query.url;
@@ -826,23 +851,10 @@ exports.viewImage = async (req, res) => {
         return res.status(400).send("Only Google Drive image URLs are allowed");
     }
 
-    const downloadUrl = toDownloadURL(extractDriveFileID(fileUrl));
-
     try {
-        const response = await axios({
-            method: 'get',
-            url: downloadUrl,
-            responseType: 'stream',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-        });
-        const contentType = response.headers['content-type'] || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        response.data.pipe(res);
+        await streamDriveFileToResponse(fileUrl, res, { fallbackContentType: 'image/jpeg' });
     } catch (err) {
-        console.error("Proxy error: ", err.message);
-        res.status(500).send("Error fetching image from drive");
+        sendDriveProxyError(res, err, 'image');
     }
 };
 
@@ -854,24 +866,130 @@ exports.viewPdf = async (req, res) => {
         return res.status(400).send("Only Google Drive PDF URLs are allowed");
     }
 
-    const downloadUrl = toDownloadURL(extractDriveFileID(fileUrl));
-
     try {
-        const response = await axios({
-            method: 'get',
-            url: downloadUrl,
-            responseType: 'stream',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-        });
-        res.setHeader('Content-Type', 'application/pdf');
-        response.data.pipe(res);
+        await streamDriveFileToResponse(fileUrl, res, { fallbackContentType: 'application/pdf' });
     } catch (err) {
-        console.error("Proxy error: ", err.message);
-        res.status(500).send("Error fetching pdf from drive");
+        sendDriveProxyError(res, err, 'pdf');
     }
 };
+
+function applyResumeCandidateLink(resume, embeddedCandidate, candidateLinkLookups) {
+    const embedded = embeddedCandidate || {};
+    const { candidate: linked, ambiguous } = resolveCandidateLink({
+        resume,
+        embeddedCandidate: embedded,
+        lookups: candidateLinkLookups,
+    });
+    const fields = pickCandidateFields(linked || embedded);
+    const candidateId = linked?.id || resume?.candidate_id || embedded?.id || null;
+
+    return {
+        candidateId,
+        canDecide: Boolean(candidateId) && !ambiguous,
+        linkAmbiguous: ambiguous,
+        ...fields,
+    };
+}
+
+async function resolveCandidateIdForDecision({ candidateId, resumeId, cycleId }) {
+    const trimmedResumeId = String(resumeId || "").trim();
+    const trimmedCandidateId = String(candidateId || "").trim();
+
+    if (trimmedResumeId) {
+        const { data: resumeRow, error: resumeError } = await supabase
+            .from("resumes")
+            .select(`
+                id,
+                name,
+                candidate_id,
+                file_url,
+                cycle_id,
+                candidates (
+                    id,
+                    name,
+                    email,
+                    resume_file_url
+                )
+            `)
+            .eq("id", trimmedResumeId)
+            .maybeSingle();
+
+        if (resumeError) throw resumeError;
+        if (!resumeRow) return { error: "Resume not found", status: 404 };
+        if (resumeRow.cycle_id !== cycleId) {
+            return { error: "Resume is not in the active cycle", status: 400 };
+        }
+
+        if (trimmedCandidateId && resumeRow.candidate_id && resumeRow.candidate_id !== trimmedCandidateId) {
+            return { error: "Resume does not match the provided candidate", status: 400 };
+        }
+
+        const { data: cycleCandidates, error: cycleCandError } = await supabase
+            .from("candidates")
+            .select("id, name, email, resume_file_url, cycle_id")
+            .eq("cycle_id", cycleId);
+
+        if (cycleCandError) throw cycleCandError;
+
+        const lookups = buildCandidateLinkLookups(cycleCandidates);
+        const { candidate: linked, ambiguous } = resolveCandidateLink({
+            resume: resumeRow,
+            embeddedCandidate: firstRel(resumeRow.candidates),
+            lookups,
+        });
+
+        if (ambiguous) {
+            return { error: "Multiple candidates match this resume name — resolve the duplicate in the database", status: 409 };
+        }
+        if (!linked?.id) {
+            return { error: "Could not link resume to a candidate record", status: 400 };
+        }
+
+        return {
+            candidateId: linked.id,
+            resumeId: resumeRow.id,
+            backfillCandidateId: resumeRow.candidate_id ? null : linked.id,
+        };
+    }
+
+    if (trimmedCandidateId) {
+        const { data, error } = await supabase
+            .from("candidates")
+            .select("id, cycle_id, name")
+            .eq("id", trimmedCandidateId)
+            .maybeSingle();
+        if (error) throw error;
+        if (!data) return { error: "Candidate not found", status: 404 };
+        if (data.cycle_id !== cycleId) {
+            return { error: "Candidate is not in the active cycle", status: 400 };
+        }
+
+        const { data: resumeRow, error: resumeError } = await supabase
+            .from("resumes")
+            .select("id, candidate_id")
+            .eq("cycle_id", cycleId)
+            .eq("candidate_id", trimmedCandidateId)
+            .maybeSingle();
+
+        if (resumeError) throw resumeError;
+        if (!resumeRow) {
+            return { error: "Candidate has no resume in this cycle", status: 400 };
+        }
+
+        return { candidateId: data.id, resumeId: resumeRow.id };
+    }
+
+    return { error: "resume_id or candidate_id is required", status: 400 };
+}
+
+async function maybeBackfillResumeCandidateId(resumeId, candidateId) {
+    if (!resumeId || !candidateId) return;
+    await supabase
+        .from("resumes")
+        .update({ candidate_id: candidateId })
+        .eq("id", resumeId)
+        .is("candidate_id", null);
+}
 
 // Gets scoreboard data
 exports.getScoreboard = async (req, res) => {
@@ -887,7 +1005,7 @@ exports.getScoreboard = async (req, res) => {
                 context: { cycle: null, round: null },
                 metrics: [],
                 maxPerCategory: 4,
-                stats: { applicants: 0, reviewed: 0, advanced: 0, avgScore: 0 },
+                stats: { applicants: 0, reviewed: 0, advanced: 0, hold: 0, rejected: 0, pending: 0, avgScore: 0 },
                 candidates: [],
             });
         }
@@ -897,8 +1015,11 @@ exports.getScoreboard = async (req, res) => {
             .select(`
                 id,
                 name,
+                candidate_id,
+                file_url,
                 created_at,
                 candidates (
+                    id,
                     email,
                     phone_number,
                     major,
@@ -916,6 +1037,39 @@ exports.getScoreboard = async (req, res) => {
 
         if (resumeError) throw resumeError;
 
+        const { data: cycleCandidates, error: cycleCandError } = await supabase
+            .from("candidates")
+            .select(`
+                id,
+                name,
+                email,
+                phone_number,
+                major,
+                gpa,
+                year,
+                pronouns,
+                linkedin,
+                gm,
+                newbie_training,
+                headshot,
+                resume_file_url
+            `)
+            .eq("cycle_id", activeCycleId);
+
+        if (cycleCandError) throw cycleCandError;
+
+        const candidateLinkLookups = buildCandidateLinkLookups(cycleCandidates);
+
+        const { data: roundDecisionRows, error: decisionError } = await supabase
+            .from('round_decisions')
+            .select('*')
+            .eq('cycle_id', activeCycleId)
+            .eq('round_id', resumeRound.id);
+
+        if (decisionError) throw decisionError;
+
+        const decisionLookup = buildDecisionLookup(roundDecisionRows);
+
         const { data: reviews, error: reviewError } = await supabase
             .from('resume_reviews')
             .select(`
@@ -923,7 +1077,10 @@ exports.getScoreboard = async (req, res) => {
                 resumes (
                     id,
                     name,
+                    candidate_id,
+                    file_url,
                     candidates (
+                        id,
                         email,
                         phone_number,
                         major,
@@ -950,20 +1107,24 @@ exports.getScoreboard = async (req, res) => {
         const metricSet = new Set(getMetricsFromRubricConfig(resumeRound.rubric_config));
 
         (resumes || []).forEach(resume => {
-            const candidate = resume.candidates || {};
+            const embedded = firstRel(resume.candidates) || {};
+            const linked = applyResumeCandidateLink(resume, embedded, candidateLinkLookups);
             candidateMap[resume.id] = {
                 id: resume.id,
+                candidateId: linked.candidateId,
+                canDecide: linked.canDecide,
+                linkAmbiguous: linked.linkAmbiguous,
                 name: resume.name || 'Unknown',
-                email: candidate.email || '',
-                phoneNumber: candidate.phone_number || '',
-                major: candidate.major || 'Undeclared',
-                gpa: candidate.gpa || '',
-                year: candidate.year || '',
-                pronouns: candidate.pronouns || '',
-                linkedin: candidate.linkedin || '',
-                gm: candidate.gm || '',
-                newbieTraining: candidate.newbie_training || '',
-                headshot: candidate.headshot || '',
+                email: linked.email,
+                phoneNumber: linked.phoneNumber,
+                major: linked.major,
+                gpa: linked.gpa,
+                year: linked.year,
+                pronouns: linked.pronouns,
+                linkedin: linked.linkedin,
+                gm: linked.gm,
+                newbieTraining: linked.newbieTraining,
+                headshot: linked.headshot,
                 createdAt: resume.created_at,
                 totalScore: 0,
                 totalNormalized: 0,
@@ -993,20 +1154,24 @@ exports.getScoreboard = async (req, res) => {
             reviewCount++;
 
             if (!candidateMap[resumeId]) {
-                const candidate = review.resumes.candidates || {};
+                const embedded = firstRel(review.resumes.candidates) || {};
+                const linked = applyResumeCandidateLink(review.resumes, embedded, candidateLinkLookups);
                 candidateMap[resumeId] = {
                     id: resumeId,
+                    candidateId: linked.candidateId,
+                    canDecide: linked.canDecide,
+                    linkAmbiguous: linked.linkAmbiguous,
                     name: review.resumes.name || 'Unknown',
-                    email: candidate.email || '',
-                    phoneNumber: candidate.phone_number || '',
-                    major: candidate.major || 'Undeclared',
-                    gpa: candidate.gpa || '',
-                    year: candidate.year || '',
-                    pronouns: candidate.pronouns || '',
-                    linkedin: candidate.linkedin || '',
-                    gm: candidate.gm || '',
-                    newbieTraining: candidate.newbie_training || '',
-                    headshot: candidate.headshot || '',
+                    email: linked.email,
+                    phoneNumber: linked.phoneNumber,
+                    major: linked.major,
+                    gpa: linked.gpa,
+                    year: linked.year,
+                    pronouns: linked.pronouns,
+                    linkedin: linked.linkedin,
+                    gm: linked.gm,
+                    newbieTraining: linked.newbieTraining,
+                    headshot: linked.headshot,
                     createdAt: null,
                     totalScore: 0,
                     totalNormalized: 0,
@@ -1052,8 +1217,11 @@ exports.getScoreboard = async (req, res) => {
             const normalizedScore = c.numReviews > 0 ? c.totalNormalized / c.numReviews : null;
             const categoryScores = buildCategoryScores(c.categoryTotals, c.categoryCounts);
 
+            const decision = resolveCandidateDecision(c.candidateId, decisionLookup);
+
             return {
                 id: c.id,
+                candidateId: c.candidateId,
                 name: c.name,
                 email: c.email,
                 phoneNumber: c.phoneNumber,
@@ -1072,7 +1240,10 @@ exports.getScoreboard = async (req, res) => {
                 numReviews: c.numReviews,
                 reviews: c.reviews.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt)),
                 score: normalizedScore === null ? null : Math.round(normalizedScore),
-                createdAt: c.createdAt
+                createdAt: c.createdAt,
+                decision,
+                canDecide: c.canDecide,
+                linkAmbiguous: c.linkAmbiguous,
             };
         });
 
@@ -1088,7 +1259,7 @@ exports.getScoreboard = async (req, res) => {
 
         const totalReviewed = candidates.filter(c => c.numReviews > 0).length;
         const avgScore = reviewCount > 0 ? (totalNormalizedSum / reviewCount).toFixed(1) : 0;
-        const advancedCount = candidates.filter(c => c.score >= 80).length;
+        const decisionCounts = countDecisions(candidates);
 
         res.json({
             context: {
@@ -1100,14 +1271,185 @@ exports.getScoreboard = async (req, res) => {
             stats: {
                 applicants: candidates.length,
                 reviewed: totalReviewed,
-                advanced: advancedCount,
-                avgScore: avgScore
+                advanced: decisionCounts.advance,
+                hold: decisionCounts.hold,
+                rejected: decisionCounts.reject,
+                pending: decisionCounts.pending,
+                avgScore: avgScore,
             },
             candidates: candidates
         });
 
     } catch (err) {
         return respondWithServerError(res, err, 'getScoreboard');
+    }
+};
+
+exports.upsertRoundDecision = async (req, res) => {
+    const candidateIdInput = String(req.body?.candidate_id || "").trim();
+    const resumeIdInput = String(req.body?.resume_id || "").trim();
+    const decision = normalizeRoundDecision(req.body?.decision);
+    const notes = typeof req.body?.notes === "string" ? req.body.notes.slice(0, 1000) : "";
+    const decidedBy = req.user?.user_id;
+
+    try {
+        const activeCycle = await getActiveCycleRow();
+        if (!activeCycle?.id) {
+            return res.status(503).json({ error: "No active recruiting cycle" });
+        }
+
+        const resumeRound = await getResumeScreenRoundForCycle(activeCycle.id);
+        if (!resumeRound) {
+            return res.status(503).json({ error: "No resume screening round for this cycle" });
+        }
+
+        const resolved = await resolveCandidateIdForDecision({
+            candidateId: candidateIdInput,
+            resumeId: resumeIdInput,
+            cycleId: activeCycle.id,
+        });
+        if (resolved.error) {
+            return res.status(resolved.status).json({ error: resolved.error });
+        }
+
+        const candidateId = resolved.candidateId;
+        const linkedResumeId = resolved.resumeId;
+
+        const { data: resumeRow, error: resumeError } = await supabase
+            .from("resumes")
+            .select("id, candidate_id")
+            .eq("id", linkedResumeId)
+            .eq("cycle_id", activeCycle.id)
+            .maybeSingle();
+
+        if (resumeError) return respondWithServerError(res, resumeError, "upsertRoundDecision resume");
+        if (!resumeRow) {
+            return res.status(400).json({ error: "Resume not found in this cycle" });
+        }
+
+        if (resolved.backfillCandidateId) {
+            await maybeBackfillResumeCandidateId(resumeRow.id, resolved.backfillCandidateId);
+        }
+
+        const payload = {
+            candidate_id: candidateId,
+            cycle_id: activeCycle.id,
+            round_id: resumeRound.id,
+            decision,
+            notes,
+            decided_by: decidedBy,
+            updated_at: new Date().toISOString(),
+        };
+
+        const { data, error } = await supabase
+            .from("round_decisions")
+            .upsert(payload, { onConflict: "candidate_id,round_id" })
+            .select("*")
+            .single();
+
+        if (error) return respondWithServerError(res, error, "upsertRoundDecision upsert");
+
+        return res.json({ decision: mapRoundDecision(data) });
+    } catch (err) {
+        return respondWithServerError(res, err, "upsertRoundDecision");
+    }
+};
+
+exports.exportScoreboardDecisions = async (req, res) => {
+    const rawFilter = String(req.query?.decision || "all").trim().toLowerCase();
+    const allowed = new Set(["all", "advance", "hold", "reject", "pending"]);
+    const exportFilter = allowed.has(rawFilter) ? rawFilter : "all";
+
+    try {
+        const activeCycle = await getActiveCycleRow();
+        const activeCycleId = activeCycle?.id || null;
+        const resumeRound = activeCycleId
+            ? await getResumeScreenRoundForCycle(activeCycleId)
+            : null;
+
+        if (!activeCycleId || !resumeRound) {
+            return res.status(503).json({ error: "No active resume screening cycle" });
+        }
+
+        const { data: resumes, error: resumeError } = await supabase
+            .from("resumes")
+            .select(`
+                id,
+                name,
+                candidate_id,
+                file_url,
+                candidates ( id, email, major, year, gpa )
+            `)
+            .eq("cycle_id", activeCycleId);
+
+        if (resumeError) return respondWithServerError(res, resumeError, "exportScoreboardDecisions resumes");
+
+        const { data: cycleCandidates, error: cycleCandError } = await supabase
+            .from("candidates")
+            .select("id, name, email, major, year, gpa, resume_file_url")
+            .eq("cycle_id", activeCycleId);
+
+        if (cycleCandError) return respondWithServerError(res, cycleCandError, "exportScoreboardDecisions candidates");
+
+        const candidateLinkLookups = buildCandidateLinkLookups(cycleCandidates);
+
+        const { data: roundDecisionRows, error: decisionError } = await supabase
+            .from("round_decisions")
+            .select("*")
+            .eq("cycle_id", activeCycleId)
+            .eq("round_id", resumeRound.id);
+
+        if (decisionError) return respondWithServerError(res, decisionError, "exportScoreboardDecisions decisions");
+
+        const decisionLookup = buildDecisionLookup(roundDecisionRows);
+
+        const { data: reviews, error: reviewError } = await supabase
+            .from("resume_reviews")
+            .select("resume_id, normalized_score, rubric_snapshot, scores")
+            .eq("cycle_id", activeCycleId)
+            .eq("round_id", resumeRound.id);
+
+        if (reviewError) return respondWithServerError(res, reviewError, "exportScoreboardDecisions reviews");
+
+        const reviewsByResume = {};
+        (reviews || []).forEach((review) => {
+            if (!reviewsByResume[review.resume_id]) reviewsByResume[review.resume_id] = [];
+            reviewsByResume[review.resume_id].push(review);
+        });
+
+        const exportRows = (resumes || []).map((resume) => {
+            const embedded = firstRel(resume.candidates) || {};
+            const linked = applyResumeCandidateLink(resume, embedded, candidateLinkLookups);
+            const resumeReviews = reviewsByResume[resume.id] || [];
+            const normalizedScores = resumeReviews
+                .map((review) => resolveReviewNormalizedValue(review, {
+                    rubricConfig: resumeRound.rubric_config,
+                    candidateYear: linked.year,
+                }))
+                .filter((v) => Number.isFinite(v));
+            const avgScore = normalizedScores.length
+                ? Math.round(normalizedScores.reduce((a, b) => a + b, 0) / normalizedScores.length)
+                : null;
+
+            return {
+                name: resume.name || "Unknown",
+                email: linked.email,
+                major: linked.major,
+                year: linked.year,
+                gpa: linked.gpa,
+                score: avgScore,
+                numReviews: resumeReviews.length,
+                decision: resolveCandidateDecision(linked.candidateId, decisionLookup),
+            };
+        });
+
+        const csv = buildDecisionsCsv(exportRows, { decisionFilter: exportFilter });
+        const suffix = exportFilter === "all" ? "all" : exportFilter;
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="scoreboard-decisions-${suffix}.csv"`);
+        return res.send(csv);
+    } catch (err) {
+        return respondWithServerError(res, err, "exportScoreboardDecisions");
     }
 };
 

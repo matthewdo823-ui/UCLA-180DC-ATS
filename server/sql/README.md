@@ -11,9 +11,11 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 5 | `add_interview_evaluations.sql` | `interview_evaluations` table for interview round decisions |
 | 6 | `add_save_resume_review.sql` | `save_resume_review()` RPC (atomic review save + optional flag) |
 | 7 | `add_resume_review_unique_per_grader.sql` | One review per grader per resume per cycle; duplicate guard in RPC |
+| 8 | `add_round_decisions.sql` | Committee round decisions (`advance` / `hold` / `reject`) for live scoreboard deliberation |
+| 9 | `backfill_resume_candidate_ids.sql` | Link orphan `resumes` rows to `candidates` by name / Drive file id (optional data repair) |
 
 ## Notes
 
-- **Fresh database:** run all seven in order.
+- **Fresh database:** run all eight in order.
 - **Existing database:** skip scripts you have already applied. Each file uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` where possible, but re-running `init.sql` or seed blocks in `add_cycles_and_rounds.sql` may fail or duplicate data.
 - `init.sql` begins with a large commented block (legacy candidate/resume DDL); the active statements start at the `user_role` enum.

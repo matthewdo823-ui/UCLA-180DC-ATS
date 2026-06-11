@@ -194,6 +194,16 @@ async function getFormsClient(scopes = SCOPES_READ) {
   return google.forms({ version: "v1", auth: authClient });
 }
 
+/** Drive client for streaming form uploads when credentials are configured. */
+async function getDriveClient() {
+  const keyFile = getKeyFilePath();
+  if (!keyFile || !fs.existsSync(keyFile)) return null;
+
+  const auth = new google.auth.GoogleAuth({ keyFile, scopes: SCOPES_READ });
+  const authClient = await auth.getClient();
+  return google.drive({ version: "v3", auth: authClient });
+}
+
 async function discoverFormQuestions(formId) {
   const forms = await getFormsClient(SCOPES_BODY);
   const res = await forms.forms.get({ formId });
@@ -231,6 +241,7 @@ module.exports = {
   cycleRowToFormConfig,
   loadLegacyFormConfig,
   getFormsClient,
+  getDriveClient,
   discoverFormQuestions,
   isGoogleFormsConfigured,
 };

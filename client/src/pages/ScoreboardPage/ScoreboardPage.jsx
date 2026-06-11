@@ -1,12 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuthedFetch } from "../../auth/AuthContext";
+import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
 import { serifFont } from "../../theme/typography";
 import { formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
+import { isAdminRole } from "../../utils/auth";
+import {
+  canRecordCommitteeDecision,
+  DECISION_STYLE,
+  downloadDecisionsExport,
+  getCandidateDecisionStatus,
+  getCommitteeLinkWarning,
+  passesDecisionFilter,
+  scoreboardSupportsDeliberation,
+} from "./decisionUtils";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
@@ -46,6 +56,7 @@ const defaultFilters = {
   year: "all",
   reviews: "all",
   scoreBand: "all",
+  decision: "all",
 };
 
 function countActiveFilters(filters) {
@@ -90,8 +101,54 @@ function filterCandidates(list, filters) {
     if (filters.year !== "all" && String(c.year || "").trim() !== filters.year) return false;
     if (!passesReviewFilter(c, filters.reviews)) return false;
     if (!passesScoreBand(c, filters.scoreBand)) return false;
+    if (!passesDecisionFilter(c, filters.decision)) return false;
     return true;
   });
+}
+
+function recomputeDecisionStats(candidates) {
+  const stats = { pending: 0, advance: 0, hold: 0, reject: 0 };
+  (candidates || []).forEach(c => {
+    const status = getCandidateDecisionStatus(c);
+    if (stats[status] !== undefined) stats[status] += 1;
+  });
+  return stats;
+}
+
+function DecisionButtons({ status, compact, disabled, saving, onSelect }) {
+  const options = ["advance", "hold", "reject"];
+  return (
+    <div style={{ display: "flex", gap: compact ? 4 : 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+      {options.map(decision => {
+        const sel = status === decision;
+        const style = DECISION_STYLE[decision];
+        return (
+          <button
+            key={decision}
+            type="button"
+            title={DECISION_STYLE[decision].label}
+            disabled={disabled || saving}
+            onClick={() => onSelect(decision)}
+            style={{
+              border: `1px solid ${sel ? style.bd : css.borderLight}`,
+              background: sel ? style.bg : "#FFF",
+              color: sel ? style.color : css.textGray,
+              borderRadius: compact ? 6 : 8,
+              padding: compact ? "5px 8px" : "7px 11px",
+              fontSize: compact ? 11 : 12,
+              fontWeight: 700,
+              cursor: disabled || saving ? "not-allowed" : "pointer",
+              opacity: disabled ? 0.45 : saving ? 0.65 : 1,
+              textTransform: "capitalize",
+              minWidth: compact ? 0 : 62,
+            }}
+          >
+            {compact ? decision[0].toUpperCase() : style.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 const SORT_TABS = [
@@ -503,7 +560,9 @@ const selectStyle = {
 
 export default function ScoreboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const authedFetch = useAuthedFetch();
+  const isAdmin = isAdminRole(user?.role);
   const [data, setData] = useState({ stats: null, candidates: [], metrics: [], maxPerCategory: 4, context: null });
   const [loading, setLoading] = useState(true);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
@@ -511,9 +570,30 @@ export default function ScoreboardPage() {
   const [filters, setFilters] = useState(() => ({ ...defaultFilters }));
   const [sortBy, setSortBy] = useState("performance_desc");
   const [listMotionKey, setListMotionKey] = useState(0);
+  const [deliberationMode, setDeliberationMode] = useState(false);
+  const [savingDecisionId, setSavingDecisionId] = useState(null);
+  const [decisionError, setDecisionError] = useState("");
+  const [exportBusy, setExportBusy] = useState(false);
+  const [focusedCandidateId, setFocusedCandidateId] = useState(null);
   const filterWrapRef = useRef(null);
   /** After first data paint, bump key so sort/filter changes remount rows and replay stagger. */
   const listStaggerBootstrappedRef = useRef(false);
+
+  const fetchScoreboard = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true;
+    if (!silent) setLoading(true);
+    try {
+      const res = await authedFetch(`${API}/scoreboard`);
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+      }
+    } catch (err) {
+      console.error("Failed to load scoreboard:", err);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [authedFetch]);
 
   useEffect(() => {
     if (loading) return;
@@ -522,24 +602,17 @@ export default function ScoreboardPage() {
       return;
     }
     setListMotionKey(k => k + 1);
-  }, [loading, sortBy, filters.major, filters.year, filters.reviews, filters.scoreBand]);
+  }, [loading, sortBy, filters.major, filters.year, filters.reviews, filters.scoreBand, filters.decision]);
 
   useEffect(() => {
-    async function fetchScoreboard() {
-      try {
-        const res = await authedFetch(`${API}/scoreboard`);
-        if (res.ok) {
-          const json = await res.json();
-          setData(json);
-        }
-      } catch (err) {
-        console.error("Failed to load scoreboard:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
     fetchScoreboard();
-  }, [authedFetch]);
+  }, [fetchScoreboard]);
+
+  useEffect(() => {
+    if (!deliberationMode) return undefined;
+    const interval = setInterval(() => fetchScoreboard({ silent: true }), 5000);
+    return () => clearInterval(interval);
+  }, [deliberationMode, fetchScoreboard]);
 
   useEffect(() => {
     if (!filtersOpen) return;
@@ -581,7 +654,126 @@ export default function ScoreboardPage() {
     return [...filtered].sort((a, b) => compareCandidates(a, b, sortBy));
   }, [candidates, filters, sortBy]);
 
+  const saveDecision = useCallback(async (candidate, decision) => {
+    if (!isAdmin) return;
+    setSavingDecisionId(candidate.id);
+    setDecisionError("");
+    try {
+      const res = await authedFetch(`${API}/scoreboard/decisions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resume_id: candidate.id,
+          candidate_id: candidate.candidateId || undefined,
+          decision,
+          notes: candidate.decision?.notes || "",
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Could not save decision");
+      }
+      const { decision: savedDecision } = await res.json();
+      setData(prev => {
+        const nextCandidates = (prev.candidates || []).map(c =>
+          c.id === candidate.id ? { ...c, decision: savedDecision } : c
+        );
+        const decisionStats = recomputeDecisionStats(nextCandidates);
+        return {
+          ...prev,
+          candidates: nextCandidates,
+          stats: {
+            ...prev.stats,
+            advanced: decisionStats.advance,
+            hold: decisionStats.hold,
+            rejected: decisionStats.reject,
+            pending: decisionStats.pending,
+          },
+        };
+      });
+      setSelectedCandidate(prev => (prev?.id === candidate.id ? { ...prev, decision: savedDecision } : prev));
+    } catch (err) {
+      setDecisionError(err.message || "Could not save decision");
+    } finally {
+      setSavingDecisionId(null);
+    }
+  }, [authedFetch, isAdmin]);
+
+  const handleExport = useCallback(async (decision) => {
+    setExportBusy(true);
+    setDecisionError("");
+    try {
+      await downloadDecisionsExport(authedFetch, API, decision);
+    } catch (err) {
+      setDecisionError(err.message || "Export failed");
+    } finally {
+      setExportBusy(false);
+    }
+  }, [authedFetch]);
+
+  useEffect(() => {
+    if (!deliberationMode || !isAdmin) return undefined;
+    function onKeyDown(event) {
+      const tag = event.target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      const list = filteredCandidates;
+      if (!list.length) return;
+
+      let index = list.findIndex(c => c.id === focusedCandidateId);
+      if (index < 0) index = 0;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        const next = list[Math.min(index + 1, list.length - 1)];
+        setFocusedCandidateId(next.id);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        const next = list[Math.max(index - 1, 0)];
+        setFocusedCandidateId(next.id);
+        return;
+      }
+
+      const focused = list[index];
+      if (!canRecordCommitteeDecision(focused)) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "g") {
+        event.preventDefault();
+        saveDecision(focused, "advance");
+      } else if (key === "y") {
+        event.preventDefault();
+        saveDecision(focused, "hold");
+      } else if (key === "r") {
+        event.preventDefault();
+        saveDecision(focused, "reject");
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [deliberationMode, filteredCandidates, focusedCandidateId, isAdmin, saveDecision]);
+
+  useEffect(() => {
+    if (!filteredCandidates.length) {
+      setFocusedCandidateId(null);
+      return;
+    }
+    if (!focusedCandidateId || !filteredCandidates.some(c => c.id === focusedCandidateId)) {
+      setFocusedCandidateId(filteredCandidates[0].id);
+    }
+  }, [filteredCandidates, focusedCandidateId]);
+
   const activeFilterCount = countActiveFilters(filters);
+  const deliberationApiReady = useMemo(
+    () => scoreboardSupportsDeliberation(candidates),
+    [candidates]
+  );
+  const gridColumns = deliberationMode
+    ? "4px 52px minmax(180px, 2fr) 88px 1fr minmax(220px, 260px) 200px"
+    : "4px 52px minmax(200px, 2fr) 1fr minmax(180px, 220px) 200px";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "auto" }}>
@@ -611,7 +803,8 @@ export default function ScoreboardPage() {
                 <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>scoreboard</span>
               </h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
-                Round 1 resume reviews — use <strong style={{ fontWeight: 600, color: css.textDark }}>Sort & filters</strong> to change order and narrow who appears in the table.
+                Round 1 resume reviews — sort and filter the roster, then use{" "}
+                <strong style={{ fontWeight: 600, color: css.textDark }}>Deliberation</strong> during live committee meetings to mark advance, hold, or reject.
                 {activeFilterCount > 0 && (
                   <span style={{ display: "block", marginTop: 8, fontSize: 13, color: css.greenDark, fontWeight: 600 }}>
                     Showing {filteredCandidates.length} of {candidates.length} candidates
@@ -622,7 +815,65 @@ export default function ScoreboardPage() {
           </div>
         </div>
 
-        <div ref={filterWrapRef} style={{ position: "relative", flexShrink: 0, marginLeft: "auto" }}>
+        <div ref={filterWrapRef} style={{ position: "relative", flexShrink: 0, marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {isAdmin ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setDeliberationMode(mode => !mode)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  cursor: "pointer",
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  background: deliberationMode ? css.greenDark : css.cardWhite,
+                  color: deliberationMode ? "#FFF" : css.textDark,
+                  border: `1px solid ${deliberationMode ? css.greenDark : css.borderLight}`,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                {deliberationMode ? "Deliberation on" : "Deliberation"}
+              </button>
+              <button
+                type="button"
+                disabled={exportBusy}
+                onClick={() => handleExport("advance")}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: `1px solid ${css.borderLight}`,
+                  background: css.cardWhite,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: exportBusy ? "not-allowed" : "pointer",
+                  opacity: exportBusy ? 0.6 : 1,
+                }}
+              >
+                Export advanced
+              </button>
+              <button
+                type="button"
+                disabled={exportBusy}
+                onClick={() => handleExport("reject")}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: `1px solid ${css.borderLight}`,
+                  background: css.cardWhite,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: exportBusy ? "not-allowed" : "pointer",
+                  opacity: exportBusy ? 0.6 : 1,
+                }}
+              >
+                Export rejected
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
             aria-expanded={filtersOpen}
@@ -753,6 +1004,22 @@ export default function ScoreboardPage() {
                 </select>
               </label>
 
+              <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
+                Committee decision
+                <select
+                  value={filters.decision}
+                  onChange={e => setFilters(f => ({ ...f, decision: e.target.value }))}
+                  style={{ ...selectStyle, marginTop: 4 }}
+                >
+                  <option value="all">All decisions</option>
+                  <option value="undecided">Undecided (pending + hold)</option>
+                  <option value="pending">Pending only</option>
+                  <option value="advance">Advanced</option>
+                  <option value="hold">Hold</option>
+                  <option value="reject">Rejected</option>
+                </select>
+              </label>
+
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${css.borderLight}`, paddingTop: 10 }}>
                 <button
                   type="button"
@@ -774,14 +1041,34 @@ export default function ScoreboardPage() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", padding: "18px 20px", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
+      {isAdmin && !loading && candidates.length > 0 && !deliberationApiReady ? (
+        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "0 0 8px", color: "#9B5C00", fontSize: 13, fontWeight: 600, lineHeight: 1.45 }}>
+          Committee decisions need the updated API. Local dev: use <code style={{ fontSize: 12 }}>VITE_API_URL=http://localhost:3000</code> in <code style={{ fontSize: 12 }}>client/.env</code> and restart Vite. Production: redeploy the server on Render.
+        </div>
+      ) : null}
+
+      {decisionError ? (
+        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "0 0 8px", color: css.red, fontSize: 13, fontWeight: 600 }}>
+          {decisionError}
+        </div>
+      ) : null}
+
+      {deliberationMode && isAdmin ? (
+        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "0 0 10px", fontSize: 12, color: css.textGray }}>
+          Live mode: use <strong style={{ color: css.textDark }}>G</strong> advance, <strong style={{ color: css.textDark }}>Y</strong> hold, <strong style={{ color: css.textDark }}>R</strong> reject · arrow keys to move · auto-refreshes every 5s
+        </div>
+      ) : null}
+
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, display: "grid", gridTemplateColumns: "repeat(6, 1fr)", padding: "18px 20px", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
         {[
           ["APPLICANTS", data.stats?.applicants ?? "—"],
           ["REVIEWED", data.stats?.reviewed ?? "—"],
           ["ADVANCED", data.stats?.advanced ?? "—"],
+          ["HOLD", data.stats?.hold ?? "—"],
+          ["REJECTED", data.stats?.rejected ?? "—"],
           ["AVG SCORE", data.stats?.avgScore ?? "—"],
         ].map(([label, value], index) => (
-          <div key={label} style={{ borderRight: index < 3 ? `1px solid ${css.borderLight}` : "none", padding: index ? "4px 0 4px 24px" : "4px 0" }}>
+          <div key={label} style={{ borderRight: index < 5 ? `1px solid ${css.borderLight}` : "none", padding: index ? "4px 0 4px 16px" : "4px 0" }}>
             <div style={{ fontSize: 24, fontFamily: "'DM Sans', sans-serif", color: css.textDark, lineHeight: 1.1, fontWeight: 700 }}>{value}</div>
             <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.06em", marginTop: 4 }}>{label}</div>
           </div>
@@ -790,10 +1077,13 @@ export default function ScoreboardPage() {
 
       <div style={{ padding: "0 0 48px", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
         <div style={{ border: `1px solid ${css.borderLight}`, borderRadius: 10, overflow: "hidden", background: css.cardWhite, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "16px 20px", borderBottom: `2px solid ${css.borderLight}`, color: css.textGray, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
+        <div style={{ display: "grid", gridTemplateColumns: gridColumns, padding: "16px 20px", borderBottom: `2px solid ${css.borderLight}`, color: css.textGray, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
+          <div aria-hidden />
           <div>#</div>
           <div>CANDIDATE</div>
+          <div>DECISION</div>
           <div>SCORE</div>
+          <div>COMMITTEE</div>
           <div style={{ textAlign: "right" }}>ACTIONS</div>
         </div>
 
@@ -813,36 +1103,70 @@ export default function ScoreboardPage() {
           const staggerCap = 36;
           const enterMs = 520;
           const delay = Math.min(index, staggerCap) * staggerMs;
+          const decisionStatus = getCandidateDecisionStatus(c);
+          const decisionStyle = DECISION_STYLE[decisionStatus];
+          const isFocused = deliberationMode && focusedCandidateId === c.id;
+          const rowSaving = savingDecisionId === c.id;
           return (
           <div
             key={`${listMotionKey}-${c.id}`}
+            onClick={() => deliberationMode && setFocusedCandidateId(c.id)}
             style={{
               display: "grid",
-              gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px",
-              padding: "20px 20px",
+              gridTemplateColumns: gridColumns,
+              padding: deliberationMode ? "18px 20px" : "20px 20px",
               borderBottom: `1px solid ${css.borderLight}`,
               alignItems: "center",
-              background: css.cardWhite,
+              background: isFocused ? "rgba(40, 98, 65, 0.05)" : decisionStyle.row !== "transparent" ? decisionStyle.row : css.cardWhite,
+              outline: isFocused ? `2px solid ${css.greenDark}` : "none",
+              outlineOffset: -2,
               animation: `scoreboardRowEnter ${enterMs}ms cubic-bezier(0.22, 1, 0.36, 1) ${delay}ms backwards`,
             }}
           >
+            <div style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: decisionStatus === "pending" ? "transparent" : decisionStyle.color, minHeight: 44 }} aria-hidden />
+
             <div style={{ color: css.greenDark, fontWeight: 700, fontSize: 14 }}>{index + 1}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-              <CandidateAvatar name={c.name} headshot={c.headshot} size={44} background={css.greenDark} />
+              <CandidateAvatar name={c.name} headshot={c.headshot} size={deliberationMode ? 48 : 44} background={css.greenDark} />
               <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                <span style={{ fontSize: 16, fontWeight: 500, fontFamily: serifFont, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
+                <span style={{ fontSize: deliberationMode ? 17 : 16, fontWeight: 500, fontFamily: serifFont, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
                 <span style={{ fontSize: 13, color: "#888", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {[c.major, c.year, c.gpa ? `GPA ${c.gpa}` : ""].filter(Boolean).join(" · ")}
                 </span>
+                {getCommitteeLinkWarning(c) ? (
+                  <span style={{ fontSize: 11, color: css.red, fontWeight: 600 }}>
+                    {getCommitteeLinkWarning(c)}
+                  </span>
+                ) : null}
               </div>
             </div>
 
             <div>
-              <div style={{ color: scoreColor(c.score), fontSize: 18, fontFamily: serifFont, fontWeight: 600 }}>{formatScore(c.score)}%</div>
+              <span style={{ background: decisionStyle.bg, color: decisionStyle.color, border: `1px solid ${decisionStyle.bd}`, borderRadius: 999, fontSize: 10, fontWeight: 800, padding: "4px 9px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                {decisionStyle.label}
+              </span>
+            </div>
+
+            <div>
+              <div style={{ color: scoreColor(c.score), fontSize: deliberationMode ? 20 : 18, fontFamily: serifFont, fontWeight: 600 }}>{formatScore(c.score)}%</div>
               <div style={{ fontSize: 11, color: css.textGray }}>
                 {formatScore(getAggregateScore(c))} raw pts · {c.numReviews ?? c.reviews?.length ?? 0} {(c.numReviews ?? c.reviews?.length ?? 0) === 1 ? "review" : "reviews"}
               </div>
+            </div>
+
+            <div>
+              {isAdmin ? (
+                <DecisionButtons
+                  status={decisionStatus}
+                  compact={!deliberationMode}
+                  disabled={!canRecordCommitteeDecision(c)}
+                  saving={rowSaving}
+                  onSelect={decision => saveDecision(c, decision)}
+                />
+              ) : (
+                <span style={{ fontSize: 12, color: css.textGray }}>Admin only</span>
+              )}
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>

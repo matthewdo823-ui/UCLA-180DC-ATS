@@ -81,9 +81,28 @@ async function upsertCandidateAndResume(client, mapped, cycleId) {
   if (existingResume) {
     const { error: updErr } = await client
       .from("resumes")
-      .update(resumePayload)
+      .update({ ...resumePayload, candidate_id: candidateId })
       .eq("id", existingResume.id);
     if (updErr) throw updErr;
+    return;
+  }
+
+  const { data: orphanResume, error: orphanError } = await client
+    .from("resumes")
+    .select("id")
+    .eq("cycle_id", cycleId)
+    .is("candidate_id", null)
+    .ilike("name", resumeDerived.name)
+    .maybeSingle();
+
+  if (orphanError) throw orphanError;
+
+  if (orphanResume) {
+    const { error: claimErr } = await client
+      .from("resumes")
+      .update({ ...resumePayload, candidate_id: candidateId })
+      .eq("id", orphanResume.id);
+    if (claimErr) throw claimErr;
   } else {
     const { error: insErr } = await client.from("resumes").insert({
       candidate_id: candidateId,
