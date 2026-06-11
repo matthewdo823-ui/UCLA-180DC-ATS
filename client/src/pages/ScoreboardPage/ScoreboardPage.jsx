@@ -146,36 +146,48 @@ const PAGE_THEME = {
 
 function DecisionButtons({ status, disabled, saving, onSelect, dark }) {
   const options = ["advance", "hold", "reject"];
-  const idleBorder = dark ? "rgba(255,255,255,0.14)" : css.borderLight;
-  const idleBg = dark ? "#1C2A42" : "#FFF";
+  const shellBorder = dark ? "rgba(255,255,255,0.14)" : css.borderLight;
+  const shellBg = dark ? "#1C2A42" : "#F3F4F6";
+  const divider = dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)";
   const idleColor = dark ? "#8FA3B8" : css.textGray;
 
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      {options.map(decision => {
-        const sel = status === decision;
+    <div
+      style={{
+        display: "inline-flex",
+        borderRadius: 8,
+        border: `1px solid ${shellBorder}`,
+        overflow: "hidden",
+        background: shellBg,
+      }}
+    >
+      {options.map((decision, index) => {
+        const selected = status === decision;
         const style = DECISION_STYLE[decision];
         return (
           <button
             key={decision}
             type="button"
-            title={DECISION_STYLE[decision].label}
+            title={selected ? `Clear ${style.label}` : style.label}
             disabled={disabled}
             onClick={(e) => {
               e.stopPropagation();
-              onSelect(decision);
+              onSelect(selected ? "pending" : decision);
             }}
             style={{
-              border: `1px solid ${sel ? style.bd : idleBorder}`,
-              background: sel ? style.bg : idleBg,
-              color: sel ? style.color : idleColor,
-              borderRadius: 8,
-              padding: "8px 14px",
-              fontSize: 12,
+              border: "none",
+              borderRight: index < options.length - 1 ? `1px solid ${divider}` : "none",
+              background: selected ? style.color : "transparent",
+              color: selected ? "#FFF" : idleColor,
+              padding: "7px 12px",
+              fontSize: 11,
               fontWeight: 700,
+              letterSpacing: "0.02em",
               cursor: disabled ? "not-allowed" : "pointer",
               opacity: disabled ? 0.45 : saving ? 0.8 : 1,
-              minWidth: 72,
+              minWidth: 68,
+              whiteSpace: "nowrap",
+              transition: "background 0.15s ease, color 0.15s ease",
             }}
           >
             {style.label}
@@ -811,15 +823,16 @@ export default function ScoreboardPage() {
       if (!canRecordCommitteeDecision(focused)) return;
 
       const key = event.key.toLowerCase();
+      const currentStatus = getCandidateDecisionStatus(focused);
       if (key === "g") {
         event.preventDefault();
-        saveDecision(focused, "advance");
+        saveDecision(focused, currentStatus === "advance" ? "pending" : "advance");
       } else if (key === "y") {
         event.preventDefault();
-        saveDecision(focused, "hold");
+        saveDecision(focused, currentStatus === "hold" ? "pending" : "hold");
       } else if (key === "r") {
         event.preventDefault();
-        saveDecision(focused, "reject");
+        saveDecision(focused, currentStatus === "reject" ? "pending" : "reject");
       }
     }
 
@@ -842,7 +855,7 @@ export default function ScoreboardPage() {
   );
   const t = deliberationMode ? PAGE_THEME.dark : PAGE_THEME.light;
   const gridColumns = deliberationMode
-    ? "4px 48px minmax(200px, 2fr) 108px minmax(280px, 1.2fr) 200px"
+    ? "4px 40px minmax(160px, 2fr) 88px minmax(220px, 0.9fr) minmax(148px, auto)"
     : "60px minmax(240px, 2fr) 1fr 220px";
 
   function statCount(value) {
@@ -911,7 +924,7 @@ export default function ScoreboardPage() {
               </h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: t.textMuted, lineHeight: 1.45 }}>
                 {deliberationMode ? (
-                  <>Live committee — mark <strong style={{ color: t.text }}>advance</strong>, <strong style={{ color: t.text }}>hold</strong>, or <strong style={{ color: t.text }}>reject</strong>. Use <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> on the focused row.</>
+                  <>Live committee — pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>. Press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> on the focused row; press again to clear.</>
                 ) : (
                   <>Round 1 resume reviews — use <strong style={{ fontWeight: 600, color: t.text }}>Sort &amp; filters</strong> to change order and narrow who appears in the table.</>
                 )}
@@ -930,7 +943,8 @@ export default function ScoreboardPage() {
           </div>
         </div>
 
-        <div ref={filterWrapRef} style={{ position: "relative", flexShrink: 0, marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div ref={filterWrapRef} style={{ position: "relative", flexShrink: 0, marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {isStaff ? (
             <>
               <button
@@ -941,17 +955,17 @@ export default function ScoreboardPage() {
                   alignItems: "center",
                   gap: 8,
                   cursor: "pointer",
-                  padding: "10px 16px",
+                  padding: "8px 14px",
                   borderRadius: 8,
                   background: deliberationMode ? t.accent : t.btnGhostBg,
                   color: deliberationMode ? "#0B1628" : t.btnGhostText,
                   border: `1px solid ${deliberationMode ? t.accent : t.border}`,
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: 600,
                   fontFamily: "'DM Sans', sans-serif",
                 }}
               >
-                {deliberationMode ? "Exit deliberation" : "Deliberation"}
+                {deliberationMode ? "Exit" : "Deliberation"}
               </button>
               <button
                 type="button"
@@ -962,17 +976,17 @@ export default function ScoreboardPage() {
                   alignItems: "center",
                   gap: 8,
                   cursor: "pointer",
-                  padding: "10px 16px",
+                  padding: "8px 14px",
                   borderRadius: 8,
                   background: equalizeActive ? t.accent : t.btnGhostBg,
                   color: equalizeActive ? "#0B1628" : t.btnGhostText,
                   border: `1px solid ${equalizeActive ? t.accent : t.border}`,
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: 600,
                   fontFamily: "'DM Sans', sans-serif",
                 }}
               >
-                {equalizeActive ? "Show raw scores" : "Equalize"}
+                {equalizeActive ? "Raw scores" : "Equalize"}
               </button>
             </>
           ) : null}
@@ -983,12 +997,12 @@ export default function ScoreboardPage() {
                 disabled={exportBusy}
                 onClick={() => handleExport("advance")}
                 style={{
-                  padding: "10px 14px",
+                  padding: "8px 12px",
                   borderRadius: 8,
                   border: `1px solid ${t.border}`,
                   background: t.btnGhostBg,
                   color: t.btnGhostText,
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: 600,
                   cursor: exportBusy ? "not-allowed" : "pointer",
                   opacity: exportBusy ? 0.6 : 1,
@@ -1001,12 +1015,12 @@ export default function ScoreboardPage() {
                 disabled={exportBusy}
                 onClick={() => handleExport("reject")}
                 style={{
-                  padding: "10px 14px",
+                  padding: "8px 12px",
                   borderRadius: 8,
                   border: `1px solid ${t.border}`,
                   background: t.btnGhostBg,
                   color: t.btnGhostText,
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: 600,
                   cursor: exportBusy ? "not-allowed" : "pointer",
                   opacity: exportBusy ? 0.6 : 1,
@@ -1026,12 +1040,12 @@ export default function ScoreboardPage() {
               alignItems: "center",
               gap: 8,
               cursor: "pointer",
-              padding: "10px 16px",
+              padding: "8px 14px",
               borderRadius: 8,
               background: t.btnGhostBg,
               color: t.btnGhostText,
               border: `1px solid ${filtersOpen ? t.accent : t.border}`,
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: 600,
               fontFamily: "'DM Sans', sans-serif",
               boxShadow: filtersOpen ? "0 2px 12px rgba(0,0,0,0.12)" : "none",
@@ -1047,6 +1061,7 @@ export default function ScoreboardPage() {
               <span style={{ background: deliberationMode ? "rgba(61,207,154,0.18)" : "rgba(40, 98, 65, 0.1)", color: t.accent, borderRadius: 20, fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>{activeFilterCount}</span>
             )}
           </button>
+          </div>
 
           {filtersOpen && (
             <div
@@ -1244,7 +1259,7 @@ export default function ScoreboardPage() {
             style={{
               display: "grid",
               gridTemplateColumns: gridColumns,
-              padding: "20px 20px",
+              padding: deliberationMode ? "14px 16px" : "20px 20px",
               borderBottom: `1px solid ${t.border}`,
               alignItems: "center",
               background: rowBg,
@@ -1284,13 +1299,10 @@ export default function ScoreboardPage() {
 
             {deliberationMode ? (
               <div
-                style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}
+                style={{ display: "flex", alignItems: "center" }}
                 onClick={e => e.stopPropagation()}
                 onKeyDown={e => e.stopPropagation()}
               >
-                <span style={{ background: decisionStyle.bg, color: decisionStyle.color, border: `1px solid ${decisionStyle.bd}`, borderRadius: 999, fontSize: 10, fontWeight: 800, padding: "4px 9px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                  {decisionStyle.label}
-                </span>
                 {isStaff ? (
                   <DecisionButtons
                     status={decisionStatus}
@@ -1305,21 +1317,22 @@ export default function ScoreboardPage() {
               </div>
             ) : null}
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
               <button
+                type="button"
                 onClick={() => setSelectedCandidate(c)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: deliberationMode ? t.accent : css.greenDark, color: deliberationMode ? "#0B1628" : "#FFF", border: "none", fontSize: 13, cursor: "pointer" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: deliberationMode ? "6px 12px" : "8px 16px", borderRadius: 6, background: deliberationMode ? t.accent : css.greenDark, color: deliberationMode ? "#0B1628" : "#FFF", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                 Details
               </button>
               <button
                 type="button"
                 onClick={() => navigate(`/scoreboard/${c.id}/application`)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: deliberationMode ? t.btnGhostBg : "#FFF", color: deliberationMode ? t.text : "#333", border: `1px solid ${t.border}`, fontSize: 13, cursor: "pointer" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: deliberationMode ? "6px 12px" : "8px 16px", borderRadius: 6, background: deliberationMode ? t.btnGhostBg : "#FFF", color: deliberationMode ? t.text : "#333", border: `1px solid ${t.border}`, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
-                Application
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+                {deliberationMode ? "App" : "Application"}
               </button>
             </div>
           </div>
