@@ -117,6 +117,7 @@ exports.getNextResume = async (req, res) => {
         if (reviewedError) return res.status(500).json({ error: reviewedError.message });
         reviewedResumeIds = [...new Set((reviewedRows || []).map((row) => row.resume_id).filter(Boolean))];
     }
+    const reviewedResumeIdSet = new Set(reviewedResumeIds);
 
     let query = supabase
         .from('resumes')
@@ -136,6 +137,10 @@ exports.getNextResume = async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
 
     for (const row of resumeCandidates || []) {
+        if (reviewedResumeIdSet.has(row.id)) {
+            continue;
+        }
+
         if (!isGoogleDriveFileUrl(row.file_url)) {
             console.warn(`[getNextResume] Skipping resume ${row.id}: not a valid Google Drive URL`);
             continue;
@@ -156,6 +161,10 @@ exports.saveReview = async (req, res) => {
     const { resume_id, scores, notes, decision } = req.body;
     const gradedBy = req.user?.user_id;
     const normalizedDecision = VALID_REVIEW_DECISIONS.has(decision) ? decision : "pass";
+
+    if (!gradedBy) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
 
     if (!resume_id) {
         return res.status(400).json({ error: "resume_id is required" });
@@ -197,6 +206,19 @@ exports.saveReview = async (req, res) => {
         return res.status(400).json({ error: "Flagged resume is not linked to a candidate" });
     }
 
+    const { data: existingReview, error: existingError } = await supabase
+        .from('resume_reviews')
+        .select('id')
+        .eq('resume_id', resume_id)
+        .eq('graded_by', gradedBy)
+        .eq('cycle_id', screening.cycle.id)
+        .maybeSingle();
+
+    if (existingError) return res.status(500).json({ error: existingError.message });
+    if (existingReview) {
+        return res.status(409).json({ error: "You have already reviewed this resume" });
+    }
+
     const { error: saveError } = await supabase.rpc('save_resume_review', {
         resume_id_input: resume_id,
         scores_input: normalizedScores,
@@ -210,7 +232,12 @@ exports.saveReview = async (req, res) => {
         candidate_id_input: normalizedDecision === "flag" ? resumeRow.candidate_id : null,
     });
 
-    if (saveError) return res.status(500).json({ error: saveError.message });
+    if (saveError) {
+        if (saveError.code === '23505' || /already reviewed/i.test(saveError.message || '')) {
+            return res.status(409).json({ error: "You have already reviewed this resume" });
+        }
+        return res.status(500).json({ error: saveError.message });
+    }
 
     return res.json({ success: true });
 };

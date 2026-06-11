@@ -12,6 +12,7 @@ export default function ScoringPanel({
   onNotes,
   onAction,
   scoringComplete = true,
+  submitError = "",
 }) {
   if (!rubric || !rubric.metrics?.length) {
     return (
@@ -100,6 +101,12 @@ export default function ScoringPanel({
           style={{ width: "100%", height: 80, padding: "12px 14px", background: "#F9FAFB", border: `1px solid ${css.borderLight}`, borderRadius: 8, color: css.textDark, fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "none", outline: "none", boxSizing: "border-box" }}
         />
       </div>
+
+      {submitError ? (
+        <div style={{ padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: `1px solid rgba(220,38,38,0.2)`, borderRadius: 8, color: css.red, fontSize: 13 }}>
+          {submitError}
+        </div>
+      ) : null}
 
       <div style={{ display: "flex", gap: 12 }}>
         {[
