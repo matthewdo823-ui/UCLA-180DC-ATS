@@ -98,8 +98,36 @@ function passesReviewFilter(candidate, reviews) {
   }
 }
 
-function filterCandidates(list, filters) {
+function normalizePhoneDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function passesSearchQuery(candidate, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+
+  const fields = [
+    candidate.name,
+    candidate.email,
+    candidate.major,
+    candidate.year,
+    candidate.phoneNumber,
+  ].filter(Boolean).map(value => String(value).toLowerCase());
+
+  if (fields.some(value => value.includes(q))) return true;
+
+  const qDigits = normalizePhoneDigits(q);
+  if (qDigits.length >= 3) {
+    const phoneDigits = normalizePhoneDigits(candidate.phoneNumber);
+    if (phoneDigits.includes(qDigits)) return true;
+  }
+
+  return false;
+}
+
+function filterCandidates(list, filters, searchQuery = "") {
   return list.filter(c => {
+    if (!passesSearchQuery(c, searchQuery)) return false;
     if (filters.major !== "all" && (c.major || "Undeclared") !== filters.major) return false;
     if (filters.year !== "all" && String(c.year || "").trim() !== filters.year) return false;
     if (!passesReviewFilter(c, filters.reviews)) return false;
@@ -500,7 +528,7 @@ function ScorecardModal({ candidate, onClose, metrics = [], maxPerCategory = 4, 
                 <p style={{ color: cardPale, fontSize: 18, fontFamily: serifFont, fontWeight: 600, margin: "0 0 3px", lineHeight: 1.15 }}>{candidate.name}</p>
                 <p style={{ color: "#9FE1CB", fontSize: 12, margin: "0 0 2px" }}>{candidate.major || "Undeclared"}</p>
                 <p style={{ color: "#5DCAA5", fontSize: 11, margin: 0 }}>
-                  {[candidate.year, candidate.gpa ? `GPA ${candidate.gpa}` : ""].filter(Boolean).join(" · ") || candidate.email || "Candidate profile"}
+                  {[candidate.email, candidate.phoneNumber].filter(Boolean).join(" · ") || "Contact not recorded"}
                 </p>
               </div>
             </div>
@@ -618,6 +646,7 @@ export default function ScoreboardPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState(() => ({ ...defaultFilters }));
   const [sortBy, setSortBy] = useState("performance_desc");
+  const [searchQuery, setSearchQuery] = useState("");
   const [listMotionKey, setListMotionKey] = useState(0);
   const [deliberationMode, setDeliberationMode] = useState(false);
   const [equalizeActive, setEqualizeActive] = useState(false);
@@ -672,7 +701,7 @@ export default function ScoreboardPage() {
       return;
     }
     setListMotionKey(k => k + 1);
-  }, [loading, sortBy, filters.major, filters.year, filters.reviews, filters.scoreBand, filters.decision]);
+  }, [loading, sortBy, searchQuery, filters.major, filters.year, filters.reviews, filters.scoreBand, filters.decision]);
 
   useEffect(() => {
     fetchScoreboard();
@@ -732,9 +761,9 @@ export default function ScoreboardPage() {
 
   const filteredCandidates = useMemo(() => {
     const effectiveFilters = deliberationMode ? filters : { ...filters, decision: "all" };
-    const filtered = filterCandidates(candidates, effectiveFilters);
+    const filtered = filterCandidates(candidates, effectiveFilters, searchQuery);
     return [...filtered].sort((a, b) => compareCandidates(a, b, sortBy));
-  }, [candidates, filters, sortBy, deliberationMode]);
+  }, [candidates, filters, searchQuery, sortBy, deliberationMode]);
 
   const saveDecision = useCallback(async (candidate, decision) => {
     if (!isStaff || !deliberationMode) return;
@@ -860,6 +889,8 @@ export default function ScoreboardPage() {
   const activeFilterCount = countActiveFilters(
     deliberationMode ? filters : { ...filters, decision: "all" }
   );
+  const hasActiveSearch = searchQuery.trim().length > 0;
+  const hasActiveNarrowing = activeFilterCount > 0 || hasActiveSearch;
   const t = deliberationMode ? PAGE_THEME.dark : PAGE_THEME.light;
   const gridColumns = deliberationMode
     ? "4px 40px minmax(160px, 2fr) 88px minmax(220px, 0.9fr) minmax(148px, auto)"
@@ -936,11 +967,12 @@ export default function ScoreboardPage() {
                 {deliberationMode ? (
                   <>Live committee — pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>. Click a row to focus it; press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> to decide (again to clear).</>
                 ) : (
-                  <>Round 1 resume reviews — use <strong style={{ fontWeight: 600, color: t.text }}>Sort &amp; filters</strong> to change order and narrow who appears in the table.</>
+                  <>Round 1 resume reviews — search by name, email, or phone, or use <strong style={{ fontWeight: 600, color: t.text }}>Sort &amp; filters</strong> to change order and narrow the table.</>
                 )}
-                {activeFilterCount > 0 && (
+                {hasActiveNarrowing && (
                   <span style={{ display: "block", marginTop: 8, fontSize: 13, color: t.titleAccent, fontWeight: 600 }}>
                     Showing {filteredCandidates.length} of {candidates.length} candidates
+                    {hasActiveSearch ? " matching search" : ""}
                   </span>
                 )}
                 {equalizeActive && (
@@ -1216,6 +1248,65 @@ export default function ScoreboardPage() {
         </div>
       ) : null}
 
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", position: "relative" }}>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={t.textMuted}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+          aria-hidden
+        >
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Search by name, email, or phone…"
+          aria-label="Search candidates"
+          style={{
+            width: "100%",
+            padding: "11px 40px 11px 40px",
+            borderRadius: 10,
+            border: `1px solid ${hasActiveSearch ? t.accent : t.border}`,
+            background: t.cardBg,
+            color: t.text,
+            fontSize: 14,
+            fontFamily: "'DM Sans', sans-serif",
+            boxShadow: deliberationMode ? "none" : "0 1px 2px rgba(0,0,0,0.02)",
+            outline: "none",
+          }}
+        />
+        {hasActiveSearch ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => setSearchQuery("")}
+            style={{
+              position: "absolute",
+              right: 10,
+              top: "50%",
+              transform: "translateY(-50%)",
+              border: "none",
+              background: "none",
+              color: t.textMuted,
+              cursor: "pointer",
+              fontSize: 18,
+              lineHeight: 1,
+              padding: 4,
+            }}
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
+
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 10, display: "grid", gridTemplateColumns: `repeat(${statRows.length}, 1fr)`, padding: "18px 20px", boxShadow: deliberationMode ? "none" : "0 1px 2px rgba(0,0,0,0.02)" }}>
         {statRows.map(([label, value], index) => (
           <div key={label} style={{ borderRight: index < statRows.length - 1 ? `1px solid ${t.border}` : "none", padding: index ? "4px 0 4px 16px" : "4px 0" }}>
@@ -1240,7 +1331,9 @@ export default function ScoreboardPage() {
         {loading && <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading candidates...</div>}
 
         {!loading && candidates.length > 0 && filteredCandidates.length === 0 && (
-          <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>No candidates match these filters.</div>
+          <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>
+            {hasActiveSearch ? "No candidates match your search." : "No candidates match these filters."}
+          </div>
         )}
 
         {!loading && candidates.length === 0 && (
