@@ -17,6 +17,17 @@ RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM resume_reviews
+    WHERE resume_id = resume_id_input
+      AND graded_by = graded_by_input
+      AND cycle_id = cycle_id_input
+  ) THEN
+    RAISE EXCEPTION 'You have already reviewed this resume'
+      USING ERRCODE = 'unique_violation';
+  END IF;
+
   INSERT INTO resume_reviews (
     resume_id,
     scores,
