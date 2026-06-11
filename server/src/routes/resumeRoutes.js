@@ -6,7 +6,9 @@ const { authenticateToken, requireRoles } = require('../middleware/authMiddlewar
 router.use(authenticateToken, requireRoles('admin', 'member'));
 
 router.get('/next-resume', resumeController.getNextResume);
+router.get('/resume/:id', resumeController.getResumeById);
 router.get('/reviews', resumeController.listMyReviews);
+router.get('/reviews/:reviewId/resume', resumeController.getReviewResume);
 router.post('/reviews', resumeController.saveReview);
 router.patch('/reviews/:reviewId', resumeController.patchMyReview);
 router.post('/candidate-flags', resumeController.createCandidateFlag);
