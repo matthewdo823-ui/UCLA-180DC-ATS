@@ -25,6 +25,7 @@ export default function ScreenerPage() {
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pastReviewDetail, setPastReviewDetail] = useState(null);
+  const [editingReviewId, setEditingReviewId] = useState(null);
   const panelRef = useRef(null);
 
   const rubric = useMemo(
@@ -62,6 +63,41 @@ export default function ScreenerPage() {
     }
   }, [authedFetch]);
 
+  const loadReviewedResume = useCallback(async (review) => {
+    const reviewId = review?.reviewId ? String(review.reviewId).trim() : "";
+    const resumeId = review?.resumeId || review?.id;
+    if (!reviewId && !resumeId) return;
+
+    try {
+      setLoading(true);
+      setFetchError("");
+      setSubmitError("");
+      const url = reviewId
+        ? `${API}/reviews/${encodeURIComponent(reviewId)}/resume`
+        : `${API}/resume/${encodeURIComponent(String(resumeId).trim())}`;
+      const res = await authedFetch(url);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setFetchError(body.error || "Could not load resume");
+        setResume(null);
+        setEditingReviewId(null);
+        return;
+      }
+      const data = await res.json();
+      setResume(data);
+      setScores(review.scores || {});
+      setNotes(review.notes ?? "");
+      setEditingReviewId(data.reviewId || reviewId || null);
+    } catch (e) {
+      console.error("Load reviewed resume failed:", e);
+      setFetchError("Could not load resume");
+      setResume(null);
+      setEditingReviewId(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [authedFetch]);
+
   const fetchNext = useCallback(async () => {
     if (!activeRound) {
       setResume(null);
@@ -84,10 +120,12 @@ export default function ScreenerPage() {
       setResume(data);
       setScores({});
       setNotes("");
+      setEditingReviewId(null);
     } catch (e) {
       console.error("Fetch failed:", e);
       setFetchError("Could not load next resume");
       setResume(null);
+      setEditingReviewId(null);
     } finally {
       setLoading(false);
     }
@@ -105,23 +143,30 @@ export default function ScreenerPage() {
     if (!scoringComplete) return;
     setSubmitError("");
 
+    const payload = { scores, notes, decision: type };
+
     try {
-      const res = await authedFetch(`${API}/reviews`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resume_id: resume.id, scores, notes, decision: type }),
-      });
+      const res = editingReviewId
+        ? await authedFetch(`${API}/reviews/${encodeURIComponent(editingReviewId)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        : await authedFetch(`${API}/reviews`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resume_id: resume.id, ...payload }),
+          });
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
         const message = error.error || "Could not save review";
-        if (res.status === 409) {
-          setSubmitError(message);
-        }
+        setSubmitError(message);
         throw new Error(message);
       }
+      setEditingReviewId(null);
       await fetchMyReviews({ showLoading: false });
     } catch (e) {
-      console.warn("Could not post review:", e);
+      console.warn("Could not save review:", e);
       return;
     }
 
@@ -212,6 +257,11 @@ export default function ScreenerPage() {
           onSaved={(updated) => {
             setMyReviews((prev) => prev.map((x) => (x.reviewId === updated.reviewId ? updated : x)));
             setPastReviewDetail(updated);
+          }}
+          onOpenInScreener={(review) => {
+            setPastReviewDetail(null);
+            setDrawerOpen(false);
+            loadReviewedResume(review);
           }}
         />
       ) : null}

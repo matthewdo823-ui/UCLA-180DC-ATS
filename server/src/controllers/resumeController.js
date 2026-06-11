@@ -52,6 +52,7 @@ function mapMyReviewRow(row, rubricConfig = null) {
     return {
         reviewId: row.id,
         id: row.resume_id,
+        resumeId: row.resume_id,
         resumeName: resume?.name ?? null,
         candidateName: cand?.name ?? null,
         year: cand?.year ?? null,
@@ -157,6 +158,154 @@ exports.getNextResume = async (req, res) => {
     return res.status(404).json({ error: "No resumes available" });
 };
 
+function formatResumeForScreener(row) {
+    if (!isGoogleDriveFileUrl(row.file_url)) {
+        return { error: "Resume file must be a Google Drive link", status: 400 };
+    }
+
+    const fileID = extractDriveFileID(row.file_url);
+    return {
+        data: {
+            ...row,
+            file_url: toDownloadURL(fileID),
+        },
+    };
+}
+
+async function fetchResumeRowById(resumeId) {
+    return supabase
+        .from('resumes')
+        .select(`*,
+            candidates ( year, cycle_id )
+        `)
+        .eq('id', resumeId)
+        .maybeSingle();
+}
+
+async function userHasReviewForResume(gradedBy, resumeId, cycleId) {
+    const { data, error } = await supabase
+        .from('resume_reviews')
+        .select('id')
+        .eq('resume_id', resumeId)
+        .eq('graded_by', gradedBy)
+        .eq('cycle_id', cycleId)
+        .maybeSingle();
+
+    if (error) throw error;
+    return Boolean(data);
+}
+
+async function assertResumeAccessibleForScreening(resumeRow, { gradedBy, cycleId }) {
+    const candidate = firstRel(resumeRow.candidates);
+    const resumeCycleId = resumeRow.cycle_id || candidate?.cycle_id || null;
+
+    if (resumeCycleId) {
+        if (resumeCycleId !== cycleId) {
+            return { error: "Resume is not part of the active cycle", status: 400 };
+        }
+        return null;
+    }
+
+    if (!gradedBy) {
+        return { error: "Resume not found", status: 404 };
+    }
+
+    const hasReview = await userHasReviewForResume(gradedBy, resumeRow.id, cycleId);
+    if (!hasReview) {
+        return { error: "Resume not found", status: 404 };
+    }
+
+    return null;
+}
+
+exports.getResumeById = async (req, res) => {
+    const gradedBy = req.user?.user_id;
+    const screening = await requireActiveResumeScreening();
+    if (screening.error) {
+        return res.status(screening.status).json({ error: screening.error });
+    }
+
+    const resumeId = String(req.params.id || "").trim();
+    if (!resumeId) {
+        return res.status(400).json({ error: "Resume id is required" });
+    }
+
+    const { data: row, error } = await fetchResumeRowById(resumeId);
+    if (error) return respondWithServerError(res, error, 'getResumeById');
+    if (!row) {
+        return res.status(404).json({ error: "Resume not found" });
+    }
+
+    try {
+        const accessError = await assertResumeAccessibleForScreening(row, {
+            gradedBy,
+            cycleId: screening.cycle.id,
+        });
+        if (accessError) {
+            return res.status(accessError.status).json({ error: accessError.error });
+        }
+    } catch (accessErr) {
+        return respondWithServerError(res, accessErr, 'getResumeById access');
+    }
+
+    const formatted = formatResumeForScreener(row);
+    if (formatted.error) {
+        return res.status(formatted.status).json({ error: formatted.error });
+    }
+
+    return res.json(formatted.data);
+};
+
+/** Load the resume PDF for one of the authenticated user's past reviews. */
+exports.getReviewResume = async (req, res) => {
+    const gradedBy = req.user?.user_id;
+    if (!gradedBy) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const screening = await requireActiveResumeScreening();
+    if (screening.error) {
+        return res.status(screening.status).json({ error: screening.error });
+    }
+
+    const reviewId = String(req.params.reviewId || "").trim();
+    if (!reviewId) {
+        return res.status(400).json({ error: "reviewId is required" });
+    }
+
+    const { data: review, error: reviewError } = await supabase
+        .from('resume_reviews')
+        .select('id, resume_id, cycle_id')
+        .eq('id', reviewId)
+        .eq('graded_by', gradedBy)
+        .maybeSingle();
+
+    if (reviewError) return respondWithServerError(res, reviewError, 'getReviewResume review');
+    if (!review) {
+        return res.status(404).json({ error: "Review not found" });
+    }
+
+    if (review.cycle_id && review.cycle_id !== screening.cycle.id) {
+        return res.status(400).json({ error: "Review is not part of the active cycle" });
+    }
+
+    const { data: row, error } = await fetchResumeRowById(review.resume_id);
+    if (error) return respondWithServerError(res, error, 'getReviewResume resume');
+    if (!row) {
+        return res.status(404).json({ error: "Resume not found" });
+    }
+
+    const formatted = formatResumeForScreener(row);
+    if (formatted.error) {
+        return res.status(formatted.status).json({ error: formatted.error });
+    }
+
+    return res.json({
+        ...formatted.data,
+        reviewId: review.id,
+    });
+};
+
 // Saves review 
 exports.saveReview = async (req, res) => {
     const { resume_id, scores, notes, decision } = req.body;
@@ -217,7 +366,36 @@ exports.saveReview = async (req, res) => {
 
     if (existingError) return respondWithServerError(res, existingError, 'saveReview existing');
     if (existingReview) {
-        return res.status(409).json({ error: "You have already reviewed this resume" });
+        const { error: updateError } = await supabase
+            .from('resume_reviews')
+            .update({
+                scores: normalizedScores,
+                notes: notes ?? "",
+                decision: normalizedDecision,
+                rubric_snapshot: rubricSnapshot,
+                normalized_score: normalizedScore,
+            })
+            .eq('id', existingReview.id)
+            .eq('graded_by', gradedBy);
+
+        if (updateError) return respondWithServerError(res, updateError, 'saveReview update');
+
+        if (normalizedDecision === "flag" && resumeRow.candidate_id) {
+            const { error: flagError } = await supabase
+                .from('candidate_flags')
+                .insert({
+                    candidate_id: resumeRow.candidate_id,
+                    resume_id: resume_id,
+                    flagged_by: gradedBy,
+                    reason: notes || "Flagged during resume review",
+                });
+
+            if (flagError && flagError.code !== '23505') {
+                return respondWithServerError(res, flagError, 'saveReview flag insert');
+            }
+        }
+
+        return res.json({ success: true, updated: true, reviewId: existingReview.id });
     }
 
     const { error: saveError } = await supabase.rpc('save_resume_review', {
