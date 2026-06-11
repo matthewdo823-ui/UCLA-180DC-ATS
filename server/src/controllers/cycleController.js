@@ -143,6 +143,22 @@ async function buildActiveCyclePayload() {
   };
 }
 
+async function applyActiveCycleSwitch(cycleId) {
+  const { error: archiveError } = await supabase
+    .from("cycles")
+    .update({ status: "archived" })
+    .neq("id", cycleId)
+    .eq("status", "active");
+
+  if (archiveError) throw archiveError;
+
+  const { error: settingsError } = await supabase
+    .from("app_settings")
+    .upsert({ id: 1, active_cycle_id: cycleId }, { onConflict: "id" });
+
+  if (settingsError) throw settingsError;
+}
+
 async function ensureUniqueSlug(baseSlug) {
   let slug = baseSlug;
   let suffix = 2;
@@ -308,6 +324,19 @@ exports.patchCycle = async (req, res) => {
   }
 
   try {
+    if (updates.status === "active") {
+      const { data: target, error: targetError } = await supabase
+        .from("cycles")
+        .select("id")
+        .eq("id", cycleId)
+        .maybeSingle();
+
+      if (targetError) return res.status(500).json({ error: targetError.message });
+      if (!target) return res.status(404).json({ error: "Cycle not found" });
+
+      await applyActiveCycleSwitch(cycleId);
+    }
+
     const { data, error } = await supabase
       .from("cycles")
       .update(updates)
@@ -361,13 +390,7 @@ exports.activateCycle = async (req, res) => {
     if (targetError) return res.status(500).json({ error: targetError.message });
     if (!target) return res.status(404).json({ error: "Cycle not found" });
 
-    const { error: archiveError } = await supabase
-      .from("cycles")
-      .update({ status: "archived" })
-      .neq("id", cycleId)
-      .eq("status", "active");
-
-    if (archiveError) return res.status(500).json({ error: archiveError.message });
+    await applyActiveCycleSwitch(cycleId);
 
     const { error: activateError } = await supabase
       .from("cycles")
@@ -375,12 +398,6 @@ exports.activateCycle = async (req, res) => {
       .eq("id", cycleId);
 
     if (activateError) return res.status(500).json({ error: activateError.message });
-
-    const { error: settingsError } = await supabase
-      .from("app_settings")
-      .upsert({ id: 1, active_cycle_id: cycleId }, { onConflict: "id" });
-
-    if (settingsError) return res.status(500).json({ error: settingsError.message });
 
     const payload = await buildActiveCyclePayload();
     return res.json(payload);
