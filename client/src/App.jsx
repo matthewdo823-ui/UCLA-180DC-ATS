@@ -12,6 +12,7 @@ import ScreenerPage from "./pages/ScreenerPage/ScreenerPage";
 import InterviewManagementPage from "./pages/InterviewManagementPage/InterviewManagementPage";
 import GradingRouterPage from "./pages/GradingRouterPage/GradingRouterPage";
 import ScoreboardPage from "./pages/ScoreboardPage/ScoreboardPage";
+import CandidateApplicationPage from "./pages/CandidateApplicationPage/CandidateApplicationPage";
 import Sidebar from "./components/Sidebar/Sidebar";
 
 function AppShell() {
@@ -69,6 +70,14 @@ function AppShell() {
             element={(
               <ProtectedRoute>
                 <ScoreboardPage />
+              </ProtectedRoute>
+            )}
+          />
+          <Route
+            path="/scoreboard/:candidateId/application"
+            element={(
+              <ProtectedRoute>
+                <CandidateApplicationPage />
               </ProtectedRoute>
             )}
           />
