@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import logo180 from "@images/180logo.webp";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { css } from "../../theme/colors";
@@ -83,26 +84,18 @@ export default function DashboardPage() {
       color: css.textDark,
       padding: 20
     }}>
-      <div style={{
-        width: 64,
-        height: 64,
-        background: css.greenDark,
-        borderRadius: 16,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 24,
-        boxShadow: "0 8px 24px rgba(40, 98, 65, 0.15)"
-      }}>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-          <path d="M4 22h16" />
-          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-        </svg>
-      </div>
+      <img
+        src={logo180}
+        alt="180 Degrees Consulting"
+        style={{
+          width: 64,
+          height: 64,
+          objectFit: "contain",
+          display: "block",
+          marginBottom: 24,
+          borderRadius: 16,
+        }}
+      />
 
       <h1 style={{ fontSize: 24, fontWeight: 700, margin: "0 0 8px 0", letterSpacing: "-0.02em" }}>
         180DC Recruitment
