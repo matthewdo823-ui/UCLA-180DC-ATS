@@ -125,7 +125,7 @@ function computeNormalizedPercent(scores, review, maxPerCategory) {
   if (!Number.isFinite(maxScore) || maxScore <= 0) return null;
 
   const raw = computeRawScore(scores, metrics);
-  return Number(((raw / maxScore) * 100).toFixed(2));
+  return Number(Math.min(100, (raw / maxScore) * 100).toFixed(2));
 }
 
 function buildCategoryScores(reviews, metrics) {
