@@ -271,8 +271,10 @@ export default function InterviewManagementPage() {
             {loading || cycleLoading ? (
               <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading candidates…</div>
             ) : filtered.length === 0 ? (
-              <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>
-                No candidates ready for interviews yet. Complete resume screening first.
+              <div style={{ padding: 40, textAlign: "center", color: css.textGray, lineHeight: 1.6 }}>
+                {data.deliberationStarted
+                  ? "No candidates were advanced from resume screening. Mark candidates as Advanced on the Scoreboard deliberation view, then return here."
+                  : "No candidates ready for interviews yet. Complete resume screening first, or use Scoreboard deliberation to advance candidates."}
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>

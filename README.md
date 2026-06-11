@@ -52,6 +52,7 @@ Run the SQL migrations in [server/sql/](server/sql/) **once**, in order, in the 
 5. `add_interview_evaluations.sql`
 6. `add_save_resume_review.sql`
 7. `add_resume_review_unique_per_grader.sql`
+8. `add_round_decisions.sql`
 
 See [server/sql/README.md](server/sql/README.md) for details on fresh vs. existing databases.
 
@@ -150,7 +151,7 @@ Used to pull new applications from a Google Form into the database.
 |------|--------|
 | `applicant` | Limited — redirected to no-access for most pages |
 | `member` | Grade resumes, view scoreboards |
-| `admin` | Full access — user/cycle management, grader scoreboard, flagged candidates |
+| `admin` | Full access — user/cycle management, grader scoreboard, flagged candidates, scoreboard deliberation & export |
 
 ## Production deployment
 

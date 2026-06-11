@@ -7,6 +7,11 @@ const {
 } = require("../utils/cycleContext");
 const { resolveReviewNormalizedValue } = require("../utils/rubric");
 const { respondWithServerError } = require("../utils/httpErrors");
+const {
+  buildDecisionLookup,
+  deliberationHasStarted,
+  normalizeRoundDecision,
+} = require("../utils/roundDecisions");
 
 const VALID_DECISIONS = new Set(["pending", "pass", "fail", "hold"]);
 
@@ -86,6 +91,17 @@ exports.listInterviewCandidates = async (req, res) => {
 
     if (reviewError) return respondWithServerError(res, reviewError, "listInterviewCandidates reviews");
 
+    const { data: roundDecisionRows, error: roundDecisionError } = await supabase
+      .from("round_decisions")
+      .select("candidate_id, decision")
+      .eq("cycle_id", ctx.cycle.id)
+      .eq("round_id", resumeRound.id);
+
+    if (roundDecisionError) return respondWithServerError(res, roundDecisionError, "listInterviewCandidates round decisions");
+
+    const resumeRoundDecisionLookup = buildDecisionLookup(roundDecisionRows);
+    const deliberationStarted = deliberationHasStarted(roundDecisionRows);
+
     const { data: evaluations, error: evalError } = await supabase
       .from("interview_evaluations")
       .select("*")
@@ -113,7 +129,14 @@ exports.listInterviewCandidates = async (req, res) => {
       const resume = resumeByCandidate[candidate.id];
       if (!resume) return false;
       const resumeReviews = reviewsByResume[resume.id] || [];
-      return resumeReviews.length > 0;
+      if (!resumeReviews.length) return false;
+
+      if (!deliberationStarted) return true;
+
+      const committeeDecision = normalizeRoundDecision(
+        resumeRoundDecisionLookup[candidate.id]?.decision
+      );
+      return committeeDecision === "advance";
     });
 
     const rubricConfig = resumeRound?.rubric_config || null;
@@ -164,6 +187,7 @@ exports.listInterviewCandidates = async (req, res) => {
         round: { id: ctx.round.id, name: ctx.round.name },
       },
       stats,
+      deliberationStarted,
       candidates: mapped,
     });
   } catch (err) {
