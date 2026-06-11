@@ -11,6 +11,7 @@ const {
   validateFieldMap,
   isGoogleFormsConfigured,
 } = require("../utils/googleForm");
+const { respondWithServerError } = require("../utils/httpErrors");
 
 const CYCLE_STATUSES = new Set(["draft", "active", "archived"]);
 const ROUND_STATUSES = new Set(["draft", "active", "closed"]);
@@ -184,7 +185,7 @@ exports.listCycles = async (req, res) => {
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithServerError(res, error, "listCycles");
 
     const cycleIds = (cycles || []).map((c) => c.id);
     const activeCycleId = await getActiveCycleId();
@@ -204,8 +205,7 @@ exports.listCycles = async (req, res) => {
       activeCycleId,
     });
   } catch (err) {
-    console.error("listCycles error:", err);
-    return res.status(500).json({ error: err.message });
+    return respondWithServerError(res, err, "listCycles");
   }
 };
 
@@ -214,8 +214,7 @@ exports.getActiveCycle = async (req, res) => {
     const payload = await buildActiveCyclePayload();
     return res.json(payload);
   } catch (err) {
-    console.error("getActiveCycle error:", err);
-    return res.status(500).json({ error: err.message });
+    return respondWithServerError(res, err, "getActiveCycle");
   }
 };
 
@@ -234,7 +233,7 @@ exports.createCycle = async (req, res) => {
       .select("*")
       .single();
 
-    if (cycleError) return res.status(500).json({ error: cycleError.message });
+    if (cycleError) return respondWithServerError(res, cycleError, "createCycle insert");
 
     const { data: rounds, error: roundsError } = await supabase
       .from("rounds")
@@ -257,7 +256,7 @@ exports.createCycle = async (req, res) => {
       ])
       .select("*");
 
-    if (roundsError) return res.status(500).json({ error: roundsError.message });
+    if (roundsError) return respondWithServerError(res, roundsError, "createCycle rounds");
 
     return res.status(201).json({
       cycle: mapCycle(cycle, {
@@ -267,8 +266,7 @@ exports.createCycle = async (req, res) => {
       }),
     });
   } catch (err) {
-    console.error("createCycle error:", err);
-    return res.status(500).json({ error: err.message });
+    return respondWithServerError(res, err, "createCycle");
   }
 };
 
@@ -331,7 +329,7 @@ exports.patchCycle = async (req, res) => {
         .eq("id", cycleId)
         .maybeSingle();
 
-      if (targetError) return res.status(500).json({ error: targetError.message });
+      if (targetError) return respondWithServerError(res, targetError, "patchCycle target");
       if (!target) return res.status(404).json({ error: "Cycle not found" });
 
       await applyActiveCycleSwitch(cycleId);
@@ -344,7 +342,7 @@ exports.patchCycle = async (req, res) => {
       .select("*")
       .maybeSingle();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithServerError(res, error, "patchCycle update");
     if (!data) return res.status(404).json({ error: "Cycle not found" });
 
     if (updates.status === "archived") {
@@ -354,7 +352,7 @@ exports.patchCycle = async (req, res) => {
         .eq("cycle_id", cycleId)
         .in("status", ["active", "draft"]);
 
-      if (closeRoundsError) return res.status(500).json({ error: closeRoundsError.message });
+      if (closeRoundsError) return respondWithServerError(res, closeRoundsError, "patchCycle close rounds");
     }
 
     const activeCycleId = await getActiveCycleId();
@@ -369,8 +367,7 @@ exports.patchCycle = async (req, res) => {
       }),
     });
   } catch (err) {
-    console.error("patchCycle error:", err);
-    return res.status(500).json({ error: err.message });
+    return respondWithServerError(res, err, "patchCycle");
   }
 };
 
@@ -387,7 +384,7 @@ exports.activateCycle = async (req, res) => {
       .eq("id", cycleId)
       .maybeSingle();
 
-    if (targetError) return res.status(500).json({ error: targetError.message });
+    if (targetError) return respondWithServerError(res, targetError, "activateCycle target");
     if (!target) return res.status(404).json({ error: "Cycle not found" });
 
     await applyActiveCycleSwitch(cycleId);
@@ -397,13 +394,12 @@ exports.activateCycle = async (req, res) => {
       .update({ status: "active" })
       .eq("id", cycleId);
 
-    if (activateError) return res.status(500).json({ error: activateError.message });
+    if (activateError) return respondWithServerError(res, activateError, "activateCycle update");
 
     const payload = await buildActiveCyclePayload();
     return res.json(payload);
   } catch (err) {
-    console.error("activateCycle error:", err);
-    return res.status(500).json({ error: err.message });
+    return respondWithServerError(res, err, "activateCycle");
   }
 };
 
@@ -440,13 +436,12 @@ exports.patchRound = async (req, res) => {
       .select("*")
       .maybeSingle();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithServerError(res, error, "patchRound");
     if (!data) return res.status(404).json({ error: "Round not found" });
 
     return res.json({ round: mapRound(data) });
   } catch (err) {
-    console.error("patchRound error:", err);
-    return res.status(500).json({ error: err.message });
+    return respondWithServerError(res, err, "patchRound");
   }
 };
 
@@ -463,7 +458,7 @@ exports.activateRound = async (req, res) => {
       .eq("id", roundId)
       .maybeSingle();
 
-    if (targetError) return res.status(500).json({ error: targetError.message });
+    if (targetError) return respondWithServerError(res, targetError, "activateRound target");
     if (!target) return res.status(404).json({ error: "Round not found" });
     if (!ROUND_TYPES.has(target.type)) {
       return res.status(400).json({ error: "Invalid round type" });
@@ -476,7 +471,7 @@ exports.activateRound = async (req, res) => {
       .eq("status", "active")
       .neq("id", roundId);
 
-    if (closeOthersError) return res.status(500).json({ error: closeOthersError.message });
+    if (closeOthersError) return respondWithServerError(res, closeOthersError, "activateRound close others");
 
     const { data, error } = await supabase
       .from("rounds")
@@ -485,12 +480,11 @@ exports.activateRound = async (req, res) => {
       .select("*")
       .single();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithServerError(res, error, "activateRound update");
 
     return res.json({ round: mapRound(data) });
   } catch (err) {
-    console.error("activateRound error:", err);
-    return res.status(500).json({ error: err.message });
+    return respondWithServerError(res, err, "activateRound");
   }
 };
 
@@ -512,7 +506,7 @@ exports.discoverCycleFormFields = async (req, res) => {
       .eq("id", cycleId)
       .maybeSingle();
 
-    if (cycleError) return res.status(500).json({ error: cycleError.message });
+    if (cycleError) return respondWithServerError(res, cycleError, "discoverCycleFormFields");
     if (!cycle) return res.status(404).json({ error: "Cycle not found" });
 
     const formInput = req.body?.formUrl ?? req.body?.googleFormId ?? cycle.google_form_id;
@@ -540,8 +534,7 @@ exports.discoverCycleFormFields = async (req, res) => {
       candidateColumns: CANDIDATE_COLUMNS,
     });
   } catch (err) {
-    console.error("discoverCycleFormFields error:", err);
-    return res.status(500).json({ error: err.message || "Could not discover form fields" });
+    return respondWithServerError(res, err, "discoverCycleFormFields", "Could not discover form fields");
   }
 };
 
@@ -563,7 +556,7 @@ exports.syncCycleForm = async (req, res) => {
       .eq("id", cycleId)
       .maybeSingle();
 
-    if (cycleError) return res.status(500).json({ error: cycleError.message });
+    if (cycleError) return respondWithServerError(res, cycleError, "syncCycleForm");
     if (!cycle) return res.status(404).json({ error: "Cycle not found" });
     if (!cycle.google_form_id || !cycle.form_field_map) {
       return res.status(400).json({ error: "Save a Google Form URL and field map on this cycle first" });
@@ -580,7 +573,7 @@ exports.syncCycleForm = async (req, res) => {
       .eq("id", cycleId)
       .maybeSingle();
 
-    if (refreshError) return res.status(500).json({ error: refreshError.message });
+    if (refreshError) return respondWithServerError(res, refreshError, "syncCycleForm refresh");
 
     return res.json({
       processed: result.processed,
@@ -592,8 +585,7 @@ exports.syncCycleForm = async (req, res) => {
       }),
     });
   } catch (err) {
-    console.error("syncCycleForm error:", err);
-    return res.status(500).json({ error: err.message || "Form sync failed" });
+    return respondWithServerError(res, err, "syncCycleForm", "Form sync failed");
   }
 };
 
@@ -611,12 +603,11 @@ exports.closeRound = async (req, res) => {
       .select("*")
       .maybeSingle();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithServerError(res, error, "closeRound");
     if (!data) return res.status(404).json({ error: "Round not found" });
 
     return res.json({ round: mapRound(data) });
   } catch (err) {
-    console.error("closeRound error:", err);
-    return res.status(500).json({ error: err.message });
+    return respondWithServerError(res, err, "closeRound");
   }
 };

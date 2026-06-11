@@ -6,6 +6,7 @@ const {
   requireActiveInterviewRound,
 } = require("../utils/cycleContext");
 const { resolveReviewNormalizedValue } = require("../utils/rubric");
+const { respondWithServerError } = require("../utils/httpErrors");
 
 const VALID_DECISIONS = new Set(["pending", "pass", "fail", "hold"]);
 
@@ -50,7 +51,7 @@ exports.listInterviewCandidates = async (req, res) => {
       .eq("cycle_id", ctx.cycle.id)
       .order("name", { ascending: true });
 
-    if (candError) return res.status(500).json({ error: candError.message });
+    if (candError) return respondWithServerError(res, candError, "listInterviewCandidates candidates");
 
     const candidateIds = (candidates || []).map((c) => c.id);
     if (!candidateIds.length) {
@@ -70,7 +71,7 @@ exports.listInterviewCandidates = async (req, res) => {
       .eq("cycle_id", ctx.cycle.id)
       .in("candidate_id", candidateIds);
 
-    if (resumeError) return res.status(500).json({ error: resumeError.message });
+    if (resumeError) return respondWithServerError(res, resumeError, "listInterviewCandidates resumes");
 
     const resumeIds = (resumes || []).map((r) => r.id);
 
@@ -83,14 +84,14 @@ exports.listInterviewCandidates = async (req, res) => {
         .in("resume_id", resumeIds)
       : { data: [], error: null };
 
-    if (reviewError) return res.status(500).json({ error: reviewError.message });
+    if (reviewError) return respondWithServerError(res, reviewError, "listInterviewCandidates reviews");
 
     const { data: evaluations, error: evalError } = await supabase
       .from("interview_evaluations")
       .select("*")
       .eq("round_id", ctx.round.id);
 
-    if (evalError) return res.status(500).json({ error: evalError.message });
+    if (evalError) return respondWithServerError(res, evalError, "listInterviewCandidates evaluations");
 
     const resumeByCandidate = {};
     (resumes || []).forEach((r) => {
@@ -166,8 +167,7 @@ exports.listInterviewCandidates = async (req, res) => {
       candidates: mapped,
     });
   } catch (err) {
-    console.error("listInterviewCandidates error:", err);
-    return res.status(500).json({ error: err.message });
+    return respondWithServerError(res, err, "listInterviewCandidates");
   }
 };
 
@@ -194,7 +194,7 @@ exports.upsertInterviewEvaluation = async (req, res) => {
       .eq("id", candidateId)
       .maybeSingle();
 
-    if (candError) return res.status(500).json({ error: candError.message });
+    if (candError) return respondWithServerError(res, candError, "upsertInterviewEvaluation candidate");
     if (!candidate) return res.status(404).json({ error: "Candidate not found" });
     if (candidate.cycle_id !== ctx.cycle.id) {
       return res.status(400).json({ error: "Candidate is not in the active cycle" });
@@ -217,12 +217,11 @@ exports.upsertInterviewEvaluation = async (req, res) => {
       .select("*")
       .single();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithServerError(res, error, "upsertInterviewEvaluation upsert");
 
     return res.json({ evaluation: mapEvaluation(data) });
   } catch (err) {
-    console.error("upsertInterviewEvaluation error:", err);
-    return res.status(500).json({ error: err.message });
+    return respondWithServerError(res, err, "upsertInterviewEvaluation");
   }
 };
 
@@ -238,7 +237,7 @@ exports.getInterviewStats = async (req, res) => {
       .select("decision")
       .eq("round_id", activeRound.id);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithServerError(res, error, "getInterviewStats");
 
     const rows = evaluations || [];
     const evaluated = rows.filter((r) => r.decision && r.decision !== "pending").length;
@@ -249,7 +248,6 @@ exports.getInterviewStats = async (req, res) => {
       pending: rows.filter((r) => !r.decision || r.decision === "pending").length,
     });
   } catch (err) {
-    console.error("getInterviewStats error:", err);
-    return res.status(500).json({ error: err.message });
+    return respondWithServerError(res, err, "getInterviewStats");
   }
 };
