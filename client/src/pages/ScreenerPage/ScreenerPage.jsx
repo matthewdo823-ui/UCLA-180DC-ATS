@@ -20,6 +20,7 @@ export default function ScreenerPage() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [myReviews, setMyReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -71,6 +72,7 @@ export default function ScreenerPage() {
     try {
       setLoading(true);
       setFetchError("");
+      setSubmitError("");
       const res = await authedFetch(`${API}/next-resume`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -101,6 +103,7 @@ export default function ScreenerPage() {
 
   async function handleAction(type) {
     if (!scoringComplete) return;
+    setSubmitError("");
 
     try {
       const res = await authedFetch(`${API}/reviews`, {
@@ -110,7 +113,11 @@ export default function ScreenerPage() {
       });
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
-        throw new Error(error.error || "Could not save review");
+        const message = error.error || "Could not save review";
+        if (res.status === 409) {
+          setSubmitError(message);
+        }
+        throw new Error(message);
       }
       await fetchMyReviews({ showLoading: false });
     } catch (e) {
@@ -179,6 +186,7 @@ export default function ScreenerPage() {
                     onNotes={setNotes}
                     onAction={handleAction}
                     scoringComplete={scoringComplete}
+                    submitError={submitError}
                   />
                 </div>
               ) : (
