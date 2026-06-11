@@ -40,13 +40,40 @@ export function getCandidateDecisionStatus(candidate) {
   return normalizeDecisionStatus(candidate?.decision?.status);
 }
 
-/** True when the API supports committee decisions (new scoreboard payload). */
-export function scoreboardSupportsDeliberation(candidates) {
-  if (!candidates?.length) return true;
-  return candidates.some(
-    (c) => Object.prototype.hasOwnProperty.call(c, "canDecide")
-      || Object.prototype.hasOwnProperty.call(c, "candidateId")
+export function buildDecisionPayload(status, notes = "") {
+  return {
+    status: normalizeDecisionStatus(status),
+    notes: notes || "",
+    updatedAt: new Date().toISOString(),
+    provisional: true,
+  };
+}
+
+export function recomputeDecisionStats(candidates) {
+  const stats = { pending: 0, advance: 0, hold: 0, reject: 0 };
+  (candidates || []).forEach((c) => {
+    const status = getCandidateDecisionStatus(c);
+    if (stats[status] !== undefined) stats[status] += 1;
+  });
+  return stats;
+}
+
+export function patchScoreboardWithDecision(scoreboardData, candidateId, decisionPayload) {
+  const nextCandidates = (scoreboardData.candidates || []).map((c) =>
+    c.id === candidateId ? { ...c, decision: decisionPayload } : c
   );
+  const counts = recomputeDecisionStats(nextCandidates);
+  return {
+    ...scoreboardData,
+    candidates: nextCandidates,
+    stats: {
+      ...scoreboardData.stats,
+      advanced: counts.advance,
+      hold: counts.hold,
+      rejected: counts.reject,
+      pending: counts.pending,
+    },
+  };
 }
 
 /** Whether admin can record a committee decision for this row. */

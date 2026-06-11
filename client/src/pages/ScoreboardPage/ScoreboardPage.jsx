@@ -9,14 +9,17 @@ import { serifFont } from "../../theme/typography";
 import { formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
 import {
+  buildDecisionPayload,
   canRecordCommitteeDecision,
   DECISION_STYLE,
   downloadDecisionsExport,
   getCandidateDecisionStatus,
   getCommitteeLinkWarning,
   passesDecisionFilter,
-  scoreboardSupportsDeliberation,
+  patchScoreboardWithDecision,
+  recomputeDecisionStats,
 } from "./decisionUtils";
+import { equalizeCandidateScores, recomputeEqualizedStats } from "./equalizeUtils";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
@@ -106,19 +109,49 @@ function filterCandidates(list, filters) {
   });
 }
 
-function recomputeDecisionStats(candidates) {
-  const stats = { pending: 0, advance: 0, hold: 0, reject: 0 };
-  (candidates || []).forEach(c => {
-    const status = getCandidateDecisionStatus(c);
-    if (stats[status] !== undefined) stats[status] += 1;
-  });
-  return stats;
-}
+const PAGE_THEME = {
+  light: {
+    pageBg: css.bgLight,
+    text: css.textDark,
+    textMuted: css.textGray,
+    cardBg: css.cardWhite,
+    border: css.borderLight,
+    accent: css.greenDark,
+    titleAccent: css.greenDark,
+    rowBg: css.cardWhite,
+    rowFocus: "rgba(40, 98, 65, 0.06)",
+    statValue: css.textDark,
+    btnGhostBg: "#FFF",
+    btnGhostText: css.textDark,
+    selectBg: "#FFF",
+    selectText: css.textDark,
+  },
+  dark: {
+    pageBg: "#0B1628",
+    text: "#E8EEF4",
+    textMuted: "#8FA3B8",
+    cardBg: "#141F33",
+    border: "rgba(255,255,255,0.09)",
+    accent: "#3DCF9A",
+    titleAccent: "#6EE7B8",
+    rowBg: "#141F33",
+    rowFocus: "rgba(61,207,154,0.14)",
+    statValue: "#F3F7FB",
+    btnGhostBg: "#1C2A42",
+    btnGhostText: "#E8EEF4",
+    selectBg: "#1C2A42",
+    selectText: "#E8EEF4",
+  },
+};
 
-function DecisionButtons({ status, compact, disabled, saving, onSelect }) {
+function DecisionButtons({ status, disabled, saving, onSelect, dark }) {
   const options = ["advance", "hold", "reject"];
+  const idleBorder = dark ? "rgba(255,255,255,0.14)" : css.borderLight;
+  const idleBg = dark ? "#1C2A42" : "#FFF";
+  const idleColor = dark ? "#8FA3B8" : css.textGray;
+
   return (
-    <div style={{ display: "flex", gap: compact ? 4 : 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {options.map(decision => {
         const sel = status === decision;
         const style = DECISION_STYLE[decision];
@@ -127,23 +160,25 @@ function DecisionButtons({ status, compact, disabled, saving, onSelect }) {
             key={decision}
             type="button"
             title={DECISION_STYLE[decision].label}
-            disabled={disabled || saving}
-            onClick={() => onSelect(decision)}
+            disabled={disabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(decision);
+            }}
             style={{
-              border: `1px solid ${sel ? style.bd : css.borderLight}`,
-              background: sel ? style.bg : "#FFF",
-              color: sel ? style.color : css.textGray,
-              borderRadius: compact ? 6 : 8,
-              padding: compact ? "5px 8px" : "7px 11px",
-              fontSize: compact ? 11 : 12,
+              border: `1px solid ${sel ? style.bd : idleBorder}`,
+              background: sel ? style.bg : idleBg,
+              color: sel ? style.color : idleColor,
+              borderRadius: 8,
+              padding: "8px 14px",
+              fontSize: 12,
               fontWeight: 700,
-              cursor: disabled || saving ? "not-allowed" : "pointer",
-              opacity: disabled ? 0.45 : saving ? 0.65 : 1,
-              textTransform: "capitalize",
-              minWidth: compact ? 0 : 62,
+              cursor: disabled ? "not-allowed" : "pointer",
+              opacity: disabled ? 0.45 : saving ? 0.8 : 1,
+              minWidth: 72,
             }}
           >
-            {compact ? decision[0].toUpperCase() : style.label}
+            {style.label}
           </button>
         );
       })}
@@ -362,7 +397,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4 }) {
   );
 }
 
-function ScorecardModal({ candidate, onClose, metrics = [], maxPerCategory = 4 }) {
+function ScorecardModal({ candidate, onClose, metrics = [], maxPerCategory = 4, equalized = false }) {
   const [reviewersOpen, setReviewersOpen] = useState(false);
   const aggregateScore = getAggregateScore(candidate);
   const normalizedScore = getNormalizedScore(candidate);
@@ -467,7 +502,9 @@ function ScorecardModal({ candidate, onClose, metrics = [], maxPerCategory = 4 }
 
           <div style={{ background: cardPale, padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #DCE7D2" }}>
             <div>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 800, letterSpacing: "0.05em" }}>NORMALIZED SCORE</p>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 800, letterSpacing: "0.05em" }}>
+                {equalized ? "EQUALIZED SCORE" : "NORMALIZED SCORE"}
+              </p>
               <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
                 {formatScore(normalizedScore)}<span style={{ fontSize: 14, color: "#3B6D11" }}>%</span>
               </p>
@@ -560,7 +597,7 @@ const selectStyle = {
 
 export default function ScoreboardPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isStaff } = useAuth();
   const authedFetch = useAuthedFetch();
   const isAdmin = isAdminRole(user?.role);
   const [data, setData] = useState({ stats: null, candidates: [], metrics: [], maxPerCategory: 4, context: null });
@@ -571,6 +608,7 @@ export default function ScoreboardPage() {
   const [sortBy, setSortBy] = useState("performance_desc");
   const [listMotionKey, setListMotionKey] = useState(0);
   const [deliberationMode, setDeliberationMode] = useState(false);
+  const [equalizeActive, setEqualizeActive] = useState(false);
   const [savingDecisionId, setSavingDecisionId] = useState(null);
   const [decisionError, setDecisionError] = useState("");
   const [exportBusy, setExportBusy] = useState(false);
@@ -578,6 +616,7 @@ export default function ScoreboardPage() {
   const filterWrapRef = useRef(null);
   /** After first data paint, bump key so sort/filter changes remount rows and replay stagger. */
   const listStaggerBootstrappedRef = useRef(false);
+  const pendingDecisionIdsRef = useRef(new Set());
 
   const fetchScoreboard = useCallback(async (opts = {}) => {
     const silent = opts.silent === true;
@@ -586,7 +625,26 @@ export default function ScoreboardPage() {
       const res = await authedFetch(`${API}/scoreboard`);
       if (res.ok) {
         const json = await res.json();
-        setData(json);
+        setData(prev => {
+          if (!silent || pendingDecisionIdsRef.current.size === 0) return json;
+          const mergedCandidates = (json.candidates || []).map(c => {
+            if (!pendingDecisionIdsRef.current.has(c.id)) return c;
+            const local = (prev.candidates || []).find(row => row.id === c.id);
+            return local ? { ...c, decision: local.decision } : c;
+          });
+          const counts = recomputeDecisionStats(mergedCandidates);
+          return {
+            ...json,
+            candidates: mergedCandidates,
+            stats: {
+              ...json.stats,
+              advanced: counts.advance,
+              hold: counts.hold,
+              rejected: counts.reject,
+              pending: counts.pending,
+            },
+          };
+        });
       }
     } catch (err) {
       console.error("Failed to load scoreboard:", err);
@@ -632,7 +690,18 @@ export default function ScoreboardPage() {
     };
   }, [filtersOpen]);
 
-  const candidates = useMemo(() => data.candidates ?? [], [data.candidates]);
+  const candidates = useMemo(() => {
+    const base = data.candidates ?? [];
+    if (!equalizeActive) return base;
+    return equalizeCandidateScores(base, { metrics: data.metrics ?? [], maxPerCategory: data.maxPerCategory ?? 4 });
+  }, [data.candidates, data.metrics, data.maxPerCategory, equalizeActive]);
+
+  const displayStats = useMemo(() => {
+    const base = data.stats ?? {};
+    if (!equalizeActive) return base;
+    const { avgScore } = recomputeEqualizedStats(candidates);
+    return { ...base, avgScore };
+  }, [data.stats, candidates, equalizeActive]);
   const metrics = useMemo(() => data.metrics ?? [], [data.metrics]);
   const maxPerCategory = data.maxPerCategory ?? 4;
   const scoreboardLabel = data.context?.cycle && data.context?.round
@@ -650,14 +719,23 @@ export default function ScoreboardPage() {
   );
 
   const filteredCandidates = useMemo(() => {
-    const filtered = filterCandidates(candidates, filters);
+    const effectiveFilters = deliberationMode ? filters : { ...filters, decision: "all" };
+    const filtered = filterCandidates(candidates, effectiveFilters);
     return [...filtered].sort((a, b) => compareCandidates(a, b, sortBy));
-  }, [candidates, filters, sortBy]);
+  }, [candidates, filters, sortBy, deliberationMode]);
 
   const saveDecision = useCallback(async (candidate, decision) => {
-    if (!isAdmin) return;
+    if (!isStaff || !deliberationMode) return;
+
+    const previousDecision = candidate.decision;
+    const optimisticDecision = buildDecisionPayload(decision, candidate.decision?.notes || "");
+
+    pendingDecisionIdsRef.current.add(candidate.id);
+    setData(prev => patchScoreboardWithDecision(prev, candidate.id, optimisticDecision));
+    setSelectedCandidate(prev => (prev?.id === candidate.id ? { ...prev, decision: optimisticDecision } : prev));
     setSavingDecisionId(candidate.id);
     setDecisionError("");
+
     try {
       const res = await authedFetch(`${API}/scoreboard/decisions`, {
         method: "POST",
@@ -671,33 +749,26 @@ export default function ScoreboardPage() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        if (res.status === 404) {
+          throw new Error("Decision API not found — restart the local server or redeploy Render with the latest code.");
+        }
         throw new Error(body.error || "Could not save decision");
       }
       const { decision: savedDecision } = await res.json();
-      setData(prev => {
-        const nextCandidates = (prev.candidates || []).map(c =>
-          c.id === candidate.id ? { ...c, decision: savedDecision } : c
-        );
-        const decisionStats = recomputeDecisionStats(nextCandidates);
-        return {
-          ...prev,
-          candidates: nextCandidates,
-          stats: {
-            ...prev.stats,
-            advanced: decisionStats.advance,
-            hold: decisionStats.hold,
-            rejected: decisionStats.reject,
-            pending: decisionStats.pending,
-          },
-        };
-      });
-      setSelectedCandidate(prev => (prev?.id === candidate.id ? { ...prev, decision: savedDecision } : prev));
+      const confirmed = { ...savedDecision, provisional: true };
+      setData(prev => patchScoreboardWithDecision(prev, candidate.id, confirmed));
+      setSelectedCandidate(prev => (prev?.id === candidate.id ? { ...prev, decision: confirmed } : prev));
     } catch (err) {
+      setData(prev => patchScoreboardWithDecision(prev, candidate.id, previousDecision || buildDecisionPayload("pending")));
+      setSelectedCandidate(prev => (
+        prev?.id === candidate.id ? { ...prev, decision: previousDecision || buildDecisionPayload("pending") } : prev
+      ));
       setDecisionError(err.message || "Could not save decision");
     } finally {
+      pendingDecisionIdsRef.current.delete(candidate.id);
       setSavingDecisionId(null);
     }
-  }, [authedFetch, isAdmin]);
+  }, [authedFetch, deliberationMode, isStaff]);
 
   const handleExport = useCallback(async (decision) => {
     setExportBusy(true);
@@ -712,7 +783,7 @@ export default function ScoreboardPage() {
   }, [authedFetch]);
 
   useEffect(() => {
-    if (!deliberationMode || !isAdmin) return undefined;
+    if (!deliberationMode || !isStaff) return undefined;
     function onKeyDown(event) {
       const tag = event.target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
@@ -754,7 +825,7 @@ export default function ScoreboardPage() {
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [deliberationMode, filteredCandidates, focusedCandidateId, isAdmin, saveDecision]);
+  }, [deliberationMode, filteredCandidates, focusedCandidateId, isStaff, saveDecision]);
 
   useEffect(() => {
     if (!filteredCandidates.length) {
@@ -766,17 +837,53 @@ export default function ScoreboardPage() {
     }
   }, [filteredCandidates, focusedCandidateId]);
 
-  const activeFilterCount = countActiveFilters(filters);
-  const deliberationApiReady = useMemo(
-    () => scoreboardSupportsDeliberation(candidates),
-    [candidates]
+  const activeFilterCount = countActiveFilters(
+    deliberationMode ? filters : { ...filters, decision: "all" }
   );
+  const t = deliberationMode ? PAGE_THEME.dark : PAGE_THEME.light;
   const gridColumns = deliberationMode
-    ? "4px 52px minmax(180px, 2fr) 88px 1fr minmax(220px, 260px) 200px"
-    : "4px 52px minmax(200px, 2fr) 1fr minmax(180px, 220px) 200px";
+    ? "4px 48px minmax(200px, 2fr) 108px minmax(280px, 1.2fr) 200px"
+    : "60px minmax(240px, 2fr) 1fr 220px";
+
+  function statCount(value) {
+    if (value === undefined || value === null || value === "") return "—";
+    return value;
+  }
+
+  function toggleDeliberationMode() {
+    setDeliberationMode(on => {
+      if (on) setFilters(f => ({ ...f, decision: "all" }));
+      setDecisionError("");
+      return !on;
+    });
+  }
+
+  const statRows = deliberationMode
+    ? [
+        ["PENDING", statCount(displayStats?.pending ?? (displayStats?.applicants != null ? displayStats?.applicants : null))],
+        ["ADVANCED", statCount(displayStats?.advanced ?? 0)],
+        ["HOLD", statCount(displayStats?.hold ?? 0)],
+        ["REJECTED", statCount(displayStats?.rejected ?? 0)],
+        ["REVIEWED", statCount(displayStats?.reviewed)],
+        ["APPLICANTS", statCount(displayStats?.applicants)],
+      ]
+    : [
+        ["APPLICANTS", statCount(displayStats?.applicants)],
+        ["REVIEWED", statCount(displayStats?.reviewed)],
+        ["ADVANCED", statCount(displayStats?.advanced)],
+        ["AVG SCORE", statCount(displayStats?.avgScore)],
+      ];
+
+  const filterSelectStyle = {
+    ...selectStyle,
+    marginTop: 4,
+    background: t.selectBg,
+    color: t.selectText,
+    border: `1px solid ${t.border}`,
+  };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "auto" }}>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: t.pageBg, color: t.text, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "auto", transition: "background 0.25s ease, color 0.25s ease" }}>
       <style>{`
         @keyframes scoreboardPanelIn {
           from { opacity: 0; transform: translateY(-6px) scale(0.98); }
@@ -792,22 +899,30 @@ export default function ScoreboardPage() {
       <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
         <div style={{ maxWidth: 640, flex: "1 1 260px", minWidth: 0 }}>
-          <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>
-            Spring 2025 · Live roster
+          <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: t.titleAccent }}>
+            {deliberationMode ? "Live deliberation" : "Spring 2025 · Live roster"}
           </p>
           <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
-            <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${css.greenDark} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
+            <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${t.accent} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
-                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: css.textDark }}>Candidate </span>
-                <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>scoreboard</span>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: t.text }}>Candidate </span>
+                <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: t.titleAccent }}>scoreboard</span>
               </h1>
-              <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
-                Round 1 resume reviews — sort and filter the roster, then use{" "}
-                <strong style={{ fontWeight: 600, color: css.textDark }}>Deliberation</strong> during live committee meetings to mark advance, hold, or reject.
+              <p style={{ margin: "10px 0 0", fontSize: 14, color: t.textMuted, lineHeight: 1.45 }}>
+                {deliberationMode ? (
+                  <>Live committee — mark <strong style={{ color: t.text }}>advance</strong>, <strong style={{ color: t.text }}>hold</strong>, or <strong style={{ color: t.text }}>reject</strong>. Use <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> on the focused row.</>
+                ) : (
+                  <>Round 1 resume reviews — use <strong style={{ fontWeight: 600, color: t.text }}>Sort &amp; filters</strong> to change order and narrow who appears in the table.</>
+                )}
                 {activeFilterCount > 0 && (
-                  <span style={{ display: "block", marginTop: 8, fontSize: 13, color: css.greenDark, fontWeight: 600 }}>
+                  <span style={{ display: "block", marginTop: 8, fontSize: 13, color: t.titleAccent, fontWeight: 600 }}>
                     Showing {filteredCandidates.length} of {candidates.length} candidates
+                  </span>
+                )}
+                {equalizeActive && (
+                  <span style={{ display: "block", marginTop: 8, fontSize: 13, color: t.titleAccent, fontWeight: 600 }}>
+                    Scores equalized by grader z-scores per rubric category
                   </span>
                 )}
               </p>
@@ -816,11 +931,11 @@ export default function ScoreboardPage() {
         </div>
 
         <div ref={filterWrapRef} style={{ position: "relative", flexShrink: 0, marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {isAdmin ? (
+          {isStaff ? (
             <>
               <button
                 type="button"
-                onClick={() => setDeliberationMode(mode => !mode)}
+                onClick={toggleDeliberationMode}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -828,16 +943,41 @@ export default function ScoreboardPage() {
                   cursor: "pointer",
                   padding: "10px 16px",
                   borderRadius: 8,
-                  background: deliberationMode ? css.greenDark : css.cardWhite,
-                  color: deliberationMode ? "#FFF" : css.textDark,
-                  border: `1px solid ${deliberationMode ? css.greenDark : css.borderLight}`,
+                  background: deliberationMode ? t.accent : t.btnGhostBg,
+                  color: deliberationMode ? "#0B1628" : t.btnGhostText,
+                  border: `1px solid ${deliberationMode ? t.accent : t.border}`,
                   fontSize: 13,
                   fontWeight: 600,
                   fontFamily: "'DM Sans', sans-serif",
                 }}
               >
-                {deliberationMode ? "Deliberation on" : "Deliberation"}
+                {deliberationMode ? "Exit deliberation" : "Deliberation"}
               </button>
+              <button
+                type="button"
+                onClick={() => setEqualizeActive(on => !on)}
+                title="Recalculate scores using per-grader z-scores on each rubric category"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  cursor: "pointer",
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  background: equalizeActive ? t.accent : t.btnGhostBg,
+                  color: equalizeActive ? "#0B1628" : t.btnGhostText,
+                  border: `1px solid ${equalizeActive ? t.accent : t.border}`,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                {equalizeActive ? "Show raw scores" : "Equalize"}
+              </button>
+            </>
+          ) : null}
+          {isAdmin && deliberationMode ? (
+            <>
               <button
                 type="button"
                 disabled={exportBusy}
@@ -845,8 +985,9 @@ export default function ScoreboardPage() {
                 style={{
                   padding: "10px 14px",
                   borderRadius: 8,
-                  border: `1px solid ${css.borderLight}`,
-                  background: css.cardWhite,
+                  border: `1px solid ${t.border}`,
+                  background: t.btnGhostBg,
+                  color: t.btnGhostText,
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: exportBusy ? "not-allowed" : "pointer",
@@ -862,8 +1003,9 @@ export default function ScoreboardPage() {
                 style={{
                   padding: "10px 14px",
                   borderRadius: 8,
-                  border: `1px solid ${css.borderLight}`,
-                  background: css.cardWhite,
+                  border: `1px solid ${t.border}`,
+                  background: t.btnGhostBg,
+                  color: t.btnGhostText,
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: exportBusy ? "not-allowed" : "pointer",
@@ -886,23 +1028,23 @@ export default function ScoreboardPage() {
               cursor: "pointer",
               padding: "10px 16px",
               borderRadius: 8,
-              background: css.cardWhite,
-              color: css.textDark,
-              border: `1px solid ${filtersOpen ? css.greenDark : css.borderLight}`,
+              background: t.btnGhostBg,
+              color: t.btnGhostText,
+              border: `1px solid ${filtersOpen ? t.accent : t.border}`,
               fontSize: 13,
               fontWeight: 600,
               fontFamily: "'DM Sans', sans-serif",
-              boxShadow: filtersOpen ? "0 2px 12px rgba(40, 98, 65, 0.1)" : "0 1px 2px rgba(0,0,0,0.04)",
+              boxShadow: filtersOpen ? "0 2px 12px rgba(0,0,0,0.12)" : "none",
               transition: "border-color 0.15s ease, box-shadow 0.15s ease",
             }}
           >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: css.greenDark }} aria-hidden>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: t.accent }} aria-hidden>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M7 12h10M11 18h2" /></svg>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
             </span>
             Sort & filters
             {activeFilterCount > 0 && (
-              <span style={{ background: "rgba(40, 98, 65, 0.1)", color: css.greenDark, borderRadius: 20, fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>{activeFilterCount}</span>
+              <span style={{ background: deliberationMode ? "rgba(61,207,154,0.18)" : "rgba(40, 98, 65, 0.1)", color: t.accent, borderRadius: 20, fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>{activeFilterCount}</span>
             )}
           </button>
 
@@ -915,23 +1057,23 @@ export default function ScoreboardPage() {
                 right: 0,
                 top: "calc(100% + 8px)",
                 width: "min(300px, calc(100vw - 44px))",
-                background: css.cardWhite,
+                background: t.cardBg,
                 borderRadius: 10,
                 boxShadow: "0 16px 48px rgba(0,0,0,0.12)",
-                border: `1px solid ${css.borderLight}`,
+                border: `1px solid ${t.border}`,
                 padding: "16px 16px 12px",
                 zIndex: 50,
-                color: css.textDark,
+                color: t.text,
                 animation: "scoreboardPanelIn 0.22s ease-out",
               }}
             >
-              <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: css.textGray }}>SORT BY</p>
+              <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: t.textMuted }}>SORT BY</p>
               <label style={{ display: "block", marginBottom: 14, fontSize: 12, fontWeight: 600 }}>
                 Order
                 <select
                   value={sortBy}
                   onChange={e => setSortBy(e.target.value)}
-                  style={{ ...selectStyle, marginTop: 4 }}
+                  style={filterSelectStyle}
                 >
                   {SORT_TABS.map(tab => (
                     <option key={tab.id} value={tab.id}>
@@ -941,14 +1083,14 @@ export default function ScoreboardPage() {
                 </select>
               </label>
 
-              <p style={{ margin: "0 0 12px", paddingTop: 4, borderTop: `1px solid ${css.borderLight}`, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: css.textGray }}>FILTER BY</p>
+              <p style={{ margin: "0 0 12px", paddingTop: 4, borderTop: `1px solid ${t.border}`, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: t.textMuted }}>FILTER BY</p>
 
               <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
                 Major
                 <select
                   value={filters.major}
                   onChange={e => setFilters(f => ({ ...f, major: e.target.value }))}
-                  style={{ ...selectStyle, marginTop: 4 }}
+                  style={filterSelectStyle}
                 >
                   <option value="all">All majors</option>
                   {majorOptions.map(m => (
@@ -964,7 +1106,7 @@ export default function ScoreboardPage() {
                 <select
                   value={filters.year}
                   onChange={e => setFilters(f => ({ ...f, year: e.target.value }))}
-                  style={{ ...selectStyle, marginTop: 4 }}
+                  style={filterSelectStyle}
                 >
                   <option value="all">All years</option>
                   {yearOptions.map(y => (
@@ -980,7 +1122,7 @@ export default function ScoreboardPage() {
                 <select
                   value={filters.reviews}
                   onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))}
-                  style={{ ...selectStyle, marginTop: 4 }}
+                  style={filterSelectStyle}
                 >
                   <option value="all">Any count</option>
                   <option value="0">None yet (0)</option>
@@ -994,7 +1136,7 @@ export default function ScoreboardPage() {
                 <select
                   value={filters.scoreBand}
                   onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))}
-                  style={{ ...selectStyle, marginTop: 4 }}
+                  style={filterSelectStyle}
                 >
                   <option value="all">All scores</option>
                   <option value="top">Top (≥ 80%)</option>
@@ -1004,34 +1146,36 @@ export default function ScoreboardPage() {
                 </select>
               </label>
 
-              <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
-                Committee decision
-                <select
-                  value={filters.decision}
-                  onChange={e => setFilters(f => ({ ...f, decision: e.target.value }))}
-                  style={{ ...selectStyle, marginTop: 4 }}
-                >
-                  <option value="all">All decisions</option>
-                  <option value="undecided">Undecided (pending + hold)</option>
-                  <option value="pending">Pending only</option>
-                  <option value="advance">Advanced</option>
-                  <option value="hold">Hold</option>
-                  <option value="reject">Rejected</option>
-                </select>
-              </label>
+              {deliberationMode ? (
+                <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
+                  Committee decision
+                  <select
+                    value={filters.decision}
+                    onChange={e => setFilters(f => ({ ...f, decision: e.target.value }))}
+                    style={filterSelectStyle}
+                  >
+                    <option value="all">All decisions</option>
+                    <option value="undecided">Undecided (pending + hold)</option>
+                    <option value="pending">Pending only</option>
+                    <option value="advance">Advanced</option>
+                    <option value="hold">Hold</option>
+                    <option value="reject">Rejected</option>
+                  </select>
+                </label>
+              ) : null}
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${css.borderLight}`, paddingTop: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${t.border}`, paddingTop: 10 }}>
                 <button
                   type="button"
                   onClick={() => setFilters({ ...defaultFilters })}
-                  style={{ background: "none", border: "none", color: css.greenDark, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}
+                  style={{ background: "none", border: "none", color: t.accent, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}
                 >
                   Clear all
                 </button>
                 <button
                   type="button"
                   onClick={() => setFiltersOpen(false)}
-                  style={{ background: css.greenDark, border: "none", color: "#FFF", padding: "6px 14px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                  style={{ background: t.accent, border: "none", color: deliberationMode ? "#0B1628" : "#FFF", padding: "6px 14px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
                 >
                   Done
                 </button>
@@ -1041,61 +1185,41 @@ export default function ScoreboardPage() {
         </div>
       </div>
 
-      {isAdmin && !loading && candidates.length > 0 && !deliberationApiReady ? (
-        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "0 0 8px", color: "#9B5C00", fontSize: 13, fontWeight: 600, lineHeight: 1.45 }}>
-          Committee decisions need the updated API. Local dev: use <code style={{ fontSize: 12 }}>VITE_API_URL=http://localhost:3000</code> in <code style={{ fontSize: 12 }}>client/.env</code> and restart Vite. Production: redeploy the server on Render.
-        </div>
-      ) : null}
-
       {decisionError ? (
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "0 0 8px", color: css.red, fontSize: 13, fontWeight: 600 }}>
           {decisionError}
         </div>
       ) : null}
 
-      {deliberationMode && isAdmin ? (
-        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "0 0 10px", fontSize: 12, color: css.textGray }}>
-          Live mode: use <strong style={{ color: css.textDark }}>G</strong> advance, <strong style={{ color: css.textDark }}>Y</strong> hold, <strong style={{ color: css.textDark }}>R</strong> reject · arrow keys to move · auto-refreshes every 5s
-        </div>
-      ) : null}
-
-      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, display: "grid", gridTemplateColumns: "repeat(6, 1fr)", padding: "18px 20px", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
-        {[
-          ["APPLICANTS", data.stats?.applicants ?? "—"],
-          ["REVIEWED", data.stats?.reviewed ?? "—"],
-          ["ADVANCED", data.stats?.advanced ?? "—"],
-          ["HOLD", data.stats?.hold ?? "—"],
-          ["REJECTED", data.stats?.rejected ?? "—"],
-          ["AVG SCORE", data.stats?.avgScore ?? "—"],
-        ].map(([label, value], index) => (
-          <div key={label} style={{ borderRight: index < 5 ? `1px solid ${css.borderLight}` : "none", padding: index ? "4px 0 4px 16px" : "4px 0" }}>
-            <div style={{ fontSize: 24, fontFamily: "'DM Sans', sans-serif", color: css.textDark, lineHeight: 1.1, fontWeight: 700 }}>{value}</div>
-            <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.06em", marginTop: 4 }}>{label}</div>
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 10, display: "grid", gridTemplateColumns: `repeat(${statRows.length}, 1fr)`, padding: "18px 20px", boxShadow: deliberationMode ? "none" : "0 1px 2px rgba(0,0,0,0.02)" }}>
+        {statRows.map(([label, value], index) => (
+          <div key={label} style={{ borderRight: index < statRows.length - 1 ? `1px solid ${t.border}` : "none", padding: index ? "4px 0 4px 16px" : "4px 0" }}>
+            <div style={{ fontSize: 24, fontFamily: "'DM Sans', sans-serif", color: t.statValue, lineHeight: 1.1, fontWeight: 700 }}>{value}</div>
+            <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 700, letterSpacing: "0.06em", marginTop: 4 }}>{label}</div>
           </div>
         ))}
       </div>
 
       <div style={{ padding: "0 0 48px", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
-        <div style={{ border: `1px solid ${css.borderLight}`, borderRadius: 10, overflow: "hidden", background: css.cardWhite, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: gridColumns, padding: "16px 20px", borderBottom: `2px solid ${css.borderLight}`, color: css.textGray, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
-          <div aria-hidden />
+        <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: "hidden", background: t.cardBg, boxShadow: deliberationMode ? "none" : "0 1px 2px rgba(0,0,0,0.02)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: gridColumns, padding: "16px 20px", borderBottom: `2px solid ${t.border}`, color: t.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
+          {deliberationMode ? <div aria-hidden /> : null}
           <div>#</div>
           <div>CANDIDATE</div>
-          <div>DECISION</div>
           <div>SCORE</div>
-          <div>COMMITTEE</div>
+          {deliberationMode ? <div>COMMITTEE DECISION</div> : null}
           <div style={{ textAlign: "right" }}>ACTIONS</div>
         </div>
 
         <div>
-        {loading && <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading candidates...</div>}
+        {loading && <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading candidates...</div>}
 
         {!loading && candidates.length > 0 && filteredCandidates.length === 0 && (
-          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No candidates match these filters.</div>
+          <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>No candidates match these filters.</div>
         )}
 
         {!loading && candidates.length === 0 && (
-          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No candidates yet.</div>
+          <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>No candidates yet.</div>
         )}
 
         {!loading && filteredCandidates.map((c, index) => {
@@ -1107,6 +1231,12 @@ export default function ScoreboardPage() {
           const decisionStyle = DECISION_STYLE[decisionStatus];
           const isFocused = deliberationMode && focusedCandidateId === c.id;
           const rowSaving = savingDecisionId === c.id;
+          const rowBg = isFocused
+            ? t.rowFocus
+            : deliberationMode && decisionStyle.row !== "transparent"
+              ? decisionStyle.row
+              : t.rowBg;
+
           return (
           <div
             key={`${listMotionKey}-${c.id}`}
@@ -1114,27 +1244,29 @@ export default function ScoreboardPage() {
             style={{
               display: "grid",
               gridTemplateColumns: gridColumns,
-              padding: deliberationMode ? "18px 20px" : "20px 20px",
-              borderBottom: `1px solid ${css.borderLight}`,
+              padding: "20px 20px",
+              borderBottom: `1px solid ${t.border}`,
               alignItems: "center",
-              background: isFocused ? "rgba(40, 98, 65, 0.05)" : decisionStyle.row !== "transparent" ? decisionStyle.row : css.cardWhite,
-              outline: isFocused ? `2px solid ${css.greenDark}` : "none",
+              background: rowBg,
+              outline: isFocused ? `2px solid ${t.accent}` : "none",
               outlineOffset: -2,
               animation: `scoreboardRowEnter ${enterMs}ms cubic-bezier(0.22, 1, 0.36, 1) ${delay}ms backwards`,
             }}
           >
-            <div style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: decisionStatus === "pending" ? "transparent" : decisionStyle.color, minHeight: 44 }} aria-hidden />
+            {deliberationMode ? (
+              <div style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: decisionStatus === "pending" ? "transparent" : decisionStyle.color, minHeight: 44 }} aria-hidden />
+            ) : null}
 
-            <div style={{ color: css.greenDark, fontWeight: 700, fontSize: 14 }}>{index + 1}</div>
+            <div style={{ color: t.accent, fontWeight: 700, fontSize: 14 }}>{index + 1}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-              <CandidateAvatar name={c.name} headshot={c.headshot} size={deliberationMode ? 48 : 44} background={css.greenDark} />
+              <CandidateAvatar name={c.name} headshot={c.headshot} size={44} background={deliberationMode ? t.accent : css.greenDark} />
               <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                <span style={{ fontSize: deliberationMode ? 17 : 16, fontWeight: 500, fontFamily: serifFont, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
-                <span style={{ fontSize: 13, color: "#888", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <span style={{ fontSize: 16, fontWeight: 500, fontFamily: serifFont, color: t.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
+                <span style={{ fontSize: 13, color: t.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {[c.major, c.year, c.gpa ? `GPA ${c.gpa}` : ""].filter(Boolean).join(" · ")}
                 </span>
-                {getCommitteeLinkWarning(c) ? (
+                {deliberationMode && getCommitteeLinkWarning(c) ? (
                   <span style={{ fontSize: 11, color: css.red, fontWeight: 600 }}>
                     {getCommitteeLinkWarning(c)}
                   </span>
@@ -1143,36 +1275,40 @@ export default function ScoreboardPage() {
             </div>
 
             <div>
-              <span style={{ background: decisionStyle.bg, color: decisionStyle.color, border: `1px solid ${decisionStyle.bd}`, borderRadius: 999, fontSize: 10, fontWeight: 800, padding: "4px 9px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                {decisionStyle.label}
-              </span>
-            </div>
-
-            <div>
-              <div style={{ color: scoreColor(c.score), fontSize: deliberationMode ? 20 : 18, fontFamily: serifFont, fontWeight: 600 }}>{formatScore(c.score)}%</div>
-              <div style={{ fontSize: 11, color: css.textGray }}>
+              <div style={{ color: scoreColor(c.score), fontSize: 18, fontFamily: serifFont, fontWeight: 600 }}>{formatScore(c.score)}%</div>
+              <div style={{ fontSize: 11, color: t.textMuted }}>
                 {formatScore(getAggregateScore(c))} raw pts · {c.numReviews ?? c.reviews?.length ?? 0} {(c.numReviews ?? c.reviews?.length ?? 0) === 1 ? "review" : "reviews"}
+                {equalizeActive ? " · equalized" : ""}
               </div>
             </div>
 
-            <div>
-              {isAdmin ? (
-                <DecisionButtons
-                  status={decisionStatus}
-                  compact={!deliberationMode}
-                  disabled={!canRecordCommitteeDecision(c)}
-                  saving={rowSaving}
-                  onSelect={decision => saveDecision(c, decision)}
-                />
-              ) : (
-                <span style={{ fontSize: 12, color: css.textGray }}>Admin only</span>
-              )}
-            </div>
+            {deliberationMode ? (
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}
+                onClick={e => e.stopPropagation()}
+                onKeyDown={e => e.stopPropagation()}
+              >
+                <span style={{ background: decisionStyle.bg, color: decisionStyle.color, border: `1px solid ${decisionStyle.bd}`, borderRadius: 999, fontSize: 10, fontWeight: 800, padding: "4px 9px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                  {decisionStyle.label}
+                </span>
+                {isStaff ? (
+                  <DecisionButtons
+                    status={decisionStatus}
+                    dark={deliberationMode}
+                    disabled={!canRecordCommitteeDecision(c)}
+                    saving={rowSaving}
+                    onSelect={decision => saveDecision(c, decision)}
+                  />
+                ) : (
+                  <span style={{ fontSize: 12, color: t.textMuted }}>Staff only</span>
+                )}
+              </div>
+            ) : null}
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button
                 onClick={() => setSelectedCandidate(c)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: css.greenDark, color: "#FFF", border: "none", fontSize: 13, cursor: "pointer" }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: deliberationMode ? t.accent : css.greenDark, color: deliberationMode ? "#0B1628" : "#FFF", border: "none", fontSize: 13, cursor: "pointer" }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                 Details
@@ -1180,7 +1316,7 @@ export default function ScoreboardPage() {
               <button
                 type="button"
                 onClick={() => navigate(`/scoreboard/${c.id}/application`)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: "#FFF", color: "#333", border: `1px solid ${css.borderLight}`, fontSize: 13, cursor: "pointer" }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: deliberationMode ? t.btnGhostBg : "#FFF", color: deliberationMode ? t.text : "#333", border: `1px solid ${t.border}`, fontSize: 13, cursor: "pointer" }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
                 Application
@@ -1196,9 +1332,10 @@ export default function ScoreboardPage() {
 
       {selectedCandidate && (
         <ScorecardModal
-          candidate={selectedCandidate}
+          candidate={candidates.find(c => c.id === selectedCandidate.id) ?? selectedCandidate}
           metrics={metrics}
           maxPerCategory={maxPerCategory}
+          equalized={equalizeActive}
           onClose={() => setSelectedCandidate(null)}
         />
       )}
