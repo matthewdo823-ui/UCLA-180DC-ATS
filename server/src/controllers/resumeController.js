@@ -907,7 +907,8 @@ exports.getScoreboard = async (req, res) => {
                     pronouns,
                     linkedin,
                     gm,
-                    newbie_training
+                    newbie_training,
+                    headshot
                 )
             `)
             .eq('cycle_id', activeCycleId)
@@ -931,7 +932,8 @@ exports.getScoreboard = async (req, res) => {
                         pronouns,
                         linkedin,
                         gm,
-                        newbie_training
+                        newbie_training,
+                        headshot
                     )
                 )
             `)
@@ -961,6 +963,7 @@ exports.getScoreboard = async (req, res) => {
                 linkedin: candidate.linkedin || '',
                 gm: candidate.gm || '',
                 newbieTraining: candidate.newbie_training || '',
+                headshot: candidate.headshot || '',
                 createdAt: resume.created_at,
                 totalScore: 0,
                 totalNormalized: 0,
@@ -1003,6 +1006,7 @@ exports.getScoreboard = async (req, res) => {
                     linkedin: candidate.linkedin || '',
                     gm: candidate.gm || '',
                     newbieTraining: candidate.newbie_training || '',
+                    headshot: candidate.headshot || '',
                     createdAt: null,
                     totalScore: 0,
                     totalNormalized: 0,
@@ -1060,6 +1064,7 @@ exports.getScoreboard = async (req, res) => {
                 linkedin: c.linkedin,
                 gm: c.gm,
                 newbieTraining: c.newbieTraining,
+                headshot: c.headshot || '',
                 aggregateScore: aggregateScore === null ? null : Number(aggregateScore.toFixed(1)),
                 normalizedScore: normalizedScore === null ? null : Number(normalizedScore.toFixed(1)),
                 maxScore: null,

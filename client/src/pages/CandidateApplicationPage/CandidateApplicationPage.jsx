@@ -1,16 +1,25 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
+import { isDriveUrl } from "../../components/AuthedDriveImage/AuthedDriveImage";
+import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
 import PdfViewer from "../../components/PdfViewer/PdfViewer";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import { serifFont } from "../../theme/typography";
-import { formatDate, formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
+import { formatDate, formatScore, hasNumericScore, titleCase } from "../../utils/format";
 
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
+
+const ROUND_1_LABEL = "Round 1: Resume Screen";
+
+const UPCOMING_EVALUATION_ROUNDS = [
+  { id: "round-2", label: "Round 2: First interview" },
+  { id: "round-3", label: "Round 3: Final round" },
+];
 
 function hasText(value) {
   return typeof value === "string" && value.trim().length > 0;
@@ -18,59 +27,6 @@ function hasText(value) {
 
 function displayValue(value, fallback = "Not provided") {
   return hasText(value) ? value.trim() : fallback;
-}
-
-function isDriveUrl(url) {
-  return hasText(url) && /drive\.google\.com|docs\.google\.com/i.test(url);
-}
-
-function AuthedDriveImage({ fileUrl, authToken, alt, fallback }) {
-  const [src, setSrc] = useState(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (!isDriveUrl(fileUrl) || !authToken) {
-      setFailed(true);
-      return undefined;
-    }
-
-    let objectUrl;
-    let cancelled = false;
-    const proxyUrl = `${API}/view/image?url=${encodeURIComponent(fileUrl.trim())}`;
-
-    (async () => {
-      try {
-        const res = await fetch(proxyUrl, {
-          headers: { Authorization: `Bearer ${authToken}` },
-        });
-        if (!res.ok) throw new Error("Failed to load image");
-        const blob = await res.blob();
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setSrc(objectUrl);
-        setFailed(false);
-      } catch {
-        if (!cancelled) setFailed(true);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [authToken, fileUrl]);
-
-  if (src && !failed) {
-    return (
-      <img
-        src={src}
-        alt={alt}
-        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-      />
-    );
-  }
-
-  return fallback;
 }
 
 function SectionCard({ title, children }) {
@@ -110,6 +66,52 @@ function EssayBlock({ label, text }) {
       <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: hasText(text) ? css.textDark : css.textGray, whiteSpace: "pre-wrap" }}>
         {hasText(text) ? text.trim() : "Not provided"}
       </p>
+    </div>
+  );
+}
+
+function RoundEvaluationPanel({ title, status = "upcoming", children }) {
+  const isActive = status === "active";
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${isActive ? "rgba(40, 98, 65, 0.22)" : css.borderLight}`,
+        borderRadius: 10,
+        overflow: "hidden",
+        background: isActive ? "#FAFCF8" : "#FBFBFB",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: "12px 16px",
+          borderBottom: `1px solid ${css.borderLight}`,
+          background: isActive ? cardPale : "#F5F5F5",
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: isActive ? cardGreen : css.textDark }}>
+          {title}
+        </p>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            padding: "4px 9px",
+            borderRadius: 20,
+            background: isActive ? "rgba(40, 98, 65, 0.12)" : "rgba(0,0,0,0.04)",
+            color: isActive ? cardGreen : css.textGray,
+          }}
+        >
+          {isActive ? "Completed" : "Upcoming"}
+        </span>
+      </div>
+      <div style={{ padding: "16px" }}>{children}</div>
     </div>
   );
 }
@@ -225,16 +227,15 @@ export default function CandidateApplicationPage() {
             <aside style={{ position: "sticky", top: 16 }}>
               <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
                 <div style={{ background: cardGreen, padding: "22px 20px 18px", textAlign: "center" }}>
-                  <div style={{ width: 132, height: 132, borderRadius: "50%", margin: "0 auto 14px", overflow: "hidden", border: `3px solid ${cardMint}`, background: cardMint }}>
-                    <AuthedDriveImage
-                      fileUrl={candidate.headshot}
-                      authToken={token}
-                      alt={`${candidate.name} headshot`}
-                      fallback={(
-                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, fontWeight: 700, color: cardPale }}>
-                          {getInitials(candidate.name)}
-                        </div>
-                      )}
+                  <div style={{ margin: "0 auto 14px", width: 132 }}>
+                    <CandidateAvatar
+                      name={candidate.name}
+                      headshot={candidate.headshot}
+                      size={132}
+                      background={cardMint}
+                      color={cardPale}
+                      border={`3px solid ${cardMint}`}
+                      fontSize={34}
                     />
                   </div>
                   <h1 style={{ margin: 0, fontFamily: serifFont, fontSize: 24, fontWeight: 600, color: cardPale, lineHeight: 1.15 }}>
@@ -254,17 +255,33 @@ export default function CandidateApplicationPage() {
                       {tag}
                     </span>
                   ))}
-                  {hasNumericScore(scoring?.normalizedScore) && (
-                    <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${css.borderLight}` }}>
-                      <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", color: css.textGray }}>ROUND 1 SCORE</p>
-                      <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>
-                        {formatScore(scoring.normalizedScore)}<span style={{ fontSize: 14 }}>%</span>
+                  <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${css.borderLight}`, display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div>
+                      <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
+                        {ROUND_1_LABEL}
                       </p>
-                      <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
-                        {formatScore(scoring.aggregateScore)} raw pts · {scoring.numReviews} {scoring.numReviews === 1 ? "review" : "reviews"}
-                      </p>
+                      {hasNumericScore(scoring?.normalizedScore) ? (
+                        <>
+                          <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>
+                            {formatScore(scoring.normalizedScore)}<span style={{ fontSize: 14 }}>%</span>
+                          </p>
+                          <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
+                            {formatScore(scoring.aggregateScore)} raw pts · {scoring.numReviews} {scoring.numReviews === 1 ? "review" : "reviews"}
+                          </p>
+                        </>
+                      ) : (
+                        <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>No score yet</p>
+                      )}
                     </div>
-                  )}
+                    {UPCOMING_EVALUATION_ROUNDS.map(round => (
+                      <div key={round.id}>
+                        <p style={{ margin: "0 0 2px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
+                          {round.label}
+                        </p>
+                        <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>—</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </aside>
@@ -325,47 +342,73 @@ export default function CandidateApplicationPage() {
                 )}
               </SectionCard>
 
-              <SectionCard title="Review summary">
-                {scoring?.numReviews > 0 ? (
-                  <>
-                    {(scoring.metrics || []).map(metric => (
-                      <CategoryRow
-                        key={metric}
-                        metric={metric}
-                        value={scoring.categoryScores?.[metric]}
-                        maxPerCategory={scoring.maxPerCategory}
-                      />
-                    ))}
-
-                    <div style={{ marginTop: 18, borderTop: `1px solid ${css.borderLight}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-                      {(scoring.reviews || []).map((review, index) => (
-                      <div key={review.id} style={{ padding: "12px 14px", background: "#F8FAF6", borderRadius: 8, border: `1px solid ${css.borderLight}` }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: review.notes ? 8 : 0 }}>
+              <SectionCard title="Evaluations">
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <RoundEvaluationPanel title={ROUND_1_LABEL} status="active">
+                    {scoring?.numReviews > 0 ? (
+                      <>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
                           <div>
-                            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: css.textDark }}>
-                              {review.reviewerName || review.reviewerEmail || `Reviewer ${index + 1}`}
+                            <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
+                              Normalized score
                             </p>
-                            <p style={{ margin: "2px 0 0", fontSize: 12, color: css.textGray }}>
-                              {formatDate(review.submittedAt, { style: "datetime" })}
-                              {review.decision && review.decision !== "pass" ? ` · ${titleCase(review.decision)}` : ""}
+                            <p style={{ margin: 0, fontSize: 26, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>
+                              {formatScore(scoring.normalizedScore)}<span style={{ fontSize: 14 }}>%</span>
                             </p>
                           </div>
-                          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: cardGreen }}>
-                            {formatScore(review.normalizedScore)}% · {formatScore(review.score)} raw
+                          <p style={{ margin: 0, fontSize: 13, color: css.textGray, paddingTop: 14 }}>
+                            {formatScore(scoring.aggregateScore)} raw pts · {scoring.numReviews} {scoring.numReviews === 1 ? "review" : "reviews"}
                           </p>
                         </div>
-                        {hasText(review.notes) && (
-                          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: css.textDark, whiteSpace: "pre-wrap" }}>
-                            {review.notes.trim()}
-                          </p>
-                        )}
-                      </div>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <p style={{ margin: 0, fontSize: 14, color: css.textGray }}>No reviews yet</p>
-                )}
+
+                        {(scoring.metrics || []).map(metric => (
+                          <CategoryRow
+                            key={metric}
+                            metric={metric}
+                            value={scoring.categoryScores?.[metric]}
+                            maxPerCategory={scoring.maxPerCategory}
+                          />
+                        ))}
+
+                        <div style={{ marginTop: 18, borderTop: `1px solid ${css.borderLight}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+                          {(scoring.reviews || []).map((review, index) => (
+                            <div key={review.id} style={{ padding: "12px 14px", background: "#F8FAF6", borderRadius: 8, border: `1px solid ${css.borderLight}` }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: review.notes ? 8 : 0 }}>
+                                <div>
+                                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: css.textDark }}>
+                                    {review.reviewerName || review.reviewerEmail || `Reviewer ${index + 1}`}
+                                  </p>
+                                  <p style={{ margin: "2px 0 0", fontSize: 12, color: css.textGray }}>
+                                    {formatDate(review.submittedAt, { style: "datetime" })}
+                                    {review.decision && review.decision !== "pass" ? ` · ${titleCase(review.decision)}` : ""}
+                                  </p>
+                                </div>
+                                <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: cardGreen }}>
+                                  {formatScore(review.normalizedScore)}% · {formatScore(review.score)} raw
+                                </p>
+                              </div>
+                              {hasText(review.notes) && (
+                                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: css.textDark, whiteSpace: "pre-wrap" }}>
+                                  {review.notes.trim()}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p style={{ margin: 0, fontSize: 14, color: css.textGray }}>No resume screen reviews yet.</p>
+                    )}
+                  </RoundEvaluationPanel>
+
+                  {UPCOMING_EVALUATION_ROUNDS.map(round => (
+                    <RoundEvaluationPanel key={round.id} title={round.label} status="upcoming">
+                      <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
+                        Scoring and feedback for this round will appear here once evaluations begin.
+                      </p>
+                    </RoundEvaluationPanel>
+                  ))}
+                </div>
               </SectionCard>
             </div>
           </div>
