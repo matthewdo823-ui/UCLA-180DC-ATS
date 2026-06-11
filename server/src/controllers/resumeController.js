@@ -18,6 +18,7 @@ const {
 } = require('../utils/rubric');
 const { firstRel } = require('../utils/supabaseHelpers');
 const { getUserName } = require('../utils/userDisplay');
+const { respondWithServerError } = require('../utils/httpErrors');
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
@@ -426,37 +427,64 @@ exports.patchMyReview = async (req, res) => {
 
 exports.createCandidateFlag = async (req, res) => {
     const { candidate_id, resume_id, reason } = req.body;
-    let candidateId = candidate_id;
 
-    if (!candidateId && resume_id) {
-        const { data, error } = await supabase
-            .from('resumes')
-            .select('candidate_id')
-            .eq('id', resume_id)
+    try {
+        const activeCycleId = await getActiveCycleId();
+        if (!activeCycleId) {
+            return res.status(503).json({ error: "No active recruiting cycle" });
+        }
+
+        let candidateId = candidate_id;
+
+        if (!candidateId && resume_id) {
+            const { data, error } = await supabase
+                .from('resumes')
+                .select('candidate_id')
+                .eq('id', resume_id)
+                .maybeSingle();
+
+            if (error) return respondWithServerError(res, error, 'createCandidateFlag resume lookup');
+            if (!data) {
+                return res.status(404).json({ error: "Resume not found" });
+            }
+            candidateId = data.candidate_id;
+        }
+
+        if (!candidateId) {
+            return res.status(400).json({ error: "candidate_id or a linked resume_id is required" });
+        }
+
+        const { data: candidate, error: candidateError } = await supabase
+            .from('candidates')
+            .select('id, cycle_id')
+            .eq('id', candidateId)
             .maybeSingle();
 
-        if (error) return res.status(500).json({ error: error.message });
-        candidateId = data?.candidate_id;
+        if (candidateError) return respondWithServerError(res, candidateError, 'createCandidateFlag candidate lookup');
+        if (!candidate) {
+            return res.status(404).json({ error: "Candidate not found" });
+        }
+        if (candidate.cycle_id !== activeCycleId) {
+            return res.status(400).json({ error: "Candidate is not in the active cycle" });
+        }
+
+        const { data, error } = await supabase
+            .from('candidate_flags')
+            .insert({
+                candidate_id: candidateId,
+                resume_id: resume_id || null,
+                flagged_by: req.user?.user_id,
+                reason: reason || "Flagged for admin review",
+            })
+            .select('id')
+            .single();
+
+        if (error) return respondWithServerError(res, error, 'createCandidateFlag insert');
+
+        return res.status(201).json({ success: true, flag: data });
+    } catch (err) {
+        return respondWithServerError(res, err, 'createCandidateFlag');
     }
-
-    if (!candidateId) {
-        return res.status(400).json({ error: "candidate_id or a linked resume_id is required" });
-    }
-
-    const { data, error } = await supabase
-        .from('candidate_flags')
-        .insert({
-            candidate_id: candidateId,
-            resume_id: resume_id || null,
-            flagged_by: req.user?.user_id,
-            reason: reason || "Flagged for admin review",
-        })
-        .select('id')
-        .single();
-
-    if (error) return res.status(500).json({ error: error.message });
-
-    return res.status(201).json({ success: true, flag: data });
 };
 
 exports.getCandidateFlags = async (req, res) => {
@@ -576,25 +604,41 @@ exports.resolveCandidateFlag = async (req, res) => {
 
 // Gets file link from resume 
 exports.getResumeFile = async (req, res) => {
-    const { data, error } = await supabase
-        .from('resumes')
-        .select('file_url')
-        .eq('id', req.params.id)
-        .single();
+    try {
+        const activeCycleId = await getActiveCycleId();
+        if (!activeCycleId) {
+            return res.status(503).json({ error: "No active recruiting cycle" });
+        }
 
-    if (error) return res.status(404).json({ error: error.message });
+        const { data, error } = await supabase
+            .from('resumes')
+            .select('file_url, candidates ( cycle_id )')
+            .eq('id', req.params.id)
+            .maybeSingle();
 
-    if (!isGoogleDriveFileUrl(data.file_url)) {
-        return res.status(400).json({ error: "Resume file must be a Google Drive link" });
+        if (error) return respondWithServerError(res, error, 'getResumeFile');
+        if (!data) {
+            return res.status(404).json({ error: "Resume not found" });
+        }
+
+        const candidate = firstRel(data.candidates);
+        if (!candidate || candidate.cycle_id !== activeCycleId) {
+            return res.status(400).json({ error: "Candidate is not in the active cycle" });
+        }
+
+        if (!isGoogleDriveFileUrl(data.file_url)) {
+            return res.status(400).json({ error: "Resume file must be a Google Drive link" });
+        }
+
+        const fileID = extractDriveFileID(data.file_url);
+        const accessable_file_url = toDownloadURL(fileID);
+
+        return res.json({
+            file_url: accessable_file_url,
+        });
+    } catch (err) {
+        return respondWithServerError(res, err, 'getResumeFile');
     }
-
-    const fileID = extractDriveFileID(data.file_url);
-    const accessable_file_url = toDownloadURL(fileID);
-
-    return res.json({
-        ...data,
-        "file_url": accessable_file_url
-    });
 };
 
 // Reverse proxy for file streaming (streams drive pdf to frontend)
