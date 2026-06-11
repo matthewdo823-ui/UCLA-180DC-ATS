@@ -1,4 +1,5 @@
 const { syncFormResponsesToDatabase, isSyncConfigured } = require("../services/formsSyncService");
+const { respondWithServerError } = require("../utils/httpErrors");
 
 function verifyCronSecret(req, res) {
   const expected = process.env.CRON_SECRET;
@@ -30,7 +31,6 @@ exports.syncForms = async (req, res) => {
       cycles: result.cycles,
     });
   } catch (err) {
-    console.error("[formsSync] Cron sync failed:", err);
-    return res.status(500).json({ error: err.message || "Form sync failed" });
+    return respondWithServerError(res, err, "syncForms", "Form sync failed");
   }
 };

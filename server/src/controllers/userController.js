@@ -2,6 +2,7 @@ const supabase = require('../config/supabase');
 const { USER_FIELDS } = require('../middleware/authMiddleware');
 const { VALID_ROLES } = require('../utils/auth');
 const { serializeUser } = require('../utils/userDisplay');
+const { respondWithServerError } = require('../utils/httpErrors');
 
 exports.listUsers = async (req, res) => {
     try {
@@ -14,8 +15,7 @@ exports.listUsers = async (req, res) => {
 
         res.json({ users: (users || []).map(serializeUser) });
     } catch (err) {
-        console.error('List users error:', err);
-        res.status(500).json({ error: err.message });
+        return respondWithServerError(res, err, 'listUsers');
     }
 };
 
@@ -68,7 +68,6 @@ exports.updateUserRole = async (req, res) => {
 
         res.json({ user: serializeUser(updatedUser) });
     } catch (err) {
-        console.error('Update user role error:', err);
-        res.status(500).json({ error: err.message });
+        return respondWithServerError(res, err, 'updateUserRole');
     }
 };

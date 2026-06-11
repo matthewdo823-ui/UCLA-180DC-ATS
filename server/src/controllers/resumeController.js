@@ -115,7 +115,7 @@ exports.getNextResume = async (req, res) => {
             .eq('graded_by', gradedBy)
             .eq('cycle_id', screening.cycle.id);
 
-        if (reviewedError) return res.status(500).json({ error: reviewedError.message });
+        if (reviewedError) return respondWithServerError(res, reviewedError, 'getNextResume reviewed');
         reviewedResumeIds = [...new Set((reviewedRows || []).map((row) => row.resume_id).filter(Boolean))];
     }
     const reviewedResumeIdSet = new Set(reviewedResumeIds);
@@ -135,7 +135,7 @@ exports.getNextResume = async (req, res) => {
 
     const { data: resumeCandidates, error } = await query.limit(100);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithServerError(res, error, 'getNextResume');
 
     for (const row of resumeCandidates || []) {
         if (reviewedResumeIdSet.has(row.id)) {
@@ -187,7 +187,7 @@ exports.saveReview = async (req, res) => {
         .eq('id', resume_id)
         .maybeSingle();
 
-    if (resumeError) return res.status(500).json({ error: resumeError.message });
+    if (resumeError) return respondWithServerError(res, resumeError, 'saveReview resume');
     if (!resumeRow) return res.status(404).json({ error: "Resume not found" });
     if (resumeRow.cycle_id && resumeRow.cycle_id !== screening.cycle.id) {
         return res.status(400).json({ error: "Resume is not part of the active cycle" });
@@ -215,7 +215,7 @@ exports.saveReview = async (req, res) => {
         .eq('cycle_id', screening.cycle.id)
         .maybeSingle();
 
-    if (existingError) return res.status(500).json({ error: existingError.message });
+    if (existingError) return respondWithServerError(res, existingError, 'saveReview existing');
     if (existingReview) {
         return res.status(409).json({ error: "You have already reviewed this resume" });
     }
@@ -237,7 +237,7 @@ exports.saveReview = async (req, res) => {
         if (saveError.code === '23505' || /already reviewed/i.test(saveError.message || '')) {
             return res.status(409).json({ error: "You have already reviewed this resume" });
         }
-        return res.status(500).json({ error: saveError.message });
+        return respondWithServerError(res, saveError, 'saveReview rpc');
     }
 
     return res.json({ success: true });
@@ -282,7 +282,7 @@ exports.listMyReviews = async (req, res) => {
 
     const { data, error } = await reviewQuery;
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithServerError(res, error, 'listMyReviews');
 
     const reviews = (data || []).map((row) => mapMyReviewRow(row, rubricConfig));
 
@@ -325,7 +325,7 @@ exports.patchMyReview = async (req, res) => {
         .eq("graded_by", gradedBy)
         .maybeSingle();
 
-    if (fetchError) return res.status(500).json({ error: fetchError.message });
+    if (fetchError) return respondWithServerError(res, fetchError, 'patchMyReview fetch');
     if (!existing) {
         return res.status(404).json({ error: "Review not found" });
     }
@@ -361,7 +361,7 @@ exports.patchMyReview = async (req, res) => {
             .eq("id", existing.resume_id)
             .maybeSingle();
 
-        if (resumeErr) return res.status(500).json({ error: resumeErr.message });
+        if (resumeErr) return respondWithServerError(res, resumeErr, 'patchMyReview resume');
         if (!resumeRow?.candidate_id) {
             return res.status(400).json({ error: "Flagged resume is not linked to a candidate" });
         }
@@ -380,7 +380,7 @@ exports.patchMyReview = async (req, res) => {
         .eq("id", reviewId)
         .eq("graded_by", gradedBy);
 
-    if (updateError) return res.status(500).json({ error: updateError.message });
+    if (updateError) return respondWithServerError(res, updateError, 'patchMyReview update');
 
     if (flaggedResume) {
         const { error: flagError } = await supabase
@@ -394,7 +394,7 @@ exports.patchMyReview = async (req, res) => {
 
         if (flagError) {
             if (flagError.code !== "23505") {
-                return res.status(500).json({ error: flagError.message });
+                return respondWithServerError(res, flagError, 'patchMyReview flag insert');
             }
         }
     }
@@ -419,8 +419,8 @@ exports.patchMyReview = async (req, res) => {
         .eq("id", reviewId)
         .maybeSingle();
 
-    if (readError) return res.status(500).json({ error: readError.message });
-    if (!row) return res.status(500).json({ error: "Failed to load updated review" });
+    if (readError) return respondWithServerError(res, readError, 'patchMyReview read');
+    if (!row) return respondWithServerError(res, new Error('updated review missing'), 'patchMyReview read');
 
     return res.json({ review: mapMyReviewRow(row, cycleRubricConfig) });
 };
@@ -583,8 +583,7 @@ exports.getCandidateFlags = async (req, res) => {
             flags,
         });
     } catch (err) {
-        console.error("Candidate flags error:", err);
-        return res.status(500).json({ error: err.message });
+        return respondWithServerError(res, err, 'getCandidateFlags');
     }
 };
 
@@ -596,7 +595,7 @@ exports.resolveCandidateFlag = async (req, res) => {
         .select('id, status, resolved_at')
         .maybeSingle();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithServerError(res, error, 'resolveCandidateFlag');
     if (!data) return res.status(404).json({ error: "Flag not found" });
 
     return res.json({ success: true, flag: data });
@@ -897,8 +896,7 @@ exports.getScoreboard = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("Scoreboard error:", err);
-        res.status(500).json({ error: err.message });
+        return respondWithServerError(res, err, 'getScoreboard');
     }
 };
 
@@ -1063,7 +1061,6 @@ exports.getGraderScoreboard = async (req, res) => {
             graders,
         });
     } catch (err) {
-        console.error("Grader scoreboard error:", err);
-        res.status(500).json({ error: err.message });
+        return respondWithServerError(res, err, 'getGraderScoreboard');
     }
 };
