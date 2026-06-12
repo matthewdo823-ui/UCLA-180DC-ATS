@@ -611,3 +611,76 @@ exports.closeRound = async (req, res) => {
     return respondWithServerError(res, err, "closeRound");
   }
 };
+
+/** Close the active round and activate the next round in the same cycle (by sort_order). */
+exports.advanceToNextRound = async (req, res) => {
+  const roundId = String(req.params.roundId || "").trim();
+  if (!roundId) {
+    return res.status(400).json({ error: "roundId is required" });
+  }
+
+  try {
+    const { data: current, error: currentError } = await supabase
+      .from("rounds")
+      .select("*")
+      .eq("id", roundId)
+      .maybeSingle();
+
+    if (currentError) return respondWithServerError(res, currentError, "advanceToNextRound current");
+    if (!current) return res.status(404).json({ error: "Round not found" });
+    if (current.status !== "active") {
+      return res.status(400).json({ error: "Only the active round can be advanced" });
+    }
+
+    const { error: closeError } = await supabase
+      .from("rounds")
+      .update({ status: "closed" })
+      .eq("id", roundId);
+
+    if (closeError) return respondWithServerError(res, closeError, "advanceToNextRound close");
+
+    const { data: nextCandidates, error: nextError } = await supabase
+      .from("rounds")
+      .select("*")
+      .eq("cycle_id", current.cycle_id)
+      .gt("sort_order", current.sort_order)
+      .order("sort_order", { ascending: true })
+      .limit(1);
+
+    if (nextError) return respondWithServerError(res, nextError, "advanceToNextRound next");
+
+    const nextRound = nextCandidates?.[0] || null;
+    if (!nextRound) {
+      return res.json({
+        closedRound: mapRound({ ...current, status: "closed" }),
+        activatedRound: null,
+        message: "Round closed. There is no next round in this cycle.",
+      });
+    }
+
+    const { error: closeOthersError } = await supabase
+      .from("rounds")
+      .update({ status: "closed" })
+      .eq("cycle_id", current.cycle_id)
+      .eq("status", "active")
+      .neq("id", nextRound.id);
+
+    if (closeOthersError) return respondWithServerError(res, closeOthersError, "advanceToNextRound close others");
+
+    const { data: activated, error: activateError } = await supabase
+      .from("rounds")
+      .update({ status: "active" })
+      .eq("id", nextRound.id)
+      .select("*")
+      .single();
+
+    if (activateError) return respondWithServerError(res, activateError, "advanceToNextRound activate");
+
+    return res.json({
+      closedRound: mapRound({ ...current, status: "closed" }),
+      activatedRound: mapRound(activated),
+    });
+  } catch (err) {
+    return respondWithServerError(res, err, "advanceToNextRound");
+  }
+};

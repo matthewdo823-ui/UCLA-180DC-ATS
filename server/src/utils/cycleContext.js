@@ -85,6 +85,33 @@ async function getInterviewRoundForCycle(cycleId) {
   return data;
 }
 
+async function getRoundsForCycle(cycleId) {
+  if (!cycleId) return [];
+
+  const { data, error } = await supabase
+    .from("rounds")
+    .select("*")
+    .eq("cycle_id", cycleId)
+    .order("sort_order", { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+async function getActiveRoundForCycle(cycleId) {
+  if (!cycleId) return null;
+
+  const { data, error } = await supabase
+    .from("rounds")
+    .select("*")
+    .eq("cycle_id", cycleId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 async function requireActiveResumeScreening() {
   const cycle = await getActiveCycleRow();
   if (!cycle) {
@@ -120,6 +147,8 @@ module.exports = {
   getResumeScreenRoundForCycle,
   getActiveInterviewRound,
   getInterviewRoundForCycle,
+  getRoundsForCycle,
+  getActiveRoundForCycle,
   requireActiveResumeScreening,
   requireActiveInterviewRound,
 };
