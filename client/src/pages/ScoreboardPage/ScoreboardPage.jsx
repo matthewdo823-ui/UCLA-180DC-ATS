@@ -25,6 +25,25 @@ const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
 const cardLime = "#C0DD97";
 
+function formatRoundKind(type) {
+  if (type === "interview") return "Interview";
+  if (type === "resume_screen") return "Resume screen";
+  return "Round";
+}
+
+function formatRoundBanner(round) {
+  if (!round?.name) return "CANDIDATE SCORECARD";
+  return `${round.name.toUpperCase()} · ${formatRoundKind(round.type).toUpperCase()}`;
+}
+
+function formatRoundStatus(round) {
+  if (!round?.status) return "VIEW";
+  if (round.status === "active") return "ACTIVE";
+  if (round.status === "closed") return "CLOSED";
+  if (round.status === "draft") return "DRAFT";
+  return String(round.status).toUpperCase();
+}
+
 function scoreColor(score) {
   if (!hasNumericScore(score)) return css.textGray;
   const numeric = Number(score);
@@ -171,6 +190,30 @@ const PAGE_THEME = {
     selectText: "#E8EEF4",
   },
 };
+
+function DecisionReadonlyBadge({ status, dark }) {
+  const style = DECISION_STYLE[status] || DECISION_STYLE.pending;
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "7px 12px",
+        borderRadius: 8,
+        border: `1px solid ${style.bd}`,
+        background: style.bg,
+        color: style.color,
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: "0.02em",
+        whiteSpace: "nowrap",
+        opacity: dark ? 0.95 : 1,
+      }}
+    >
+      {style.label}
+    </span>
+  );
+}
 
 function DecisionButtons({ status, disabled, saving, onSelect, dark }) {
   const options = ["advance", "hold", "reject"];
@@ -437,7 +480,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4 }) {
   );
 }
 
-function ScorecardModal({ candidate, onClose, metrics = [], maxPerCategory = 4, equalized = false }) {
+function ScorecardModal({ candidate, onClose, round = null, metrics = [], maxPerCategory = 4, equalized = false }) {
   const [reviewersOpen, setReviewersOpen] = useState(false);
   const aggregateScore = getAggregateScore(candidate);
   const normalizedScore = getNormalizedScore(candidate);
@@ -455,12 +498,15 @@ function ScorecardModal({ candidate, onClose, metrics = [], maxPerCategory = 4, 
 
   if (!candidate) return null;
 
+  const roundBanner = formatRoundBanner(round);
+  const roundStatus = formatRoundStatus(round);
+
   return (
     <div
       className="scorecard-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label={`${candidate.name} Round 1 scorecard`}
+      aria-label={`${candidate.name} ${round?.name || "scorecard"}`}
       onMouseDown={event => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -500,17 +546,17 @@ function ScorecardModal({ candidate, onClose, metrics = [], maxPerCategory = 4, 
         </button>
 
         <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", color: "#FFF", textAlign: "center", margin: "0 0 10px" }}>
-          ROUND 1 · RESUME SCREEN
+          {roundBanner}
         </p>
 
         <div style={{ borderRadius: 16, border: `2px solid ${cardGreen}`, overflow: "hidden", background: "#FFF", boxShadow: "0 24px 70px rgba(0,0,0,0.26)" }}>
           <div style={{ background: cardGreen, padding: "18px 18px 16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
               <span style={{ background: "#04342C", color: "#9FE1CB", fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 20, letterSpacing: "0.04em" }}>
-                ROUND 1 · RESUME SCREEN
+                {roundBanner}
               </span>
               <span style={{ background: "rgba(255,255,255,0.1)", color: cardLime, fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 20, border: `1px solid ${cardMint}` }}>
-                ACTIVE
+                {roundStatus}
               </span>
             </div>
 
@@ -731,10 +777,10 @@ export default function ScoreboardPage() {
   }, [fetchScoreboard]);
 
   useEffect(() => {
-    if (!deliberationMode || viewingHistorical || !canDeliberate) return undefined;
+    if (!deliberationMode || viewingHistorical || !isStaff) return undefined;
     const interval = setInterval(() => fetchScoreboard({ silent: true }), 5000);
     return () => clearInterval(interval);
-  }, [canDeliberate, deliberationMode, fetchScoreboard, viewingHistorical]);
+  }, [deliberationMode, fetchScoreboard, isStaff, viewingHistorical]);
 
   useEffect(() => {
     if (!filtersOpen) return;
@@ -774,6 +820,7 @@ export default function ScoreboardPage() {
   const allRounds = data.context?.allRounds ?? [];
   const viewingHistorical = data.context?.viewingHistorical === true;
   const canDeliberate = data.context?.canDeliberate === true;
+  const canEditDeliberations = isAdmin && canDeliberate && !viewingHistorical;
   const canCloseRound = data.context?.canCloseRound === true;
   const undecidedCount = data.context?.undecidedCount ?? 0;
   const pastRounds = useMemo(
@@ -801,7 +848,7 @@ export default function ScoreboardPage() {
   }, [candidates, filters, searchQuery, sortBy, deliberationMode]);
 
   const saveDecision = useCallback(async (candidate, decision) => {
-    if (!isStaff || !deliberationMode || !canDeliberate) return;
+    if (!canEditDeliberations || !deliberationMode) return;
 
     const previousDecision = candidate.decision;
     const optimisticDecision = buildDecisionPayload(decision, candidate.decision?.notes || "");
@@ -844,7 +891,7 @@ export default function ScoreboardPage() {
       pendingDecisionIdsRef.current.delete(candidate.id);
       setSavingDecisionId(null);
     }
-  }, [authedFetch, canDeliberate, deliberationMode, isStaff]);
+  }, [authedFetch, canEditDeliberations, deliberationMode]);
 
   const handleAdvanceRound = useCallback(async () => {
     if (!isAdmin || !activeRound?.id || !canDeliberate) return;
@@ -895,7 +942,7 @@ export default function ScoreboardPage() {
   }, [candidates]);
 
   useEffect(() => {
-    if (!deliberationMode || !isStaff || !canDeliberate) return undefined;
+    if (!deliberationMode || !canEditDeliberations) return undefined;
     function onKeyDown(event) {
       const tag = event.target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
@@ -938,7 +985,7 @@ export default function ScoreboardPage() {
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [canDeliberate, deliberationMode, filteredCandidates, focusedCandidateId, isStaff, saveDecision]);
+  }, [canEditDeliberations, deliberationMode, filteredCandidates, focusedCandidateId, saveDecision]);
 
   useEffect(() => {
     if (!deliberationMode) {
@@ -1067,17 +1114,26 @@ export default function ScoreboardPage() {
                   <>
                     {viewingHistorical ? (
                       <>Archived committee decisions for <strong style={{ color: t.text }}>{activeRound?.name || "this round"}</strong>. Decisions persist after you leave deliberation or close the round.</>
-                    ) : activeRound?.type === "interview" ? (
-                      <>Interview deliberation — only candidates <strong style={{ color: t.text }}>advanced</strong> from resume screening appear here.</>
+                    ) : canEditDeliberations ? (
+                      activeRound?.type === "interview" ? (
+                        <>Interview deliberation — only candidates <strong style={{ color: t.text }}>advanced</strong> from resume screening appear here. Pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>; press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> on a focused row.</>
+                      ) : (
+                        <>Live committee — pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>. Click a row to focus it; press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> to decide (again to clear).</>
+                      )
                     ) : (
-                      <>Live committee — pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>. Click a row to focus it; press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> to decide (again to clear).</>
+                      <>Live deliberation for <strong style={{ color: t.text }}>{activeRound?.name || "this round"}</strong> — view only. Updates refresh automatically every few seconds.</>
                     )}
                     {" "}
-                    {!viewingHistorical ? (
+                    {!viewingHistorical && canEditDeliberations ? (
                       <>
                         Decisions save to <strong style={{ color: t.text }}>{activeRound?.name || "this round"}</strong>
-                        {canDeliberate ? " as you click and persist when you exit." : " (round closed — view only)."}
+                        {" "}as you click and persist when you exit.
                       </>
+                    ) : null}
+                    {!viewingHistorical && !canEditDeliberations && canDeliberate ? (
+                      <span style={{ display: "block", marginTop: 8, fontSize: 13, color: t.textMuted }}>
+                        Only admins can record or change committee decisions.
+                      </span>
                     ) : null}
                   </>
                 ) : (
@@ -1619,14 +1675,16 @@ export default function ScoreboardPage() {
                 onClick={e => e.stopPropagation()}
                 onKeyDown={e => e.stopPropagation()}
               >
-                {isStaff ? (
+                {canEditDeliberations ? (
                   <DecisionButtons
                     status={decisionStatus}
                     dark={deliberationMode}
-                    disabled={!canDeliberate || !canRecordCommitteeDecision(c)}
+                    disabled={!canRecordCommitteeDecision(c)}
                     saving={rowSaving}
                     onSelect={decision => saveDecision(c, decision)}
                   />
+                ) : isStaff ? (
+                  <DecisionReadonlyBadge status={decisionStatus} dark={deliberationMode} />
                 ) : (
                   <span style={{ fontSize: 12, color: t.textMuted }}>Staff only</span>
                 )}
@@ -1662,6 +1720,7 @@ export default function ScoreboardPage() {
       {selectedCandidate && (
         <ScorecardModal
           candidate={candidates.find(c => c.id === selectedCandidate.id) ?? selectedCandidate}
+          round={data.context?.resumeRound || activeRound}
           metrics={metrics}
           maxPerCategory={maxPerCategory}
           equalized={equalizeActive}
