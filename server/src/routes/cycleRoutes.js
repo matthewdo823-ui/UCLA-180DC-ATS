@@ -16,5 +16,6 @@ router.post("/cycles/:cycleId/activate", cycleController.activateCycle);
 router.patch("/rounds/:roundId", cycleController.patchRound);
 router.post("/rounds/:roundId/activate", cycleController.activateRound);
 router.post("/rounds/:roundId/close", cycleController.closeRound);
+router.post("/rounds/:roundId/advance-to-next", cycleController.advanceToNextRound);
 
 module.exports = router;
