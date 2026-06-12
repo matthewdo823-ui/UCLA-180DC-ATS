@@ -53,6 +53,28 @@ function countDecisions(candidates) {
   return counts;
 }
 
+/** Committee must mark every candidate Advance or Reject before closing a round. */
+function isFinalCommitteeDecision(status) {
+  const normalized = normalizeRoundDecision(status);
+  return normalized === "advance" || normalized === "reject";
+}
+
+function findIncompleteDeliberationCandidates(candidates) {
+  return (candidates || []).filter((c) => !isFinalCommitteeDecision(c?.decision?.status));
+}
+
+function summarizeIncompleteDeliberation(candidates) {
+  const incomplete = findIncompleteDeliberationCandidates(candidates);
+  let pending = 0;
+  let hold = 0;
+  incomplete.forEach((c) => {
+    const status = normalizeRoundDecision(c?.decision?.status);
+    if (status === "hold") hold += 1;
+    else pending += 1;
+  });
+  return { incompleteCount: incomplete.length, pendingCount: pending, holdCount: hold };
+}
+
 function escapeCsvField(value) {
   const str = value == null ? "" : String(value);
   if (/[",\n\r]/.test(str)) {
@@ -96,5 +118,8 @@ module.exports = {
   resolveCandidateDecision,
   deliberationHasStarted,
   countDecisions,
+  isFinalCommitteeDecision,
+  findIncompleteDeliberationCandidates,
+  summarizeIncompleteDeliberation,
   buildDecisionsCsv,
 };

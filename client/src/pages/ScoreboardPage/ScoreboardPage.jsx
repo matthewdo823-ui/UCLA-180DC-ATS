@@ -654,6 +654,7 @@ export default function ScoreboardPage() {
   const [decisionError, setDecisionError] = useState("");
   const [exportBusy, setExportBusy] = useState(false);
   const [advanceRoundBusy, setAdvanceRoundBusy] = useState(false);
+  const [viewingRoundId, setViewingRoundId] = useState(null);
   const [focusedCandidateId, setFocusedCandidateId] = useState(null);
   const filterWrapRef = useRef(null);
   /** After first data paint, bump key so sort/filter changes remount rows and replay stagger. */
@@ -662,38 +663,59 @@ export default function ScoreboardPage() {
 
   const fetchScoreboard = useCallback(async (opts = {}) => {
     const silent = opts.silent === true;
+    const roundId = opts.roundId !== undefined ? opts.roundId : viewingRoundId;
     if (!silent) setLoading(true);
     try {
-      const res = await authedFetch(`${API}/scoreboard`);
-      if (res.ok) {
-        const json = await res.json();
-        setData(prev => {
-          if (!silent || pendingDecisionIdsRef.current.size === 0) return json;
-          const mergedCandidates = (json.candidates || []).map(c => {
-            if (!pendingDecisionIdsRef.current.has(c.id)) return c;
-            const local = (prev.candidates || []).find(row => row.id === c.id);
-            return local ? { ...c, decision: local.decision } : c;
-          });
-          const counts = recomputeDecisionStats(mergedCandidates);
-          return {
-            ...json,
-            candidates: mergedCandidates,
-            stats: {
-              ...json.stats,
-              advanced: counts.advance,
-              hold: counts.hold,
-              rejected: counts.reject,
-              pending: counts.pending,
-            },
-          };
-        });
+      const query = roundId ? `?roundId=${encodeURIComponent(roundId)}` : "";
+      const res = await authedFetch(`${API}/scoreboard${query}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (!silent) {
+          setDecisionError(body.error || "Could not load scoreboard — is the API server running?");
+        }
+        return;
       }
+
+      const json = await res.json();
+      const hasDecisionSupport = (json.candidates || []).length === 0
+        || Object.prototype.hasOwnProperty.call(json.candidates[0], "decision");
+      if (!hasDecisionSupport) {
+        setDecisionError(
+          "Deliberation API is missing on the server — restart it with the latest code (cd server && node index.js) or redeploy Render."
+        );
+      } else if (!silent) {
+        setDecisionError("");
+      }
+
+      setData(prev => {
+        if (!silent || pendingDecisionIdsRef.current.size === 0) return json;
+        const mergedCandidates = (json.candidates || []).map(c => {
+          if (!pendingDecisionIdsRef.current.has(c.id)) return c;
+          const local = (prev.candidates || []).find(row => row.id === c.id);
+          return local ? { ...c, decision: local.decision } : c;
+        });
+        const counts = recomputeDecisionStats(mergedCandidates);
+        return {
+          ...json,
+          candidates: mergedCandidates,
+          stats: {
+            ...json.stats,
+            advanced: counts.advance,
+            hold: counts.hold,
+            rejected: counts.reject,
+            pending: counts.pending,
+          },
+        };
+      });
     } catch (err) {
       console.error("Failed to load scoreboard:", err);
+      if (!silent) {
+        setDecisionError("Could not reach the API — check that the server is running on port 3000.");
+      }
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [authedFetch]);
+  }, [authedFetch, viewingRoundId]);
 
   useEffect(() => {
     if (loading) return;
@@ -709,10 +731,10 @@ export default function ScoreboardPage() {
   }, [fetchScoreboard]);
 
   useEffect(() => {
-    if (!deliberationMode) return undefined;
+    if (!deliberationMode || viewingHistorical || !canDeliberate) return undefined;
     const interval = setInterval(() => fetchScoreboard({ silent: true }), 5000);
     return () => clearInterval(interval);
-  }, [deliberationMode, fetchScoreboard]);
+  }, [canDeliberate, deliberationMode, fetchScoreboard, viewingHistorical]);
 
   useEffect(() => {
     if (!filtersOpen) return;
@@ -747,8 +769,17 @@ export default function ScoreboardPage() {
   const metrics = useMemo(() => data.metrics ?? [], [data.metrics]);
   const maxPerCategory = data.maxPerCategory ?? 4;
   const activeRound = data.context?.round;
+  const liveActiveRound = data.context?.activeRound;
   const nextRound = data.context?.nextRound;
-  const canDeliberate = data.context?.canDeliberate !== false;
+  const allRounds = data.context?.allRounds ?? [];
+  const viewingHistorical = data.context?.viewingHistorical === true;
+  const canDeliberate = data.context?.canDeliberate === true;
+  const canCloseRound = data.context?.canCloseRound === true;
+  const undecidedCount = data.context?.undecidedCount ?? 0;
+  const pastRounds = useMemo(
+    () => allRounds.filter((round) => round.id !== liveActiveRound?.id),
+    [allRounds, liveActiveRound?.id]
+  );
   const scoreboardLabel = data.context?.cycle && activeRound
     ? `${data.context.cycle.name} · ${activeRound.name}${activeRound.status === "closed" ? " (closed)" : ""}`
     : "Candidate scoreboard";
@@ -816,11 +847,20 @@ export default function ScoreboardPage() {
   }, [authedFetch, canDeliberate, deliberationMode, isStaff]);
 
   const handleAdvanceRound = useCallback(async () => {
-    if (!isAdmin || !activeRound?.id) return;
+    if (!isAdmin || !activeRound?.id || !canDeliberate) return;
+
+    if (!canCloseRound) {
+      setDecisionError(
+        undecidedCount > 0
+          ? `Mark every candidate Advance or Reject before closing the round (${undecidedCount} still undecided).`
+          : "Mark every candidate Advance or Reject before closing the round."
+      );
+      return;
+    }
 
     const nextLabel = nextRound?.name || "the next stage";
     const confirmed = window.confirm(
-      `Close "${activeRound.name}" and open "${nextLabel}"?\n\nDeliberation decisions for this round are already saved. The scoreboard will refresh with the next round's candidate pool.`
+      `Close "${activeRound.name}" and open "${nextLabel}"?\n\nCandidates marked Advance will move to the next round. Deliberation decisions are saved and will remain available in past round views.`
     );
     if (!confirmed) return;
 
@@ -832,13 +872,15 @@ export default function ScoreboardPage() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || "Could not advance to next round");
       }
-      await fetchScoreboard();
+      setViewingRoundId(null);
+      setDeliberationMode(false);
+      await fetchScoreboard({ roundId: null });
     } catch (err) {
       setDecisionError(err.message || "Could not advance to next round");
     } finally {
       setAdvanceRoundBusy(false);
     }
-  }, [activeRound?.id, activeRound?.name, authedFetch, fetchScoreboard, isAdmin, nextRound?.name]);
+  }, [activeRound?.id, activeRound?.name, authedFetch, canCloseRound, canDeliberate, fetchScoreboard, isAdmin, nextRound?.name, undecidedCount]);
 
   const handleExport = useCallback((decision) => {
     setExportBusy(true);
@@ -931,15 +973,43 @@ export default function ScoreboardPage() {
   }
 
   function toggleDeliberationMode() {
+    if (viewingHistorical) return;
     setDeliberationMode(on => {
       if (on) {
         setFilters(f => ({ ...f, decision: "all" }));
         setFocusedCandidateId(null);
+        setDecisionError("");
+      } else {
+        fetchScoreboard();
       }
-      setDecisionError("");
       return !on;
     });
   }
+
+  const handleViewPastRound = useCallback((roundId) => {
+    if (!roundId) return;
+    setViewingRoundId(roundId);
+    setDeliberationMode(true);
+    setFilters(f => ({ ...f, decision: "all" }));
+    setFocusedCandidateId(null);
+    setDecisionError("");
+    fetchScoreboard({ roundId });
+  }, [fetchScoreboard]);
+
+  const handleReturnToCurrentRound = useCallback(() => {
+    setViewingRoundId(null);
+    setDeliberationMode(false);
+    setFilters(f => ({ ...f, decision: "all" }));
+    setFocusedCandidateId(null);
+    setDecisionError("");
+    fetchScoreboard({ roundId: null });
+  }, [fetchScoreboard]);
+
+  useEffect(() => {
+    if (viewingHistorical && !deliberationMode) {
+      setDeliberationMode(true);
+    }
+  }, [viewingHistorical, deliberationMode]);
 
   const statRows = deliberationMode
     ? [
@@ -995,14 +1065,20 @@ export default function ScoreboardPage() {
               <p style={{ margin: "10px 0 0", fontSize: 14, color: t.textMuted, lineHeight: 1.45 }}>
                 {deliberationMode ? (
                   <>
-                    {activeRound?.type === "interview" ? (
+                    {viewingHistorical ? (
+                      <>Archived committee decisions for <strong style={{ color: t.text }}>{activeRound?.name || "this round"}</strong>. Decisions persist after you leave deliberation or close the round.</>
+                    ) : activeRound?.type === "interview" ? (
                       <>Interview deliberation — only candidates <strong style={{ color: t.text }}>advanced</strong> from resume screening appear here.</>
                     ) : (
                       <>Live committee — pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>. Click a row to focus it; press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> to decide (again to clear).</>
                     )}
                     {" "}
-                    Decisions save to <strong style={{ color: t.text }}>{activeRound?.name || "this round"}</strong>
-                    {canDeliberate ? " as you click." : " (round closed — view only)."}
+                    {!viewingHistorical ? (
+                      <>
+                        Decisions save to <strong style={{ color: t.text }}>{activeRound?.name || "this round"}</strong>
+                        {canDeliberate ? " as you click and persist when you exit." : " (round closed — view only)."}
+                      </>
+                    ) : null}
                   </>
                 ) : (
                   <>Round 1 resume reviews — search by name, email, or phone, or use <strong style={{ fontWeight: 600, color: t.text }}>Sort &amp; filters</strong> to change order and narrow the table.</>
@@ -1027,9 +1103,43 @@ export default function ScoreboardPage() {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {isStaff ? (
             <>
+              {pastRounds.length > 0 ? (
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: "0.04em" }}>Past rounds</span>
+                  <select
+                    value={viewingRoundId || ""}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (!value) {
+                        handleReturnToCurrentRound();
+                        return;
+                      }
+                      handleViewPastRound(value);
+                    }}
+                    style={{
+                      padding: "7px 10px",
+                      borderRadius: 8,
+                      border: `1px solid ${t.border}`,
+                      background: t.selectBg,
+                      color: t.selectText,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      fontFamily: "'DM Sans', sans-serif",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <option value="">Current round</option>
+                    {pastRounds.map((round) => (
+                      <option key={round.id} value={round.id}>
+                        {round.name}{round.status === "closed" ? " (closed)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <button
                 type="button"
-                onClick={toggleDeliberationMode}
+                onClick={viewingHistorical ? handleReturnToCurrentRound : toggleDeliberationMode}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -1045,7 +1155,7 @@ export default function ScoreboardPage() {
                   fontFamily: "'DM Sans', sans-serif",
                 }}
               >
-                {deliberationMode ? "Exit" : "Deliberation"}
+                {viewingHistorical ? "Back to current" : deliberationMode ? "Exit" : "Deliberation"}
               </button>
               <button
                 type="button"
@@ -1108,12 +1218,18 @@ export default function ScoreboardPage() {
               >
                 Export rejected
               </button>
-              {canDeliberate && activeRound?.id ? (
+              {canDeliberate && activeRound?.id && !viewingHistorical ? (
                 <button
                   type="button"
-                  disabled={advanceRoundBusy}
+                  disabled={advanceRoundBusy || !canCloseRound}
                   onClick={handleAdvanceRound}
-                  title={nextRound ? `Close ${activeRound.name} and open ${nextRound.name}` : "Close this round"}
+                  title={
+                    !canCloseRound
+                      ? `Mark all ${undecidedCount || "remaining"} candidates Advance or Reject before closing`
+                      : nextRound
+                        ? `Close ${activeRound.name} and open ${nextRound.name}`
+                        : "Close this round"
+                  }
                   style={{
                     padding: "8px 12px",
                     borderRadius: 8,
@@ -1122,11 +1238,17 @@ export default function ScoreboardPage() {
                     color: t.accent,
                     fontSize: 12,
                     fontWeight: 700,
-                    cursor: advanceRoundBusy ? "not-allowed" : "pointer",
-                    opacity: advanceRoundBusy ? 0.6 : 1,
+                    cursor: advanceRoundBusy || !canCloseRound ? "not-allowed" : "pointer",
+                    opacity: advanceRoundBusy || !canCloseRound ? 0.55 : 1,
                   }}
                 >
-                  {advanceRoundBusy ? "Advancing…" : nextRound ? `Close & open ${nextRound.name}` : "Close round"}
+                  {advanceRoundBusy
+                    ? "Advancing…"
+                    : !canCloseRound
+                      ? `Close round (${undecidedCount} undecided)`
+                      : nextRound
+                        ? `Close & open ${nextRound.name}`
+                        : "Close round"}
                 </button>
               ) : null}
             </>
@@ -1300,6 +1422,35 @@ export default function ScoreboardPage() {
           )}
         </div>
       </div>
+
+      {viewingHistorical && activeRound ? (
+        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: deliberationMode ? "rgba(61,207,154,0.08)" : t.cardBg, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: t.text }}>
+              Viewing past round: {activeRound.name}
+            </p>
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: t.textMuted }}>
+              Committee decisions from this closed round are read-only.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleReturnToCurrentRound}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: `1px solid ${t.accent}`,
+              background: t.btnGhostBg,
+              color: t.accent,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Back to current round
+          </button>
+        </div>
+      ) : null}
 
       {decisionError ? (
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "0 0 8px", color: css.red, fontSize: 13, fontWeight: 600 }}>
