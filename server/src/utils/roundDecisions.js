@@ -67,13 +67,14 @@ function buildDecisionsCsv(rows, { decisionFilter = "all" } = {}) {
     return normalizeRoundDecision(row.decision?.status) === decisionFilter;
   });
 
-  const header = ["name", "email", "major", "year", "gpa", "score", "num_reviews", "decision", "notes"];
+  const header = ["name", "email", "phone", "major", "year", "gpa", "score", "num_reviews", "decision", "notes"];
   const lines = [header.join(",")];
 
   filtered.forEach((row) => {
     lines.push([
       escapeCsvField(row.name),
       escapeCsvField(row.email),
+      escapeCsvField(row.phoneNumber),
       escapeCsvField(row.major),
       escapeCsvField(row.year),
       escapeCsvField(row.gpa),
@@ -84,7 +85,7 @@ function buildDecisionsCsv(rows, { decisionFilter = "all" } = {}) {
     ].join(","));
   });
 
-  return lines.join("\n");
+  return `\uFEFF${lines.join("\n")}`;
 }
 
 module.exports = {
