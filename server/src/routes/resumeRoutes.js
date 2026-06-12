@@ -20,7 +20,7 @@ router.get('/view/image', resumeController.viewImage);
 router.get('/scoreboard/:resumeId/application', resumeController.getScoreboardApplication);
 router.get('/scoreboard', resumeController.getScoreboard);
 router.post('/scoreboard/decisions', requireRoles('admin', 'member'), resumeController.upsertRoundDecision);
-router.get('/scoreboard/decisions/export', requireRoles('admin'), resumeController.exportScoreboardDecisions);
+router.get('/scoreboard/decisions/export', requireRoles('admin', 'member'), resumeController.exportScoreboardDecisions);
 router.get('/grader-scoreboard', requireRoles('admin'), resumeController.getGraderScoreboard);
 
 module.exports = router;

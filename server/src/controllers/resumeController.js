@@ -1435,6 +1435,7 @@ exports.exportScoreboardDecisions = async (req, res) => {
             return {
                 name: resume.name || "Unknown",
                 email: linked.email,
+                phoneNumber: linked.phoneNumber,
                 major: linked.major,
                 year: linked.year,
                 gpa: linked.gpa,

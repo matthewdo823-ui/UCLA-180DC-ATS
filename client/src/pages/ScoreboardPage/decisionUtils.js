@@ -114,18 +114,60 @@ export function passesDecisionFilter(candidate, decisionFilter) {
   }
 }
 
-export async function downloadDecisionsExport(authedFetch, apiBase, decision = "all") {
-  const res = await authedFetch(`${apiBase}/scoreboard/decisions/export?decision=${encodeURIComponent(decision)}`);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || "Export failed");
+function escapeCsvField(value) {
+  const str = value == null ? "" : String(value);
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
   }
-  const blob = await res.blob();
-  const suffix = decision === "all" ? "all" : decision;
+  return str;
+}
+
+const EXPORT_HEADERS = ["name", "email", "phone", "major", "year", "gpa", "score", "num_reviews", "decision", "notes"];
+
+function triggerCsvDownload(csvText, filename) {
+  const blob = new Blob(["\uFEFF", csvText], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `scoreboard-decisions-${suffix}.csv`;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
   anchor.click();
+  document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
+}
+
+function candidateToCsvRow(candidate) {
+  return [
+    escapeCsvField(candidate.name),
+    escapeCsvField(candidate.email),
+    escapeCsvField(candidate.phoneNumber),
+    escapeCsvField(candidate.major),
+    escapeCsvField(candidate.year),
+    escapeCsvField(candidate.gpa),
+    escapeCsvField(candidate.score ?? ""),
+    escapeCsvField(candidate.numReviews ?? candidate.reviews?.length ?? 0),
+    escapeCsvField(getCandidateDecisionStatus(candidate)),
+    escapeCsvField(candidate.decision?.notes || ""),
+  ].join(",");
+}
+
+/** Export deliberation decisions from the live scoreboard roster (matches UI). */
+export function exportCandidatesDecisionCsv(candidates, decisionType) {
+  if (decisionType !== "advance" && decisionType !== "reject") {
+    throw new Error("Unsupported export type");
+  }
+
+  const label = decisionType === "advance" ? "advanced" : "rejected";
+  const rows = (candidates || []).filter((c) => getCandidateDecisionStatus(c) === decisionType);
+  if (!rows.length) {
+    throw new Error(`No ${label} candidates to export yet. Mark candidates in deliberation first.`);
+  }
+
+  const lines = [EXPORT_HEADERS.join(",")];
+  rows.forEach((candidate) => {
+    lines.push(candidateToCsvRow(candidate));
+  });
+
+  triggerCsvDownload(lines.join("\n"), `${label}-candidates.csv`);
 }
