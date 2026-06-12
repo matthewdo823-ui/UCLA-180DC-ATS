@@ -125,9 +125,28 @@ function pickCandidateFields(candidate) {
   };
 }
 
+function applyResumeCandidateLink(resume, embeddedCandidate, candidateLinkLookups) {
+  const embedded = embeddedCandidate || {};
+  const { candidate: linked, ambiguous } = resolveCandidateLink({
+    resume,
+    embeddedCandidate: embedded,
+    lookups: candidateLinkLookups,
+  });
+  const fields = pickCandidateFields(linked || embedded);
+  const candidateId = linked?.id || resume?.candidate_id || embedded?.id || null;
+
+  return {
+    candidateId,
+    canDecide: Boolean(candidateId) && !ambiguous,
+    linkAmbiguous: ambiguous,
+    ...fields,
+  };
+}
+
 module.exports = {
   normalizePersonName,
   buildCandidateLinkLookups,
   resolveCandidateLink,
   pickCandidateFields,
+  applyResumeCandidateLink,
 };

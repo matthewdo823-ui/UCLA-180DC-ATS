@@ -1,6 +1,6 @@
 const supabase = require("../config/supabase");
 const { getActiveCycleId } = require("../utils/cycleContext");
-const { assertDeliberationCompleteForRound } = require("./resumeController");
+const { assertDeliberationCompleteForRound } = require("../services/roundDeliberationService");
 const { DEFAULT_RUBRIC_CONFIG, validateRubricConfig } = require("../utils/rubric");
 const { syncFormResponsesToDatabase } = require("../services/formsSyncService");
 const {
