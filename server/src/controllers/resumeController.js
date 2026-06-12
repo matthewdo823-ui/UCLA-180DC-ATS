@@ -5,6 +5,8 @@ const {
     getActiveCycleId,
     getActiveCycleRow,
     getResumeScreenRoundForCycle,
+    getRoundsForCycle,
+    getActiveRoundForCycle,
     requireActiveResumeScreening,
 } = require('../utils/cycleContext');
 const {
@@ -24,6 +26,7 @@ const {
     mapRoundDecision,
     buildDecisionLookup,
     resolveCandidateDecision,
+    deliberationHasStarted,
     countDecisions,
     buildDecisionsCsv,
 } = require('../utils/roundDecisions');
@@ -991,24 +994,101 @@ async function maybeBackfillResumeCandidateId(resumeId, candidateId) {
         .is("candidate_id", null);
 }
 
+function mapScoreboardRoundContext(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        status: row.status,
+        sortOrder: row.sort_order,
+    };
+}
+
+function resolveDeliberationRounds(rounds) {
+    const resumeRound = (rounds || []).find((r) => r.type === "resume_screen") || null;
+    const interviewRound = (rounds || []).find((r) => r.type === "interview") || null;
+    const activeRound = (rounds || []).find((r) => r.status === "active") || null;
+    const deliberationRound = activeRound || resumeRound;
+    const nextRound = activeRound
+        ? (rounds || [])
+            .filter((r) => r.sort_order > activeRound.sort_order)
+            .sort((a, b) => a.sort_order - b.sort_order)[0] || null
+        : null;
+    return { resumeRound, interviewRound, deliberationRound, activeRound, nextRound };
+}
+
+function filterCandidatesForDeliberationRound(candidates, { deliberationRound, resumeDecisionRows }) {
+    if (!deliberationRound || deliberationRound.type !== "interview") {
+        return candidates;
+    }
+
+    const resumeLookup = buildDecisionLookup(resumeDecisionRows);
+    const resumeDeliberationStarted = deliberationHasStarted(resumeDecisionRows);
+
+    return (candidates || []).filter((candidate) => {
+        if (!candidate.numReviews) return false;
+        if (!resumeDeliberationStarted) return true;
+        const priorStatus = normalizeRoundDecision(resumeLookup[candidate.candidateId]?.decision);
+        return priorStatus === "advance";
+    });
+}
+
+async function assertCandidateEligibleForRoundDecision({
+    activeRound,
+    resumeRound,
+    cycleId,
+    candidateId,
+}) {
+    if (!activeRound || activeRound.status !== "active") {
+        return { error: "This round is closed — activate a round in Cycle Management to record decisions.", status: 400 };
+    }
+
+    if (activeRound.type !== "interview" || !resumeRound) {
+        return null;
+    }
+
+    const { data: resumeDecisionRows, error } = await supabase
+        .from("round_decisions")
+        .select("candidate_id, decision")
+        .eq("cycle_id", cycleId)
+        .eq("round_id", resumeRound.id);
+
+    if (error) throw error;
+
+    if (!deliberationHasStarted(resumeDecisionRows)) {
+        return null;
+    }
+
+    const resumeLookup = buildDecisionLookup(resumeDecisionRows);
+    const priorStatus = normalizeRoundDecision(resumeLookup[candidateId]?.decision);
+    if (priorStatus !== "advance") {
+        return { error: "Only candidates advanced from resume screening can receive decisions in this round.", status: 400 };
+    }
+
+    return null;
+}
+
 // Gets scoreboard data
 exports.getScoreboard = async (req, res) => {
     try {
         const activeCycle = await getActiveCycleRow();
         const activeCycleId = activeCycle?.id || null;
-        const resumeRound = activeCycleId
-            ? await getResumeScreenRoundForCycle(activeCycleId)
-            : null;
+        const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
+        const { resumeRound, deliberationRound, nextRound } = resolveDeliberationRounds(cycleRounds);
 
-        if (!activeCycleId || !resumeRound) {
+        if (!activeCycleId || !resumeRound || !deliberationRound) {
             return res.json({
-                context: { cycle: null, round: null },
+                context: { cycle: null, round: null, resumeRound: null, nextRound: null, canDeliberate: false },
                 metrics: [],
                 maxPerCategory: 4,
                 stats: { applicants: 0, reviewed: 0, advanced: 0, hold: 0, rejected: 0, pending: 0, avgScore: 0 },
                 candidates: [],
             });
         }
+
+        const decisionsFinalized = deliberationRound.status === "closed";
+        const decisionOptions = { provisional: !decisionsFinalized };
 
         const { data: resumes, error: resumeError } = await supabase
             .from('resumes')
@@ -1064,11 +1144,23 @@ exports.getScoreboard = async (req, res) => {
             .from('round_decisions')
             .select('*')
             .eq('cycle_id', activeCycleId)
-            .eq('round_id', resumeRound.id);
+            .eq('round_id', deliberationRound.id);
 
         if (decisionError) throw decisionError;
 
         const decisionLookup = buildDecisionLookup(roundDecisionRows);
+
+        let resumeRoundDecisionRows = [];
+        if (deliberationRound.type === "interview" && resumeRound.id !== deliberationRound.id) {
+            const { data: priorRows, error: priorDecisionError } = await supabase
+                .from("round_decisions")
+                .select("candidate_id, decision")
+                .eq("cycle_id", activeCycleId)
+                .eq("round_id", resumeRound.id);
+
+            if (priorDecisionError) throw priorDecisionError;
+            resumeRoundDecisionRows = priorRows || [];
+        }
 
         const { data: reviews, error: reviewError } = await supabase
             .from('resume_reviews')
@@ -1218,7 +1310,7 @@ exports.getScoreboard = async (req, res) => {
             const normalizedScore = c.numReviews > 0 ? c.totalNormalized / c.numReviews : null;
             const categoryScores = buildCategoryScores(c.categoryTotals, c.categoryCounts);
 
-            const decision = resolveCandidateDecision(c.candidateId, decisionLookup);
+            const decision = resolveCandidateDecision(c.candidateId, decisionLookup, decisionOptions);
 
             return {
                 id: c.id,
@@ -1248,7 +1340,12 @@ exports.getScoreboard = async (req, res) => {
             };
         });
 
-        candidates.sort((a, b) => {
+        const filteredCandidates = filterCandidatesForDeliberationRound(candidates, {
+            deliberationRound,
+            resumeDecisionRows: resumeRoundDecisionRows,
+        });
+
+        filteredCandidates.sort((a, b) => {
             if (a.score === null && b.score === null) {
                 return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
             }
@@ -1256,21 +1353,24 @@ exports.getScoreboard = async (req, res) => {
             if (b.score === null) return -1;
             return b.score - a.score;
         });
-        candidates.forEach((c, index) => c.rank = index + 1);
+        filteredCandidates.forEach((c, index) => { c.rank = index + 1; });
 
-        const totalReviewed = candidates.filter(c => c.numReviews > 0).length;
+        const totalReviewed = filteredCandidates.filter(c => c.numReviews > 0).length;
         const avgScore = reviewCount > 0 ? (totalNormalizedSum / reviewCount).toFixed(1) : 0;
-        const decisionCounts = countDecisions(candidates);
+        const decisionCounts = countDecisions(filteredCandidates);
 
         res.json({
             context: {
                 cycle: activeCycle ? { id: activeCycle.id, name: activeCycle.name } : null,
-                round: resumeRound ? { id: resumeRound.id, name: resumeRound.name } : null,
+                round: mapScoreboardRoundContext(deliberationRound),
+                resumeRound: mapScoreboardRoundContext(resumeRound),
+                nextRound: mapScoreboardRoundContext(nextRound),
+                canDeliberate: deliberationRound.status === "active",
             },
             metrics,
             maxPerCategory,
             stats: {
-                applicants: candidates.length,
+                applicants: filteredCandidates.length,
                 reviewed: totalReviewed,
                 advanced: decisionCounts.advance,
                 hold: decisionCounts.hold,
@@ -1278,7 +1378,7 @@ exports.getScoreboard = async (req, res) => {
                 pending: decisionCounts.pending,
                 avgScore: avgScore,
             },
-            candidates: candidates
+            candidates: filteredCandidates
         });
 
     } catch (err) {
@@ -1302,6 +1402,13 @@ exports.upsertRoundDecision = async (req, res) => {
         const resumeRound = await getResumeScreenRoundForCycle(activeCycle.id);
         if (!resumeRound) {
             return res.status(503).json({ error: "No resume screening round for this cycle" });
+        }
+
+        const activeRound = await getActiveRoundForCycle(activeCycle.id);
+        if (!activeRound) {
+            return res.status(503).json({
+                error: "No active round — activate a round in Cycle Management before saving deliberation decisions.",
+            });
         }
 
         const resolved = await resolveCandidateIdForDecision({
@@ -1332,10 +1439,20 @@ exports.upsertRoundDecision = async (req, res) => {
             await maybeBackfillResumeCandidateId(resumeRow.id, resolved.backfillCandidateId);
         }
 
+        const eligibilityError = await assertCandidateEligibleForRoundDecision({
+            activeRound,
+            resumeRound,
+            cycleId: activeCycle.id,
+            candidateId,
+        });
+        if (eligibilityError) {
+            return res.status(eligibilityError.status).json({ error: eligibilityError.error });
+        }
+
         const payload = {
             candidate_id: candidateId,
             cycle_id: activeCycle.id,
-            round_id: resumeRound.id,
+            round_id: activeRound.id,
             decision,
             notes,
             decided_by: decidedBy,
@@ -1350,7 +1467,9 @@ exports.upsertRoundDecision = async (req, res) => {
 
         if (error) return respondWithServerError(res, error, "upsertRoundDecision upsert");
 
-        return res.json({ decision: mapRoundDecision(data) });
+        return res.json({
+            decision: mapRoundDecision(data, { provisional: activeRound.status === "active" }),
+        });
     } catch (err) {
         return respondWithServerError(res, err, "upsertRoundDecision");
     }
@@ -1364,11 +1483,10 @@ exports.exportScoreboardDecisions = async (req, res) => {
     try {
         const activeCycle = await getActiveCycleRow();
         const activeCycleId = activeCycle?.id || null;
-        const resumeRound = activeCycleId
-            ? await getResumeScreenRoundForCycle(activeCycleId)
-            : null;
+        const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
+        const { resumeRound, deliberationRound } = resolveDeliberationRounds(cycleRounds);
 
-        if (!activeCycleId || !resumeRound) {
+        if (!activeCycleId || !resumeRound || !deliberationRound) {
             return res.status(503).json({ error: "No active resume screening cycle" });
         }
 
@@ -1398,11 +1516,23 @@ exports.exportScoreboardDecisions = async (req, res) => {
             .from("round_decisions")
             .select("*")
             .eq("cycle_id", activeCycleId)
-            .eq("round_id", resumeRound.id);
+            .eq("round_id", deliberationRound.id);
 
         if (decisionError) return respondWithServerError(res, decisionError, "exportScoreboardDecisions decisions");
 
         const decisionLookup = buildDecisionLookup(roundDecisionRows);
+
+        let resumeRoundDecisionRows = [];
+        if (deliberationRound.type === "interview" && resumeRound.id !== deliberationRound.id) {
+            const { data: priorRows, error: priorDecisionError } = await supabase
+                .from("round_decisions")
+                .select("candidate_id, decision")
+                .eq("cycle_id", activeCycleId)
+                .eq("round_id", resumeRound.id);
+
+            if (priorDecisionError) return respondWithServerError(res, priorDecisionError, "exportScoreboardDecisions prior decisions");
+            resumeRoundDecisionRows = priorRows || [];
+        }
 
         const { data: reviews, error: reviewError } = await supabase
             .from("resume_reviews")
@@ -1433,6 +1563,7 @@ exports.exportScoreboardDecisions = async (req, res) => {
                 : null;
 
             return {
+                candidateId: linked.candidateId,
                 name: resume.name || "Unknown",
                 email: linked.email,
                 phoneNumber: linked.phoneNumber,
@@ -1445,7 +1576,12 @@ exports.exportScoreboardDecisions = async (req, res) => {
             };
         });
 
-        const csv = buildDecisionsCsv(exportRows, { decisionFilter: exportFilter });
+        const filteredExportRows = filterCandidatesForDeliberationRound(exportRows, {
+            deliberationRound,
+            resumeDecisionRows: resumeRoundDecisionRows,
+        });
+
+        const csv = buildDecisionsCsv(filteredExportRows, { decisionFilter: exportFilter });
         const suffix = exportFilter === "all" ? "all" : exportFilter;
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Content-Disposition", `attachment; filename="scoreboard-decisions-${suffix}.csv"`);

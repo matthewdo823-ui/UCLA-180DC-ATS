@@ -5,14 +5,14 @@ function normalizeRoundDecision(value) {
   return VALID_ROUND_DECISIONS.has(normalized) ? normalized : "pending";
 }
 
-function mapRoundDecision(row) {
+function mapRoundDecision(row, { provisional = true } = {}) {
   if (!row) {
     return {
       status: "pending",
       notes: "",
       decidedBy: null,
       updatedAt: null,
-      provisional: true,
+      provisional,
     };
   }
 
@@ -21,7 +21,7 @@ function mapRoundDecision(row) {
     notes: row.notes || "",
     decidedBy: row.decided_by ?? null,
     updatedAt: row.updated_at || row.submitted_at || null,
-    provisional: true,
+    provisional,
   };
 }
 
@@ -33,8 +33,8 @@ function buildDecisionLookup(rows) {
   return lookup;
 }
 
-function resolveCandidateDecision(candidateId, lookup) {
-  return mapRoundDecision(candidateId ? lookup[candidateId] : null);
+function resolveCandidateDecision(candidateId, lookup, options = {}) {
+  return mapRoundDecision(candidateId ? lookup[candidateId] : null, options);
 }
 
 /** True once any committee decision is no longer pending for this round. */

@@ -653,6 +653,7 @@ export default function ScoreboardPage() {
   const [savingDecisionId, setSavingDecisionId] = useState(null);
   const [decisionError, setDecisionError] = useState("");
   const [exportBusy, setExportBusy] = useState(false);
+  const [advanceRoundBusy, setAdvanceRoundBusy] = useState(false);
   const [focusedCandidateId, setFocusedCandidateId] = useState(null);
   const filterWrapRef = useRef(null);
   /** After first data paint, bump key so sort/filter changes remount rows and replay stagger. */
@@ -745,8 +746,11 @@ export default function ScoreboardPage() {
   }, [data.stats, candidates, equalizeActive]);
   const metrics = useMemo(() => data.metrics ?? [], [data.metrics]);
   const maxPerCategory = data.maxPerCategory ?? 4;
-  const scoreboardLabel = data.context?.cycle && data.context?.round
-    ? `${data.context.cycle.name} · ${data.context.round.name}`
+  const activeRound = data.context?.round;
+  const nextRound = data.context?.nextRound;
+  const canDeliberate = data.context?.canDeliberate !== false;
+  const scoreboardLabel = data.context?.cycle && activeRound
+    ? `${data.context.cycle.name} · ${activeRound.name}${activeRound.status === "closed" ? " (closed)" : ""}`
     : "Candidate scoreboard";
 
   const majorOptions = useMemo(
@@ -766,7 +770,7 @@ export default function ScoreboardPage() {
   }, [candidates, filters, searchQuery, sortBy, deliberationMode]);
 
   const saveDecision = useCallback(async (candidate, decision) => {
-    if (!isStaff || !deliberationMode) return;
+    if (!isStaff || !deliberationMode || !canDeliberate) return;
 
     const previousDecision = candidate.decision;
     const optimisticDecision = buildDecisionPayload(decision, candidate.decision?.notes || "");
@@ -809,7 +813,32 @@ export default function ScoreboardPage() {
       pendingDecisionIdsRef.current.delete(candidate.id);
       setSavingDecisionId(null);
     }
-  }, [authedFetch, deliberationMode, isStaff]);
+  }, [authedFetch, canDeliberate, deliberationMode, isStaff]);
+
+  const handleAdvanceRound = useCallback(async () => {
+    if (!isAdmin || !activeRound?.id) return;
+
+    const nextLabel = nextRound?.name || "the next stage";
+    const confirmed = window.confirm(
+      `Close "${activeRound.name}" and open "${nextLabel}"?\n\nDeliberation decisions for this round are already saved. The scoreboard will refresh with the next round's candidate pool.`
+    );
+    if (!confirmed) return;
+
+    setAdvanceRoundBusy(true);
+    setDecisionError("");
+    try {
+      const res = await authedFetch(`${API}/rounds/${activeRound.id}/advance-to-next`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Could not advance to next round");
+      }
+      await fetchScoreboard();
+    } catch (err) {
+      setDecisionError(err.message || "Could not advance to next round");
+    } finally {
+      setAdvanceRoundBusy(false);
+    }
+  }, [activeRound?.id, activeRound?.name, authedFetch, fetchScoreboard, isAdmin, nextRound?.name]);
 
   const handleExport = useCallback((decision) => {
     setExportBusy(true);
@@ -824,7 +853,7 @@ export default function ScoreboardPage() {
   }, [candidates]);
 
   useEffect(() => {
-    if (!deliberationMode || !isStaff) return undefined;
+    if (!deliberationMode || !isStaff || !canDeliberate) return undefined;
     function onKeyDown(event) {
       const tag = event.target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
@@ -867,7 +896,7 @@ export default function ScoreboardPage() {
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [deliberationMode, filteredCandidates, focusedCandidateId, isStaff, saveDecision]);
+  }, [canDeliberate, deliberationMode, filteredCandidates, focusedCandidateId, isStaff, saveDecision]);
 
   useEffect(() => {
     if (!deliberationMode) {
@@ -965,7 +994,16 @@ export default function ScoreboardPage() {
               </h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: t.textMuted, lineHeight: 1.45 }}>
                 {deliberationMode ? (
-                  <>Live committee — pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>. Click a row to focus it; press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> to decide (again to clear).</>
+                  <>
+                    {activeRound?.type === "interview" ? (
+                      <>Interview deliberation — only candidates <strong style={{ color: t.text }}>advanced</strong> from resume screening appear here.</>
+                    ) : (
+                      <>Live committee — pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>. Click a row to focus it; press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> to decide (again to clear).</>
+                    )}
+                    {" "}
+                    Decisions save to <strong style={{ color: t.text }}>{activeRound?.name || "this round"}</strong>
+                    {canDeliberate ? " as you click." : " (round closed — view only)."}
+                  </>
                 ) : (
                   <>Round 1 resume reviews — search by name, email, or phone, or use <strong style={{ fontWeight: 600, color: t.text }}>Sort &amp; filters</strong> to change order and narrow the table.</>
                 )}
@@ -1070,6 +1108,27 @@ export default function ScoreboardPage() {
               >
                 Export rejected
               </button>
+              {canDeliberate && activeRound?.id ? (
+                <button
+                  type="button"
+                  disabled={advanceRoundBusy}
+                  onClick={handleAdvanceRound}
+                  title={nextRound ? `Close ${activeRound.name} and open ${nextRound.name}` : "Close this round"}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    border: `1px solid ${t.accent}`,
+                    background: "rgba(29,158,117,0.12)",
+                    color: t.accent,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: advanceRoundBusy ? "not-allowed" : "pointer",
+                    opacity: advanceRoundBusy ? 0.6 : 1,
+                  }}
+                >
+                  {advanceRoundBusy ? "Advancing…" : nextRound ? `Close & open ${nextRound.name}` : "Close round"}
+                </button>
+              ) : null}
             </>
           ) : null}
           <button
@@ -1413,7 +1472,7 @@ export default function ScoreboardPage() {
                   <DecisionButtons
                     status={decisionStatus}
                     dark={deliberationMode}
-                    disabled={!canRecordCommitteeDecision(c)}
+                    disabled={!canDeliberate || !canRecordCommitteeDecision(c)}
                     saving={rowSaving}
                     onSelect={decision => saveDecision(c, decision)}
                   />
