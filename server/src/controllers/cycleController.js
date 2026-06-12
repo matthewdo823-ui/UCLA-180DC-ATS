@@ -1,5 +1,6 @@
 const supabase = require("../config/supabase");
 const { getActiveCycleId } = require("../utils/cycleContext");
+const { assertDeliberationCompleteForRound } = require("./resumeController");
 const { DEFAULT_RUBRIC_CONFIG, validateRubricConfig } = require("../utils/rubric");
 const { syncFormResponsesToDatabase } = require("../services/formsSyncService");
 const {
@@ -630,6 +631,16 @@ exports.advanceToNextRound = async (req, res) => {
     if (!current) return res.status(404).json({ error: "Round not found" });
     if (current.status !== "active") {
       return res.status(400).json({ error: "Only the active round can be advanced" });
+    }
+
+    const deliberationError = await assertDeliberationCompleteForRound(current.cycle_id, roundId);
+    if (deliberationError) {
+      return res.status(deliberationError.status).json({
+        error: deliberationError.error,
+        incompleteCount: deliberationError.incompleteCount,
+        pendingCount: deliberationError.pendingCount,
+        holdCount: deliberationError.holdCount,
+      });
     }
 
     const { error: closeError } = await supabase

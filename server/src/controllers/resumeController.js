@@ -28,6 +28,7 @@ const {
     resolveCandidateDecision,
     deliberationHasStarted,
     countDecisions,
+    summarizeIncompleteDeliberation,
     buildDecisionsCsv,
 } = require('../utils/roundDecisions');
 const {
@@ -1034,6 +1035,110 @@ function filterCandidatesForDeliberationRound(candidates, { deliberationRound, r
     });
 }
 
+async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRound) {
+    const { data: resumes, error: resumeError } = await supabase
+        .from("resumes")
+        .select(`
+            id,
+            name,
+            candidate_id,
+            candidates ( id, email, major, year, gpa )
+        `)
+        .eq("cycle_id", cycleId);
+
+    if (resumeError) throw resumeError;
+
+    const { data: cycleCandidates, error: cycleCandError } = await supabase
+        .from("candidates")
+        .select("id, name, email, major, year, gpa, resume_file_url")
+        .eq("cycle_id", cycleId);
+
+    if (cycleCandError) throw cycleCandError;
+
+    const candidateLinkLookups = buildCandidateLinkLookups(cycleCandidates);
+
+    const { data: roundDecisionRows, error: decisionError } = await supabase
+        .from("round_decisions")
+        .select("*")
+        .eq("cycle_id", cycleId)
+        .eq("round_id", deliberationRound.id);
+
+    if (decisionError) throw decisionError;
+
+    const decisionLookup = buildDecisionLookup(roundDecisionRows);
+
+    let resumeRoundDecisionRows = [];
+    if (deliberationRound.type === "interview" && resumeRound?.id !== deliberationRound.id) {
+        const { data: priorRows, error: priorDecisionError } = await supabase
+            .from("round_decisions")
+            .select("candidate_id, decision")
+            .eq("cycle_id", cycleId)
+            .eq("round_id", resumeRound.id);
+
+        if (priorDecisionError) throw priorDecisionError;
+        resumeRoundDecisionRows = priorRows || [];
+    }
+
+    const { data: reviews, error: reviewError } = await supabase
+        .from("resume_reviews")
+        .select("resume_id")
+        .eq("cycle_id", cycleId)
+        .eq("round_id", resumeRound.id);
+
+    if (reviewError) throw reviewError;
+
+    const reviewCountByResume = {};
+    (reviews || []).forEach((review) => {
+        reviewCountByResume[review.resume_id] = (reviewCountByResume[review.resume_id] || 0) + 1;
+    });
+
+    const poolRows = (resumes || []).map((resume) => {
+        const embedded = firstRel(resume.candidates) || {};
+        const linked = applyResumeCandidateLink(resume, embedded, candidateLinkLookups);
+        return {
+            id: resume.id,
+            candidateId: linked.candidateId,
+            name: resume.name || "Unknown",
+            numReviews: reviewCountByResume[resume.id] || 0,
+            decision: resolveCandidateDecision(linked.candidateId, decisionLookup, { provisional: false }),
+        };
+    });
+
+    return filterCandidatesForDeliberationRound(poolRows, {
+        deliberationRound,
+        resumeDecisionRows: resumeRoundDecisionRows,
+    });
+}
+
+exports.assertDeliberationCompleteForRound = async function assertDeliberationCompleteForRound(cycleId, roundId) {
+    const cycleRounds = await getRoundsForCycle(cycleId);
+    const resumeRound = cycleRounds.find((r) => r.type === "resume_screen") || null;
+    const deliberationRound = cycleRounds.find((r) => r.id === roundId) || null;
+
+    if (!resumeRound) {
+        return { error: "No resume screening round for this cycle", status: 400 };
+    }
+    if (!deliberationRound) {
+        return { error: "Round not found in this cycle", status: 404 };
+    }
+
+    const pool = await loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRound);
+    const summary = summarizeIncompleteDeliberation(pool);
+    if (summary.incompleteCount > 0) {
+        const parts = [];
+        if (summary.pendingCount) parts.push(`${summary.pendingCount} pending`);
+        if (summary.holdCount) parts.push(`${summary.holdCount} on hold`);
+        const detail = parts.length ? ` (${parts.join(", ")})` : "";
+        return {
+            error: `Cannot close round: ${summary.incompleteCount} candidate(s) still need Advance or Reject${detail}.`,
+            status: 400,
+            ...summary,
+        };
+    }
+
+    return null;
+}
+
 async function assertCandidateEligibleForRoundDecision({
     activeRound,
     resumeRound,
@@ -1072,14 +1177,48 @@ async function assertCandidateEligibleForRoundDecision({
 // Gets scoreboard data
 exports.getScoreboard = async (req, res) => {
     try {
+        const requestedRoundId = String(req.query?.roundId || "").trim();
         const activeCycle = await getActiveCycleRow();
         const activeCycleId = activeCycle?.id || null;
         const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
-        const { resumeRound, deliberationRound, nextRound } = resolveDeliberationRounds(cycleRounds);
+        const {
+            resumeRound,
+            deliberationRound: activeDeliberationRound,
+            activeRound,
+            nextRound: activeNextRound,
+        } = resolveDeliberationRounds(cycleRounds);
+
+        let deliberationRound = activeDeliberationRound;
+        let viewingHistorical = false;
+
+        if (requestedRoundId) {
+            const requestedRound = cycleRounds.find((r) => r.id === requestedRoundId) || null;
+            if (!requestedRound) {
+                return res.status(404).json({ error: "Round not found in this cycle" });
+            }
+            deliberationRound = requestedRound;
+            viewingHistorical = requestedRound.id !== activeRound?.id;
+        }
+
+        const nextRound = viewingHistorical
+            ? (cycleRounds || [])
+                .filter((r) => r.sort_order > deliberationRound.sort_order)
+                .sort((a, b) => a.sort_order - b.sort_order)[0] || null
+            : activeNextRound;
 
         if (!activeCycleId || !resumeRound || !deliberationRound) {
             return res.json({
-                context: { cycle: null, round: null, resumeRound: null, nextRound: null, canDeliberate: false },
+                context: {
+                    cycle: null,
+                    round: null,
+                    resumeRound: null,
+                    nextRound: null,
+                    allRounds: [],
+                    viewingHistorical: false,
+                    canDeliberate: false,
+                    canCloseRound: false,
+                    undecidedCount: 0,
+                },
                 metrics: [],
                 maxPerCategory: 4,
                 stats: { applicants: 0, reviewed: 0, advanced: 0, hold: 0, rejected: 0, pending: 0, avgScore: 0 },
@@ -1087,8 +1226,9 @@ exports.getScoreboard = async (req, res) => {
             });
         }
 
-        const decisionsFinalized = deliberationRound.status === "closed";
+        const decisionsFinalized = deliberationRound.status === "closed" || viewingHistorical;
         const decisionOptions = { provisional: !decisionsFinalized };
+        const canDeliberate = !viewingHistorical && deliberationRound.status === "active";
 
         const { data: resumes, error: resumeError } = await supabase
             .from('resumes')
@@ -1358,6 +1498,9 @@ exports.getScoreboard = async (req, res) => {
         const totalReviewed = filteredCandidates.filter(c => c.numReviews > 0).length;
         const avgScore = reviewCount > 0 ? (totalNormalizedSum / reviewCount).toFixed(1) : 0;
         const decisionCounts = countDecisions(filteredCandidates);
+        const incompleteSummary = summarizeIncompleteDeliberation(filteredCandidates);
+        const undecidedCount = decisionCounts.pending + decisionCounts.hold;
+        const canCloseRound = canDeliberate && incompleteSummary.incompleteCount === 0 && filteredCandidates.length > 0;
 
         res.json({
             context: {
@@ -1365,7 +1508,13 @@ exports.getScoreboard = async (req, res) => {
                 round: mapScoreboardRoundContext(deliberationRound),
                 resumeRound: mapScoreboardRoundContext(resumeRound),
                 nextRound: mapScoreboardRoundContext(nextRound),
-                canDeliberate: deliberationRound.status === "active",
+                activeRound: mapScoreboardRoundContext(activeRound),
+                allRounds: (cycleRounds || []).map(mapScoreboardRoundContext),
+                viewingHistorical,
+                canDeliberate,
+                canCloseRound,
+                undecidedCount,
+                incompleteCount: incompleteSummary.incompleteCount,
             },
             metrics,
             maxPerCategory,

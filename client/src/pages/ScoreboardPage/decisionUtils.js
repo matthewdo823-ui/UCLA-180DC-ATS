@@ -96,6 +96,13 @@ export function getCommitteeLinkWarning(candidate) {
   return null;
 }
 
+export function canCloseDeliberationRound(candidates) {
+  return (candidates || []).every((c) => {
+    const status = getCandidateDecisionStatus(c);
+    return status === "advance" || status === "reject";
+  });
+}
+
 export function passesDecisionFilter(candidate, decisionFilter) {
   const status = getCandidateDecisionStatus(candidate);
   switch (decisionFilter) {
