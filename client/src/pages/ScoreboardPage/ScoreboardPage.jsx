@@ -12,7 +12,7 @@ import {
   buildDecisionPayload,
   canRecordCommitteeDecision,
   DECISION_STYLE,
-  downloadDecisionsExport,
+  exportCandidatesDecisionCsv,
   getCandidateDecisionStatus,
   getCommitteeLinkWarning,
   passesDecisionFilter,
@@ -811,17 +811,17 @@ export default function ScoreboardPage() {
     }
   }, [authedFetch, deliberationMode, isStaff]);
 
-  const handleExport = useCallback(async (decision) => {
+  const handleExport = useCallback((decision) => {
     setExportBusy(true);
     setDecisionError("");
     try {
-      await downloadDecisionsExport(authedFetch, API, decision);
+      exportCandidatesDecisionCsv(candidates, decision);
     } catch (err) {
       setDecisionError(err.message || "Export failed");
     } finally {
       setExportBusy(false);
     }
-  }, [authedFetch]);
+  }, [candidates]);
 
   useEffect(() => {
     if (!deliberationMode || !isStaff) return undefined;
