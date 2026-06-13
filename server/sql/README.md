@@ -12,7 +12,8 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 6 | `add_save_resume_review.sql` | `save_resume_review()` RPC (atomic review save + optional flag) |
 | 7 | `add_resume_review_unique_per_grader.sql` | One review per grader per resume per cycle; duplicate guard in RPC |
 | 8 | `add_round_decisions.sql` | Committee round decisions (`advance` / `hold` / `reject`) for live scoreboard deliberation |
-| 9 | `backfill_resume_candidate_ids.sql` | Link orphan `resumes` rows to `candidates` by name / Drive file id (optional data repair) |
+| 9 | `add_round_notifications.sql` | Advance email templates per round + send audit log |
+| 10 | `backfill_resume_candidate_ids.sql` | Link orphan `resumes` rows to `candidates` by name / Drive file id (optional data repair) |
 
 ## Notes
 

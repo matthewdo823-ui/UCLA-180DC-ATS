@@ -41,6 +41,11 @@ const {
     filterCandidatesForDeliberationRound,
     assertCandidateEligibleForRoundDecision,
 } = require('../services/roundDeliberationService');
+const {
+    resolveAdvanceNotificationForRound,
+    fetchLatestAdvanceBatch,
+    isGmailConfigured,
+} = require('../services/roundNotificationService');
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
@@ -1310,6 +1315,23 @@ exports.getScoreboard = async (req, res) => {
         const undecidedCount = decisionCounts.pending + decisionCounts.hold;
         const canCloseRound = canDeliberate && incompleteSummary.incompleteCount === 0 && filteredCandidates.length > 0;
 
+        let notification = null;
+        if (req.user?.role === "admin") {
+            const template = await resolveAdvanceNotificationForRound(
+                deliberationRound,
+                activeCycle,
+                cycleRounds
+            );
+            const lastBatch = await fetchLatestAdvanceBatch(deliberationRound.id);
+            notification = {
+                template,
+                lastBatch,
+                gmailConfigured: isGmailConfigured(),
+                canSendAdvanceEmails:
+                    deliberationRound.status === "closed" && decisionCounts.advance > 0,
+            };
+        }
+
         res.json({
             context: {
                 cycle: activeCycle ? { id: activeCycle.id, name: activeCycle.name } : null,
@@ -1323,6 +1345,7 @@ exports.getScoreboard = async (req, res) => {
                 canCloseRound,
                 undecidedCount,
                 incompleteCount: incompleteSummary.incompleteCount,
+                notification,
             },
             metrics,
             maxPerCategory,

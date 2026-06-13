@@ -31,6 +31,34 @@ app.use(cors({
     },
   }));
 
+// Gmail OAuth setup redirect (no auth — used only during npm run gmail-oauth-setup)
+app.get('/oauth2callback', (req, res) => {
+  const code = String(req.query?.code || '').trim();
+  const err = String(req.query?.error || '').trim();
+  if (err) {
+    return res.status(400).type('html').send(
+      `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem">`
+      + `<h2>Google sign-in failed</h2><p>${err}</p><p>Close this tab and try again.</p></body></html>`
+    );
+  }
+  if (!code) {
+    return res.status(400).type('html').send(
+      '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem">'
+      + '<h2>No authorization code</h2><p>Close this tab and run npm run gmail-oauth-setup again.</p></body></html>'
+    );
+  }
+  const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return res.type('html').send(
+    '<!DOCTYPE html><html><head><title>Gmail OAuth</title></head>'
+    + '<body style="font-family:sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem">'
+    + '<h2>Authorization successful</h2>'
+    + '<p>Copy this code and paste it into the terminal running <code>npm run gmail-oauth-setup</code>:</p>'
+    + `<textarea readonly style="width:100%;height:5rem;font-family:monospace;padding:0.5rem">${escaped}</textarea>`
+    + '<p style="color:#666;font-size:0.9rem">You can close this tab after pasting the code.</p>'
+    + '</body></html>'
+  );
+});
+
 // Mount routes
 app.use(cronRoutes);
 app.use('/auth', authRoutes);
