@@ -20,6 +20,7 @@ import {
   recomputeDecisionStats,
 } from "./decisionUtils";
 import { equalizeCandidateScores, recomputeEqualizedStats } from "./equalizeUtils";
+import AdvanceEmailModal from "./AdvanceEmailModal";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
@@ -700,6 +701,7 @@ export default function ScoreboardPage() {
   const [decisionError, setDecisionError] = useState("");
   const [exportBusy, setExportBusy] = useState(false);
   const [advanceRoundBusy, setAdvanceRoundBusy] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [viewingRoundId, setViewingRoundId] = useState(null);
   const [focusedCandidateId, setFocusedCandidateId] = useState(null);
   const filterWrapRef = useRef(null);
@@ -823,6 +825,7 @@ export default function ScoreboardPage() {
   const canEditDeliberations = isAdmin && canDeliberate && !viewingHistorical;
   const canCloseRound = data.context?.canCloseRound === true;
   const undecidedCount = data.context?.undecidedCount ?? 0;
+  const advanceNotification = data.context?.notification;
   const pastRounds = useMemo(
     () => allRounds.filter((round) => round.id !== liveActiveRound?.id),
     [allRounds, liveActiveRound?.id]
@@ -1273,6 +1276,23 @@ export default function ScoreboardPage() {
                 }}
               >
                 Export rejected
+              </button>
+              <button
+                type="button"
+                onClick={() => setEmailModalOpen(true)}
+                title="Edit and send advance notification email"
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: `1px solid ${t.accent}`,
+                  background: t.btnGhostBg,
+                  color: t.accent,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Advance email
               </button>
               {canDeliberate && activeRound?.id && !viewingHistorical ? (
                 <button
@@ -1727,6 +1747,31 @@ export default function ScoreboardPage() {
           onClose={() => setSelectedCandidate(null)}
         />
       )}
+
+      <AdvanceEmailModal
+        open={emailModalOpen}
+        onClose={() => setEmailModalOpen(false)}
+        roundId={activeRound?.id}
+        roundName={activeRound?.name}
+        roundStatus={activeRound?.status}
+        advancedCount={displayStats?.advanced ?? 0}
+        notification={advanceNotification}
+        userEmail={user?.email}
+        authedFetch={authedFetch}
+        onSaved={(template) => {
+          setData((prev) => ({
+            ...prev,
+            context: {
+              ...prev.context,
+              notification: {
+                ...prev.context?.notification,
+                template,
+              },
+            },
+          }));
+        }}
+        onSent={() => fetchScoreboard({ silent: true })}
+      />
     </div>
   );
 }
