@@ -8,8 +8,6 @@ const DEMOGRAPHIC_FIELDS = [
   { id: "gpa", label: "GPA", type: "gpa" },
   { id: "pronouns", label: "Pronouns", type: "pronouns" },
   { id: "urm", label: "URM", type: "grouped" },
-  { id: "gm", label: "GM availability", type: "availability" },
-  { id: "newbie_training", label: "Newbie training availability", type: "availability" },
 ];
 
 const MAX_GROUPED_CATEGORIES = 8;
@@ -28,20 +26,6 @@ function normalizePronouns(value) {
   return "Other";
 }
 
-function normalizeAvailability(value) {
-  const trimmed = String(value ?? "").trim();
-  if (!trimmed) return "Not specified";
-  const lower = trimmed.toLowerCase();
-  if (lower === "yes" || lower === "y") return "Yes";
-  if (lower === "no" || lower === "n") return "No";
-  if (lower.startsWith("yes")) return "Yes";
-  if (lower.startsWith("no")) return "No";
-  if (/\bno\b/.test(lower) && (lower.includes("cannot") || lower.includes("can't") || lower.includes("due to"))) {
-    return "No";
-  }
-  return "Other";
-}
-
 function bucketGpa(value) {
   const parsed = Number.parseFloat(String(value ?? "").replace(/[^\d.]/g, ""));
   if (!Number.isFinite(parsed)) return "Not specified";
@@ -55,8 +39,6 @@ function normalizeCategoryValue(field, rawValue) {
   switch (field.type) {
     case "pronouns":
       return normalizePronouns(rawValue);
-    case "availability":
-      return normalizeAvailability(rawValue);
     case "gpa":
       return bucketGpa(rawValue);
     case "categorical":
@@ -219,8 +201,6 @@ function buildDimensionBreakdown(stages, field) {
   let categories;
   if (field.type === "gpa") {
     categories = ["Below 3.0", "3.0 – 3.49", "3.5 – 3.79", "3.8+", "Not specified"];
-  } else if (field.type === "availability") {
-    categories = ["Yes", "No", "Other", "Not specified"];
   } else if (field.type === "pronouns") {
     categories = ["He/Him", "She/Her", "They/Them", "Other", "Not specified"];
   } else if (field.type === "grouped") {
@@ -274,7 +254,7 @@ async function getDemographicsSnapshot() {
   ] = await Promise.all([
     supabase
       .from("candidates")
-      .select("id, major, gpa, year, pronouns, urm, gm, newbie_training, resume_file_url")
+      .select("id, major, gpa, year, pronouns, urm, resume_file_url")
       .eq("cycle_id", cycle.id),
     supabase
       .from("resumes")
