@@ -199,7 +199,7 @@ export default function ScreenerPage() {
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
             <div style={{ maxWidth: 420, textAlign: "center", color: css.textGray, fontSize: 14, lineHeight: 1.5 }}>
               {cycleError || (activeRound && !isResumeRound
-                ? "Resume screening is closed. The active round is interview management — use Grading in the sidebar."
+                ? `Resume screening is closed. The active round is ${activeRound?.name || "interviews"} — use Grading in the sidebar.`
                 : "Resume screening is not open. An admin must activate a cycle and its resume round.")}
             </div>
           </div>

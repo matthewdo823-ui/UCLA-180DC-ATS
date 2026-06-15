@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS rounds (
   cycle_id      UUID NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
   type          TEXT NOT NULL
-                CHECK (type IN ('resume_screen', 'interview')),
+                CHECK (type IN ('resume_screen', 'coffee_chat', 'final_round')),
   status        TEXT NOT NULL DEFAULT 'draft'
                 CHECK (status IN ('draft', 'active', 'closed')),
   sort_order    INT NOT NULL DEFAULT 0,
@@ -120,7 +120,9 @@ BEGIN
     RETURNING id INTO resume_round_id;
 
     INSERT INTO rounds (cycle_id, name, type, status, sort_order)
-    VALUES (seed_cycle_id, 'Interview Management', 'interview', 'draft', 2);
+    VALUES
+      (seed_cycle_id, 'Coffee Chats', 'coffee_chat', 'draft', 2),
+      (seed_cycle_id, 'Final Round', 'final_round', 'draft', 3);
 
     UPDATE app_settings
     SET active_cycle_id = seed_cycle_id

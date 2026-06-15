@@ -3,9 +3,9 @@ const router = express.Router();
 const userController = require('../controllers/userController');
 const { authenticateToken, requireRoles } = require('../middleware/authMiddleware');
 
-router.use(authenticateToken, requireRoles('admin'));
+const adminAuth = [authenticateToken, requireRoles('admin')];
 
-router.get('/users', userController.listUsers);
-router.patch('/users/:userId/role', userController.updateUserRole);
+router.get('/users', ...adminAuth, userController.listUsers);
+router.patch('/users/:userId/role', ...adminAuth, userController.updateUserRole);
 
 module.exports = router;

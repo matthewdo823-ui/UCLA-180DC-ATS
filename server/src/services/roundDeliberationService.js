@@ -12,6 +12,13 @@ const {
   buildCandidateLinkLookups,
   applyResumeCandidateLink,
 } = require("../utils/candidateLink");
+const {
+  ROUND_TYPES,
+  getRoundByType,
+  getPriorRound,
+  isResumeScreenType,
+  sortRounds,
+} = require("../utils/rounds");
 
 function mapScoreboardRoundContext(row) {
   if (!row) return null;
@@ -25,35 +32,67 @@ function mapScoreboardRoundContext(row) {
 }
 
 function resolveDeliberationRounds(rounds) {
-  const resumeRound = (rounds || []).find((r) => r.type === "resume_screen") || null;
-  const interviewRound = (rounds || []).find((r) => r.type === "interview") || null;
-  const activeRound = (rounds || []).find((r) => r.status === "active") || null;
+  const sortedRounds = sortRounds(rounds);
+  const resumeRound = getRoundByType(sortedRounds, ROUND_TYPES.RESUME_SCREEN);
+  const coffeeChatRound = getRoundByType(sortedRounds, ROUND_TYPES.COFFEE_CHAT);
+  const finalRound = getRoundByType(sortedRounds, ROUND_TYPES.FINAL_ROUND);
+  const activeRound = sortedRounds.find((round) => round.status === "active") || null;
   const deliberationRound = activeRound || resumeRound;
   const nextRound = activeRound
-    ? (rounds || [])
-      .filter((r) => r.sort_order > activeRound.sort_order)
-      .sort((a, b) => a.sort_order - b.sort_order)[0] || null
+    ? sortedRounds.find((round) => round.sort_order > activeRound.sort_order) || null
     : null;
-  return { resumeRound, interviewRound, deliberationRound, activeRound, nextRound };
+
+  return {
+    resumeRound,
+    coffeeChatRound,
+    finalRound,
+    interviewRound: coffeeChatRound,
+    deliberationRound,
+    activeRound,
+    nextRound,
+    sortedRounds,
+  };
 }
 
-function filterCandidatesForDeliberationRound(candidates, { deliberationRound, resumeDecisionRows }) {
-  if (!deliberationRound || deliberationRound.type !== "interview") {
+function filterCandidatesForDeliberationRound(candidates, { deliberationRound, priorDecisionRows }) {
+  if (!deliberationRound || isResumeScreenType(deliberationRound.type)) {
     return candidates;
   }
 
-  const resumeLookup = buildDecisionLookup(resumeDecisionRows);
-  const resumeDeliberationStarted = deliberationHasStarted(resumeDecisionRows);
+  const priorLookup = buildDecisionLookup(priorDecisionRows);
+  const priorDeliberationStarted = deliberationHasStarted(priorDecisionRows);
 
   return (candidates || []).filter((candidate) => {
     if (!candidate.numReviews) return false;
-    if (!resumeDeliberationStarted) return true;
-    const priorStatus = normalizeRoundDecision(resumeLookup[candidate.candidateId]?.decision);
+    if (!priorDeliberationStarted) return true;
+    const priorStatus = normalizeRoundDecision(priorLookup[candidate.candidateId]?.decision);
     return priorStatus === "advance";
   });
 }
 
-async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRound) {
+async function loadPriorRoundDecisionRows(cycleId, deliberationRound, cycleRounds) {
+  if (!deliberationRound || isResumeScreenType(deliberationRound.type)) {
+    return [];
+  }
+
+  const priorRound = getPriorRound(cycleRounds, deliberationRound);
+  if (!priorRound || priorRound.id === deliberationRound.id) {
+    return [];
+  }
+
+  const { data: priorRows, error: priorDecisionError } = await supabase
+    .from("round_decisions")
+    .select("candidate_id, decision")
+    .eq("cycle_id", cycleId)
+    .eq("round_id", priorRound.id);
+
+  if (priorDecisionError) throw priorDecisionError;
+  return priorRows || [];
+}
+
+async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRound, cycleRounds = null) {
+  const rounds = cycleRounds || await getRoundsForCycle(cycleId);
+
   const { data: resumes, error: resumeError } = await supabase
     .from("resumes")
     .select(`
@@ -84,18 +123,7 @@ async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRo
   if (decisionError) throw decisionError;
 
   const decisionLookup = buildDecisionLookup(roundDecisionRows);
-
-  let resumeRoundDecisionRows = [];
-  if (deliberationRound.type === "interview" && resumeRound?.id !== deliberationRound.id) {
-    const { data: priorRows, error: priorDecisionError } = await supabase
-      .from("round_decisions")
-      .select("candidate_id, decision")
-      .eq("cycle_id", cycleId)
-      .eq("round_id", resumeRound.id);
-
-    if (priorDecisionError) throw priorDecisionError;
-    resumeRoundDecisionRows = priorRows || [];
-  }
+  const priorRoundDecisionRows = await loadPriorRoundDecisionRows(cycleId, deliberationRound, rounds);
 
   const { data: reviews, error: reviewError } = await supabase
     .from("resume_reviews")
@@ -124,14 +152,14 @@ async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRo
 
   return filterCandidatesForDeliberationRound(poolRows, {
     deliberationRound,
-    resumeDecisionRows: resumeRoundDecisionRows,
+    priorDecisionRows: priorRoundDecisionRows,
   });
 }
 
 async function assertDeliberationCompleteForRound(cycleId, roundId) {
   const cycleRounds = await getRoundsForCycle(cycleId);
-  const resumeRound = cycleRounds.find((r) => r.type === "resume_screen") || null;
-  const deliberationRound = cycleRounds.find((r) => r.id === roundId) || null;
+  const resumeRound = getRoundByType(cycleRounds, ROUND_TYPES.RESUME_SCREEN);
+  const deliberationRound = cycleRounds.find((round) => round.id === roundId) || null;
 
   if (!resumeRound) {
     return { error: "No resume screening round for this cycle", status: 400 };
@@ -140,7 +168,7 @@ async function assertDeliberationCompleteForRound(cycleId, roundId) {
     return { error: "Round not found in this cycle", status: 404 };
   }
 
-  const pool = await loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRound);
+  const pool = await loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRound, cycleRounds);
   const summary = summarizeIncompleteDeliberation(pool);
   if (summary.incompleteCount > 0) {
     const parts = [];
@@ -162,31 +190,35 @@ async function assertCandidateEligibleForRoundDecision({
   resumeRound,
   cycleId,
   candidateId,
+  cycleRounds = null,
 }) {
   if (!activeRound || activeRound.status !== "active") {
     return { error: "This round is closed — activate a round in Cycle Management to record decisions.", status: 400 };
   }
 
-  if (activeRound.type !== "interview" || !resumeRound) {
+  if (isResumeScreenType(activeRound.type) || !resumeRound) {
     return null;
   }
 
-  const { data: resumeDecisionRows, error } = await supabase
-    .from("round_decisions")
-    .select("candidate_id, decision")
-    .eq("cycle_id", cycleId)
-    .eq("round_id", resumeRound.id);
-
-  if (error) throw error;
-
-  if (!deliberationHasStarted(resumeDecisionRows)) {
+  const rounds = cycleRounds || await getRoundsForCycle(cycleId);
+  const priorRoundDecisionRows = await loadPriorRoundDecisionRows(cycleId, activeRound, rounds);
+  if (!priorRoundDecisionRows.length) {
     return null;
   }
 
-  const resumeLookup = buildDecisionLookup(resumeDecisionRows);
-  const priorStatus = normalizeRoundDecision(resumeLookup[candidateId]?.decision);
+  if (!deliberationHasStarted(priorRoundDecisionRows)) {
+    return null;
+  }
+
+  const priorLookup = buildDecisionLookup(priorRoundDecisionRows);
+  const priorStatus = normalizeRoundDecision(priorLookup[candidateId]?.decision);
   if (priorStatus !== "advance") {
-    return { error: "Only candidates advanced from resume screening can receive decisions in this round.", status: 400 };
+    const priorRound = getPriorRound(rounds, activeRound);
+    const priorLabel = priorRound?.name || "the previous round";
+    return {
+      error: `Only candidates advanced from ${priorLabel} can receive decisions in this round.`,
+      status: 400,
+    };
   }
 
   return null;
@@ -196,6 +228,7 @@ module.exports = {
   mapScoreboardRoundContext,
   resolveDeliberationRounds,
   filterCandidatesForDeliberationRound,
+  loadPriorRoundDecisionRows,
   loadDeliberationPoolForRound,
   assertDeliberationCompleteForRound,
   assertCandidateEligibleForRoundDecision,

@@ -3,6 +3,7 @@ const {
   getActiveCycleRow,
   getActiveInterviewRound,
   getResumeScreenRoundForCycle,
+  getRoundsForCycle,
   requireActiveInterviewRound,
 } = require("../utils/cycleContext");
 const { resolveReviewNormalizedValue } = require("../utils/rubric");
@@ -12,6 +13,10 @@ const {
   deliberationHasStarted,
   normalizeRoundDecision,
 } = require("../utils/roundDecisions");
+const {
+  getPriorRound,
+  isResumeScreenType,
+} = require("../utils/rounds");
 
 const VALID_DECISIONS = new Set(["pending", "pass", "fail", "hold"]);
 
@@ -29,6 +34,64 @@ function mapEvaluation(row) {
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
   };
+}
+
+async function loadPriorRoundGate(cycleId, activeRound) {
+  const rounds = await getRoundsForCycle(cycleId);
+  const priorRound = getPriorRound(rounds, activeRound);
+  if (!priorRound) {
+    return { priorRound: null, gateStarted: false, eligibleCandidateIds: null };
+  }
+
+  if (isResumeScreenType(priorRound.type)) {
+    const { data: roundDecisionRows, error } = await supabase
+      .from("round_decisions")
+      .select("candidate_id, decision")
+      .eq("cycle_id", cycleId)
+      .eq("round_id", priorRound.id);
+
+    if (error) throw error;
+
+    const gateStarted = deliberationHasStarted(roundDecisionRows);
+    const eligibleCandidateIds = gateStarted
+      ? new Set(
+        (roundDecisionRows || [])
+          .filter((row) => normalizeRoundDecision(row.decision) === "advance")
+          .map((row) => row.candidate_id)
+          .filter(Boolean)
+      )
+      : null;
+
+    return { priorRound, gateStarted, eligibleCandidateIds };
+  }
+
+  const { data: priorEvaluations, error } = await supabase
+    .from("interview_evaluations")
+    .select("candidate_id, decision")
+    .eq("cycle_id", cycleId)
+    .eq("round_id", priorRound.id);
+
+  if (error) throw error;
+
+  const gateStarted = (priorEvaluations || []).some(
+    (row) => String(row.decision || "pending").trim().toLowerCase() !== "pending"
+  );
+  const eligibleCandidateIds = gateStarted
+    ? new Set(
+      (priorEvaluations || [])
+        .filter((row) => String(row.decision || "").trim().toLowerCase() === "pass")
+        .map((row) => row.candidate_id)
+        .filter(Boolean)
+    )
+    : null;
+
+  return { priorRound, gateStarted, eligibleCandidateIds };
+}
+
+function candidatePassesPriorRoundGate(candidateId, { gateStarted, eligibleCandidateIds }) {
+  if (!gateStarted) return true;
+  if (!eligibleCandidateIds) return true;
+  return eligibleCandidateIds.has(candidateId);
 }
 
 exports.listInterviewCandidates = async (req, res) => {
@@ -49,6 +112,8 @@ exports.listInterviewCandidates = async (req, res) => {
         candidates: [],
       });
     }
+
+    const priorGate = await loadPriorRoundGate(ctx.cycle.id, ctx.round);
 
     const { data: candidates, error: candError } = await supabase
       .from("candidates")
@@ -91,17 +156,6 @@ exports.listInterviewCandidates = async (req, res) => {
 
     if (reviewError) return respondWithServerError(res, reviewError, "listInterviewCandidates reviews");
 
-    const { data: roundDecisionRows, error: roundDecisionError } = await supabase
-      .from("round_decisions")
-      .select("candidate_id, decision")
-      .eq("cycle_id", ctx.cycle.id)
-      .eq("round_id", resumeRound.id);
-
-    if (roundDecisionError) return respondWithServerError(res, roundDecisionError, "listInterviewCandidates round decisions");
-
-    const resumeRoundDecisionLookup = buildDecisionLookup(roundDecisionRows);
-    const deliberationStarted = deliberationHasStarted(roundDecisionRows);
-
     const { data: evaluations, error: evalError } = await supabase
       .from("interview_evaluations")
       .select("*")
@@ -130,13 +184,7 @@ exports.listInterviewCandidates = async (req, res) => {
       if (!resume) return false;
       const resumeReviews = reviewsByResume[resume.id] || [];
       if (!resumeReviews.length) return false;
-
-      if (!deliberationStarted) return true;
-
-      const committeeDecision = normalizeRoundDecision(
-        resumeRoundDecisionLookup[candidate.id]?.decision
-      );
-      return committeeDecision === "advance";
+      return candidatePassesPriorRoundGate(candidate.id, priorGate);
     });
 
     const rubricConfig = resumeRound?.rubric_config || null;
@@ -187,7 +235,7 @@ exports.listInterviewCandidates = async (req, res) => {
         round: { id: ctx.round.id, name: ctx.round.name },
       },
       stats,
-      deliberationStarted,
+      deliberationStarted: priorGate.gateStarted,
       candidates: mapped,
     });
   } catch (err) {
@@ -222,6 +270,14 @@ exports.upsertInterviewEvaluation = async (req, res) => {
     if (!candidate) return res.status(404).json({ error: "Candidate not found" });
     if (candidate.cycle_id !== ctx.cycle.id) {
       return res.status(400).json({ error: "Candidate is not in the active cycle" });
+    }
+
+    const priorGate = await loadPriorRoundGate(ctx.cycle.id, ctx.round);
+    if (!candidatePassesPriorRoundGate(candidateId, priorGate)) {
+      const priorLabel = priorGate.priorRound?.name || "the previous round";
+      return res.status(400).json({
+        error: `Only candidates who advanced from ${priorLabel} can be evaluated in this round.`,
+      });
     }
 
     const payload = {
