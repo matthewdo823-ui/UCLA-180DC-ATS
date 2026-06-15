@@ -12,6 +12,7 @@ import ScreenerPage from "./pages/ScreenerPage/ScreenerPage";
 import InterviewManagementPage from "./pages/InterviewManagementPage/InterviewManagementPage";
 import GradingRouterPage from "./pages/GradingRouterPage/GradingRouterPage";
 import ScoreboardPage from "./pages/ScoreboardPage/ScoreboardPage";
+import DemographicsPage from "./pages/DemographicsPage/DemographicsPage";
 import CandidateApplicationPage from "./pages/CandidateApplicationPage/CandidateApplicationPage";
 import Sidebar from "./components/Sidebar/Sidebar";
 
@@ -70,6 +71,14 @@ function AppShell() {
             element={(
               <ProtectedRoute>
                 <ScoreboardPage />
+              </ProtectedRoute>
+            )}
+          />
+          <Route
+            path="/demographics"
+            element={(
+              <ProtectedRoute>
+                <DemographicsPage />
               </ProtectedRoute>
             )}
           />
