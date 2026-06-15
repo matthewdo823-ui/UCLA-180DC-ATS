@@ -7,13 +7,16 @@ import ApplicationEvaluationsSection from "./ApplicationEvaluationsSection";
 import ApplicationProfileSidebar from "./ApplicationProfileSidebar";
 import ApplicationResponsesSection from "./ApplicationResponsesSection";
 import ApplicationResumeSection from "./ApplicationResumeSection";
+import ApplicationSummarySection from "./ApplicationSummarySection";
 import useCandidateApplication from "./useCandidateApplication";
+import useCandidateApplicationSummary from "./useCandidateApplicationSummary";
 
 export default function CandidateApplicationPage() {
   const { candidateId: resumeId } = useParams();
   const navigate = useNavigate();
   const { token } = useAuth();
   const { candidate, resume, scoring, contextLabel, loading, error } = useCandidateApplication(resumeId);
+  const summaryState = useCandidateApplicationSummary(resumeId, !loading && !error && Boolean(candidate));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
@@ -56,6 +59,7 @@ export default function CandidateApplicationPage() {
             <ApplicationProfileSidebar candidate={candidate} resume={resume} scoring={scoring} />
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+              <ApplicationSummarySection {...summaryState} onRefresh={summaryState.refresh} />
               <ApplicationContactSection candidate={candidate} resume={resume} />
               <ApplicationResponsesSection candidate={candidate} />
               <ApplicationResumeSection candidate={candidate} resume={resume} authToken={token} />
