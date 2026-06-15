@@ -11,6 +11,7 @@ import {
 } from "../../utils/rubric";
 import { formatDate } from "../../utils/format";
 import { serifFont } from "../../theme/typography";
+import { formatRoundTypeLabel, isResumeScreenType } from "../../constants/rounds";
 
 const CYCLE_STATUS_STYLE = {
   active: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
@@ -550,7 +551,7 @@ function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric }) {
     }
   }, [round.rubricConfig, editingRubric]);
 
-  const isResumeRound = round.type === "resume_screen";
+  const isResumeRound = isResumeScreenType(round.type);
 
   return (
     <div style={{
@@ -566,7 +567,7 @@ function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric }) {
             <StatusBadge status={round.status} styles={ROUND_STATUS_STYLE} />
           </div>
           <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
-            Type: {round.type === "resume_screen" ? "Resume screen" : "Interview management"}
+            Type: {formatRoundTypeLabel(round.type)}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>

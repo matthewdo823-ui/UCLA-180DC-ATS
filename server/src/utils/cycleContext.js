@@ -1,4 +1,9 @@
 const supabase = require("../config/supabase");
+const {
+  ROUND_TYPES,
+  getRoundByType,
+  isInterviewRoundType,
+} = require("./rounds");
 
 async function getActiveCycleId(client = supabase) {
   const { data, error } = await client
@@ -63,26 +68,25 @@ async function getActiveInterviewRound() {
     .from("rounds")
     .select("*")
     .eq("cycle_id", cycleId)
-    .eq("type", "interview")
     .eq("status", "active")
     .maybeSingle();
 
   if (error) throw error;
+  if (!data || !isInterviewRoundType(data.type)) return null;
   return data;
 }
 
-async function getInterviewRoundForCycle(cycleId) {
+async function getInterviewRoundForCycle(cycleId, roundType = ROUND_TYPES.COFFEE_CHAT) {
   if (!cycleId) return null;
 
-  const { data, error } = await supabase
+  const { data: rounds, error } = await supabase
     .from("rounds")
     .select("*")
     .eq("cycle_id", cycleId)
-    .eq("type", "interview")
-    .maybeSingle();
+    .order("sort_order", { ascending: true });
 
   if (error) throw error;
-  return data;
+  return getRoundByType(rounds, roundType);
 }
 
 async function getRoundsForCycle(cycleId) {
@@ -134,7 +138,7 @@ async function requireActiveInterviewRound() {
 
   const round = await getActiveInterviewRound();
   if (!round) {
-    return { error: "No active interview round", status: 503 };
+    return { error: "No active coffee chat or final round", status: 503 };
   }
 
   return { cycle, round };

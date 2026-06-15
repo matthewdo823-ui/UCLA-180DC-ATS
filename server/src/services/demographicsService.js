@@ -1,6 +1,11 @@
 const supabase = require("../config/supabase");
 const { getActiveCycleRow, getRoundsForCycle } = require("../utils/cycleContext");
 const { normalizeRoundDecision } = require("../utils/roundDecisions");
+const {
+  isResumeScreenType,
+  isInterviewRoundType,
+  sortRounds,
+} = require("../utils/rounds");
 
 const DEMOGRAPHIC_FIELDS = [
   { id: "year", label: "Class year", type: "categorical" },
@@ -92,6 +97,24 @@ function countByField(candidates, field, groupedCategoryOrder = null) {
   return counts;
 }
 
+function getAdvancedCandidateIds(roundId, decisionsByRound, allIds) {
+  return new Set(
+    [...(decisionsByRound[roundId]?.entries() || [])]
+      .filter(([, decision]) => decision === "advance")
+      .map(([candidateId]) => candidateId)
+      .filter((candidateId) => allIds.has(candidateId))
+  );
+}
+
+function getPassedCandidateIds(roundId, interviewByRound, allIds) {
+  return new Set(
+    [...(interviewByRound[roundId]?.entries() || [])]
+      .filter(([, decision]) => decision === "pass")
+      .map(([candidateId]) => candidateId)
+      .filter((candidateId) => allIds.has(candidateId))
+  );
+}
+
 function buildStageCandidateSets({
   candidates,
   resumeCandidateIds,
@@ -128,63 +151,47 @@ function buildStageCandidateSets({
     },
   ];
 
-  const resumeRound = (rounds || []).find((round) => round.type === "resume_screen") || null;
-  const interviewRound = (rounds || []).find((round) => round.type === "interview") || null;
+  let priorStageIds = null;
 
-  if (resumeRound) {
-    stages.push({
-      id: "resume_pool",
-      label: `${resumeRound.name} pool`,
-      roundId: resumeRound.id,
-      candidateIds: resumePoolIds,
-    });
+  sortRounds(rounds).forEach((round) => {
+    if (isResumeScreenType(round.type)) {
+      stages.push({
+        id: "resume_pool",
+        label: `${round.name} pool`,
+        roundId: round.id,
+        candidateIds: resumePoolIds,
+      });
 
-    const advancedIds = new Set(
-      [...(decisionsByRound[resumeRound.id]?.entries() || [])]
-        .filter(([, decision]) => decision === "advance")
-        .map(([candidateId]) => candidateId)
-        .filter((candidateId) => allIds.has(candidateId))
-    );
+      const advancedIds = getAdvancedCandidateIds(round.id, decisionsByRound, allIds);
+      stages.push({
+        id: `advanced_${round.id}`,
+        label: `Advanced · ${round.name}`,
+        roundId: round.id,
+        candidateIds: advancedIds,
+      });
+      priorStageIds = advancedIds;
+      return;
+    }
 
-    stages.push({
-      id: `advanced_${resumeRound.id}`,
-      label: `Advanced · ${resumeRound.name}`,
-      roundId: resumeRound.id,
-      candidateIds: advancedIds,
-    });
-  }
+    if (isInterviewRoundType(round.type)) {
+      const poolIds = priorStageIds || new Set();
+      stages.push({
+        id: `pool_${round.id}`,
+        label: `${round.name} pool`,
+        roundId: round.id,
+        candidateIds: poolIds,
+      });
 
-  if (interviewRound) {
-    const resumeAdvancedIds = resumeRound
-      ? new Set(
-        [...(decisionsByRound[resumeRound.id]?.entries() || [])]
-          .filter(([, decision]) => decision === "advance")
-          .map(([candidateId]) => candidateId)
-          .filter((candidateId) => allIds.has(candidateId))
-      )
-      : new Set();
-
-    stages.push({
-      id: `interview_pool_${interviewRound.id}`,
-      label: `${interviewRound.name} pool`,
-      roundId: interviewRound.id,
-      candidateIds: resumeAdvancedIds,
-    });
-
-    const passedIds = new Set(
-      [...(interviewByRound[interviewRound.id]?.entries() || [])]
-        .filter(([, decision]) => decision === "pass")
-        .map(([candidateId]) => candidateId)
-        .filter((candidateId) => allIds.has(candidateId))
-    );
-
-    stages.push({
-      id: `passed_${interviewRound.id}`,
-      label: `Passed · ${interviewRound.name}`,
-      roundId: interviewRound.id,
-      candidateIds: passedIds,
-    });
-  }
+      const passedIds = getPassedCandidateIds(round.id, interviewByRound, allIds);
+      stages.push({
+        id: `passed_${round.id}`,
+        label: `Passed · ${round.name}`,
+        roundId: round.id,
+        candidateIds: passedIds,
+      });
+      priorStageIds = passedIds;
+    }
+  });
 
   return stages.map((stage) => ({
     ...stage,

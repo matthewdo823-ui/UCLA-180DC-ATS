@@ -21,16 +21,11 @@ import {
 } from "./decisionUtils";
 import { equalizeCandidateScores, recomputeEqualizedStats } from "./equalizeUtils";
 import AdvanceEmailModal from "./AdvanceEmailModal";
+import { formatRoundKind, isInterviewRoundType } from "../../constants/rounds";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
 const cardLime = "#C0DD97";
-
-function formatRoundKind(type) {
-  if (type === "interview") return "Interview";
-  if (type === "resume_screen") return "Resume screen";
-  return "Round";
-}
 
 function formatRoundBanner(round) {
   if (!round?.name) return "CANDIDATE SCORECARD";
@@ -1118,8 +1113,8 @@ export default function ScoreboardPage() {
                     {viewingHistorical ? (
                       <>Archived committee decisions for <strong style={{ color: t.text }}>{activeRound?.name || "this round"}</strong>. Decisions persist after you leave deliberation or close the round.</>
                     ) : canEditDeliberations ? (
-                      activeRound?.type === "interview" ? (
-                        <>Interview deliberation — only candidates <strong style={{ color: t.text }}>advanced</strong> from resume screening appear here. Pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>; press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> on a focused row.</>
+                      isInterviewRoundType(activeRound?.type) ? (
+                        <>Interview deliberation — only candidates <strong style={{ color: t.text }}>advanced</strong> from the previous round appear here. Pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>; press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> on a focused row.</>
                       ) : (
                         <>Live committee — pick <strong style={{ color: t.text }}>Advance</strong>, <strong style={{ color: t.text }}>Hold</strong>, or <strong style={{ color: t.text }}>Reject</strong>. Click a row to focus it; press <strong style={{ color: t.text }}>G</strong> / <strong style={{ color: t.text }}>Y</strong> / <strong style={{ color: t.text }}>R</strong> to decide (again to clear).</>
                       )

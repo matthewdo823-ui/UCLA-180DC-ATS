@@ -157,7 +157,7 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
 
 export default function InterviewManagementPage() {
   const authedFetch = useAuthedFetch();
-  const { phaseLabel, isInterviewRound, loading: cycleLoading, error: cycleError } = useActiveCycle();
+  const { phaseLabel, activeRound, isInterviewRound, loading: cycleLoading, error: cycleError } = useActiveCycle();
   const [data, setData] = useState({ candidates: [], stats: null, context: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -206,21 +206,23 @@ export default function InterviewManagementPage() {
 
   const blocked = !cycleLoading && (!isInterviewRound || cycleError);
 
+  const roundLabel = activeRound?.name || "Interviews";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
-      <Topbar phaseLabel={phaseLabel} activeLabel="Interview management" rightSlot={<></>} />
+      <Topbar phaseLabel={phaseLabel} activeLabel={roundLabel} rightSlot={<></>} />
 
       <div style={{ maxWidth: 960, margin: "0 auto", width: "100%", padding: "24px 24px 40px" }}>
         <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontFamily: serifFont, fontSize: 28, margin: "0 0 8px" }}>Interview management</h1>
+          <h1 style={{ fontFamily: serifFont, fontSize: 28, margin: "0 0 8px" }}>{roundLabel}</h1>
           <p style={{ margin: 0, color: css.textGray, lineHeight: 1.5 }}>
-            Schedule interviews and record pass / fail / hold decisions. Candidates appear here after resume screening in this cycle.
+            Schedule interviews and record pass / fail / hold decisions. Candidates appear here after advancing from the previous round.
           </p>
         </div>
 
         {blocked ? (
           <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>
-            {cycleError || "Interview management is not open. An admin must activate the interview round for this cycle."}
+            {cycleError || `Interview evaluations are not open. An admin must activate the ${roundLabel} round for this cycle.`}
           </div>
         ) : (
           <>

@@ -5,12 +5,18 @@ const TEMPLATE_VARIABLES = [
   { key: "nextRoundName", label: "Next round name" },
 ];
 
+const {
+  normalizeRoundType,
+  ROUND_TYPES,
+} = require("./rounds");
+
 function buildDefaultAdvanceNotification({ roundType, roundName, cycleName, nextRoundName } = {}) {
   const cycle = cycleName || "180DC recruiting";
   const round = roundName || "this round";
   const next = nextRoundName || "the next stage";
+  const normalizedType = normalizeRoundType(roundType);
 
-  if (roundType === "interview") {
+  if (normalizedType === ROUND_TYPES.FINAL_ROUND) {
     return {
       subject: `180DC — ${cycle} update`,
       body: [
@@ -86,7 +92,7 @@ function buildSampleTemplateVars({ cycleName, roundName, nextRoundName } = {}) {
     candidateName: "Alex Chen",
     cycleName: cycleName || "Fall 2026 Recruiting",
     roundName: roundName || "Resume Screening",
-    nextRoundName: nextRoundName || "First Round Interviews",
+    nextRoundName: nextRoundName || "Coffee Chats",
   };
 }
 

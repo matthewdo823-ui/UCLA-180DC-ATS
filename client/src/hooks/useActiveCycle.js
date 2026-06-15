@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuthedFetch } from "../auth/AuthContext";
 import { API } from "../constants/config";
+import { isInterviewRoundType, isResumeScreenType } from "../constants/rounds";
 import { getRubricForYear } from "../utils/rubric";
 
 export function getGradingPath(activeRound) {
-  if (activeRound?.type === "interview") return "/interviews";
+  if (isInterviewRoundType(activeRound?.type)) return "/interviews";
   return "/resume-screener";
 }
 
@@ -54,8 +55,8 @@ export function useActiveCycle() {
       ? `${cycle.name} · No active round`
       : "No active cycle";
 
-  const isInterviewRound = activeRound?.type === "interview";
-  const isResumeRound = activeRound?.type === "resume_screen";
+  const isInterviewRound = isInterviewRoundType(activeRound?.type);
+  const isResumeRound = isResumeScreenType(activeRound?.type);
 
   return {
     cycle,
