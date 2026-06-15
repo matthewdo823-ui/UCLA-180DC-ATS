@@ -66,10 +66,12 @@ export default function DashboardPage() {
     hasGoal && goal > 0 ? Math.min(100, Math.round((graded / goal) * 100)) : 0;
 
   const goalLabel = isInterviewRound
-    ? `Evaluate ${goal} interview candidate${goal === 1 ? "" : "s"}`
+    ? `Evaluate ${goal} candidate${goal === 1 ? "" : "s"} in ${activeRound?.name || "this round"}`
     : `Grade ${goal} resume${goal === 1 ? "" : "s"}`;
 
-  const buttonLabel = isInterviewRound ? "Open Interview Management" : "Start Grading Session";
+  const buttonLabel = isInterviewRound
+    ? `Open ${activeRound?.name || "Interviews"}`
+    : "Start Grading Session";
 
   return (
     <div style={{

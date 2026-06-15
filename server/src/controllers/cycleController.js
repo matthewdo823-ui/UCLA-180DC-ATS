@@ -13,10 +13,14 @@ const {
   isGoogleFormsConfigured,
 } = require("../utils/googleForm");
 const { respondWithServerError } = require("../utils/httpErrors");
+const {
+  ROUND_TYPES,
+  DEFAULT_CYCLE_ROUNDS,
+  isKnownRoundType,
+} = require("../utils/rounds");
 
 const CYCLE_STATUSES = new Set(["draft", "active", "archived"]);
 const ROUND_STATUSES = new Set(["draft", "active", "closed"]);
-const ROUND_TYPES = new Set(["resume_screen", "interview"]);
 
 function slugify(name) {
   const base = String(name || "")
@@ -238,23 +242,18 @@ exports.createCycle = async (req, res) => {
 
     const { data: rounds, error: roundsError } = await supabase
       .from("rounds")
-      .insert([
-        {
+      .insert(
+        DEFAULT_CYCLE_ROUNDS.map((round) => ({
           cycle_id: cycle.id,
-          name: "Resume Screen",
-          type: "resume_screen",
+          name: round.name,
+          type: round.type,
           status: "draft",
-          sort_order: 1,
-          rubric_config: DEFAULT_RUBRIC_CONFIG,
-        },
-        {
-          cycle_id: cycle.id,
-          name: "Interview Management",
-          type: "interview",
-          status: "draft",
-          sort_order: 2,
-        },
-      ])
+          sort_order: round.sortOrder,
+          ...(round.type === ROUND_TYPES.RESUME_SCREEN
+            ? { rubric_config: DEFAULT_RUBRIC_CONFIG }
+            : {}),
+        }))
+      )
       .select("*");
 
     if (roundsError) return respondWithServerError(res, roundsError, "createCycle rounds");
@@ -461,7 +460,7 @@ exports.activateRound = async (req, res) => {
 
     if (targetError) return respondWithServerError(res, targetError, "activateRound target");
     if (!target) return res.status(404).json({ error: "Round not found" });
-    if (!ROUND_TYPES.has(target.type)) {
+    if (!isKnownRoundType(target.type)) {
       return res.status(400).json({ error: "Invalid round type" });
     }
 

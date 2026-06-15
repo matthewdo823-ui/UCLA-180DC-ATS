@@ -39,6 +39,7 @@ const {
     mapScoreboardRoundContext,
     resolveDeliberationRounds,
     filterCandidatesForDeliberationRound,
+    loadPriorRoundDecisionRows,
     assertCandidateEligibleForRoundDecision,
 } = require('../services/roundDeliberationService');
 const {
@@ -1103,17 +1104,11 @@ exports.getScoreboard = async (req, res) => {
 
         const decisionLookup = buildDecisionLookup(roundDecisionRows);
 
-        let resumeRoundDecisionRows = [];
-        if (deliberationRound.type === "interview" && resumeRound.id !== deliberationRound.id) {
-            const { data: priorRows, error: priorDecisionError } = await supabase
-                .from("round_decisions")
-                .select("candidate_id, decision")
-                .eq("cycle_id", activeCycleId)
-                .eq("round_id", resumeRound.id);
-
-            if (priorDecisionError) throw priorDecisionError;
-            resumeRoundDecisionRows = priorRows || [];
-        }
+        const priorRoundDecisionRows = await loadPriorRoundDecisionRows(
+            activeCycleId,
+            deliberationRound,
+            cycleRounds
+        );
 
         const { data: reviews, error: reviewError } = await supabase
             .from('resume_reviews')
@@ -1295,7 +1290,7 @@ exports.getScoreboard = async (req, res) => {
 
         const filteredCandidates = filterCandidatesForDeliberationRound(candidates, {
             deliberationRound,
-            resumeDecisionRows: resumeRoundDecisionRows,
+            priorDecisionRows: priorRoundDecisionRows,
         });
 
         filteredCandidates.sort((a, b) => {
@@ -1502,17 +1497,11 @@ exports.exportScoreboardDecisions = async (req, res) => {
 
         const decisionLookup = buildDecisionLookup(roundDecisionRows);
 
-        let resumeRoundDecisionRows = [];
-        if (deliberationRound.type === "interview" && resumeRound.id !== deliberationRound.id) {
-            const { data: priorRows, error: priorDecisionError } = await supabase
-                .from("round_decisions")
-                .select("candidate_id, decision")
-                .eq("cycle_id", activeCycleId)
-                .eq("round_id", resumeRound.id);
-
-            if (priorDecisionError) return respondWithServerError(res, priorDecisionError, "exportScoreboardDecisions prior decisions");
-            resumeRoundDecisionRows = priorRows || [];
-        }
+        const priorRoundDecisionRows = await loadPriorRoundDecisionRows(
+            activeCycleId,
+            deliberationRound,
+            cycleRounds
+        );
 
         const { data: reviews, error: reviewError } = await supabase
             .from("resume_reviews")
@@ -1558,7 +1547,7 @@ exports.exportScoreboardDecisions = async (req, res) => {
 
         const filteredExportRows = filterCandidatesForDeliberationRound(exportRows, {
             deliberationRound,
-            resumeDecisionRows: resumeRoundDecisionRows,
+            priorDecisionRows: priorRoundDecisionRows,
         });
 
         const csv = buildDecisionsCsv(filteredExportRows, { decisionFilter: exportFilter });
