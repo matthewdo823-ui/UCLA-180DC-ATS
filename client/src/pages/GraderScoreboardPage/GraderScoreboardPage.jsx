@@ -40,6 +40,24 @@ function graderMatchesStatusFilter(grader, filterId) {
   }
 }
 
+function passesGraderSearchQuery(grader, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+
+  const fields = [grader.name, grader.email, grader.role]
+    .filter(Boolean)
+    .map(value => String(value).toLowerCase());
+
+  return fields.some(value => value.includes(q));
+}
+
+function filterGraders(list, statusFilter, searchQuery = "") {
+  return list.filter(g => {
+    if (!passesGraderSearchQuery(g, searchQuery)) return false;
+    return graderMatchesStatusFilter(g, statusFilter);
+  });
+}
+
 function ProgressTiles({ count, expected }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 2 }}>
@@ -219,6 +237,7 @@ export default function GraderScoreboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedGrader, setSelectedGrader] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     async function fetchGraders() {
@@ -246,9 +265,12 @@ export default function GraderScoreboardPage() {
     : "Grader scoreboard";
 
   const filteredGraders = useMemo(
-    () => graders.filter(g => graderMatchesStatusFilter(g, statusFilter)),
-    [graders, statusFilter]
+    () => filterGraders(graders, statusFilter, searchQuery),
+    [graders, statusFilter, searchQuery]
   );
+
+  const hasActiveSearch = searchQuery.trim().length > 0;
+  const hasActiveNarrowing = statusFilter !== "all" || hasActiveSearch;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "auto" }}>
@@ -274,10 +296,11 @@ export default function GraderScoreboardPage() {
                 <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>scoreboard</span>
               </h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
-                Round 1 grading progress — use the status chips to focus on who is done, in progress, or not started yet.
-                {statusFilter !== "all" && (
+                Round 1 grading progress — search by name or email, or use the status chips to focus on who is done, in progress, or not started yet.
+                {hasActiveNarrowing && (
                   <span style={{ display: "block", marginTop: 8, fontSize: 13, color: css.greenDark, fontWeight: 600 }}>
                     Showing {filteredGraders.length} of {graders.length} graders
+                    {hasActiveSearch ? " matching search" : ""}
                   </span>
                 )}
               </p>
@@ -316,6 +339,65 @@ export default function GraderScoreboardPage() {
         </div>
       </div>
 
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", position: "relative" }}>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={css.textGray}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+          aria-hidden
+        >
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Search by name or email…"
+          aria-label="Search graders"
+          style={{
+            width: "100%",
+            padding: "11px 40px 11px 40px",
+            borderRadius: 10,
+            border: `1px solid ${hasActiveSearch ? css.greenDark : css.borderLight}`,
+            background: css.cardWhite,
+            color: css.textDark,
+            fontSize: 14,
+            fontFamily: "'DM Sans', sans-serif",
+            boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+            outline: "none",
+          }}
+        />
+        {hasActiveSearch ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => setSearchQuery("")}
+            style={{
+              position: "absolute",
+              right: 10,
+              top: "50%",
+              transform: "translateY(-50%)",
+              border: "none",
+              background: "none",
+              color: css.textGray,
+              cursor: "pointer",
+              fontSize: 18,
+              lineHeight: 1,
+              padding: 4,
+            }}
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
+
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", padding: "18px 20px", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
         {[
           ["GRADERS", data.stats?.graders ?? "—"],
@@ -346,7 +428,9 @@ export default function GraderScoreboardPage() {
         )}
 
         {!loading && graders.length > 0 && filteredGraders.length === 0 && (
-          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No graders match this filter.</div>
+          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>
+            {hasActiveSearch ? "No graders match your search." : "No graders match this filter."}
+          </div>
         )}
 
         {!loading && filteredGraders.map((grader, index) => {
@@ -356,7 +440,7 @@ export default function GraderScoreboardPage() {
           const delay = Math.min(index, staggerCap) * staggerMs;
           return (
           <div
-            key={`${statusFilter}-${grader.id}`}
+            key={`${statusFilter}-${searchQuery}-${grader.id}`}
             style={{
               display: "grid",
               gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px",
