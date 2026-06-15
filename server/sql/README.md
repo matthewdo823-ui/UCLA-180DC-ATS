@@ -14,6 +14,8 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 8 | `add_round_decisions.sql` | Committee round decisions (`advance` / `hold` / `reject`) for live scoreboard deliberation |
 | 9 | `add_round_notifications.sql` | Advance email templates per round + send audit log |
 | 10 | `backfill_resume_candidate_ids.sql` | Link orphan `resumes` rows to `candidates` by name / Drive file id (optional data repair) |
+| 11 | `add_final_round.sql` | Normalizes recruiting rounds to resume_screen, coffee_chat, and final_round |
+| 12 | `add_candidate_summaries.sql` | Cached AI candidate summaries for the full application view |
 
 ## Notes
 

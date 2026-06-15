@@ -19,6 +19,7 @@ router.get('/resume/:id/file', resumeController.getResumeFile);
 router.get('/view/pdf', resumeController.viewPdf);
 router.get('/view/image', resumeController.viewImage);
 router.get('/scoreboard/:resumeId/application', resumeController.getScoreboardApplication);
+router.get('/scoreboard/:resumeId/application/summary', resumeController.getScoreboardApplicationSummary);
 router.get('/scoreboard', resumeController.getScoreboard);
 router.get('/demographics', demographicsController.getDemographics);
 router.post('/scoreboard/decisions', requireRoles('admin'), resumeController.upsertRoundDecision);

@@ -47,6 +47,10 @@ const {
     fetchLatestAdvanceBatch,
     isGmailConfigured,
 } = require('../services/roundNotificationService');
+const {
+    isAiSummaryConfigured,
+    resolveCandidateSummary,
+} = require('../services/candidateSummaryService');
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
@@ -1585,6 +1589,179 @@ function mapApplicationCandidate(candidate) {
     };
 }
 
+async function fetchScoreboardApplicationPayload(resumeId) {
+    const activeCycle = await getActiveCycleRow();
+    const activeCycleId = activeCycle?.id || null;
+    const resumeRound = activeCycleId
+        ? await getResumeScreenRoundForCycle(activeCycleId)
+        : null;
+
+    if (!activeCycleId || !resumeRound) {
+        const err = new Error('No active resume screening cycle');
+        err.statusCode = 503;
+        throw err;
+    }
+
+    const { data: resumeRow, error: resumeError } = await supabase
+        .from('resumes')
+        .select(`
+            id,
+            name,
+            file_url,
+            review_count,
+            created_at,
+            cycle_id,
+            candidates (
+                id,
+                name,
+                email,
+                phone_number,
+                major,
+                gpa,
+                year,
+                pronouns,
+                urm,
+                linkedin,
+                gm,
+                newbie_training,
+                why_consulting,
+                why_180dc,
+                why_social_impact,
+                extenuating_circumstances,
+                headshot,
+                resume_file_url,
+                created_at,
+                cycle_id
+            )
+        `)
+        .eq('id', resumeId)
+        .maybeSingle();
+
+    if (resumeError) {
+        const err = new Error(resumeError.message || 'Failed to load resume');
+        err.cause = resumeError;
+        throw err;
+    }
+    if (!resumeRow) {
+        const err = new Error('Candidate not found');
+        err.statusCode = 404;
+        throw err;
+    }
+
+    if (resumeRow.cycle_id !== activeCycleId) {
+        const err = new Error('Candidate is not in the active cycle');
+        err.statusCode = 404;
+        throw err;
+    }
+
+    const candidate = firstRel(resumeRow.candidates);
+    if (!candidate || candidate.cycle_id !== activeCycleId) {
+        const err = new Error('Candidate is not in the active cycle');
+        err.statusCode = 404;
+        throw err;
+    }
+
+    const { data: reviews, error: reviewError } = await supabase
+        .from('resume_reviews')
+        .select('id, scores, notes, submitted_at, graded_by, rubric_snapshot, decision')
+        .eq('resume_id', resumeId)
+        .eq('cycle_id', activeCycleId)
+        .eq('round_id', resumeRound.id)
+        .order('submitted_at', { ascending: true });
+
+    if (reviewError) {
+        const err = new Error(reviewError.message || 'Failed to load reviews');
+        err.cause = reviewError;
+        throw err;
+    }
+
+    const gradedByUserLookup = await getGradedByUserLookup((reviews || []).map(review => review.graded_by));
+    const metricSet = new Set(getMetricsFromRubricConfig(resumeRound.rubric_config));
+    const categoryTotals = {};
+    const categoryCounts = {};
+    let totalScore = 0;
+    let totalNormalized = 0;
+
+    const mappedReviews = (reviews || []).map(review => {
+        const snapshot = review.rubric_snapshot || null;
+        const metrics = snapshot?.metrics || Object.keys(review.scores || {});
+        metrics.forEach((metric) => metricSet.add(metric));
+
+        const reviewScore = getReviewScore(review.scores, metrics);
+        const reviewNormalized = resolveReviewNormalizedValue(review, {
+            rubricConfig: resumeRound.rubric_config,
+            candidateYear: candidate.year,
+        });
+
+        totalScore += reviewScore;
+        totalNormalized += reviewNormalized;
+
+        Object.entries(review.scores || {}).forEach(([metric, value]) => {
+            const numericValue = Number(value) || 0;
+            categoryTotals[metric] = (categoryTotals[metric] || 0) + numericValue;
+            categoryCounts[metric] = (categoryCounts[metric] || 0) + 1;
+        });
+
+        const graderFromUsers = review.graded_by != null ? gradedByUserLookup[review.graded_by] : null;
+
+        return {
+            id: review.id,
+            scores: review.scores || {},
+            score: reviewScore,
+            normalizedScore: reviewNormalized,
+            maxScore: snapshot?.maxScore ?? null,
+            decision: review.decision || 'pass',
+            reviewerName: graderFromUsers?.name || null,
+            reviewerEmail: graderFromUsers?.email || null,
+            notes: review.notes || '',
+            submittedAt: review.submitted_at,
+        };
+    });
+
+    const numReviews = mappedReviews.length;
+    const aggregateScore = numReviews > 0 ? Number((totalScore / numReviews).toFixed(1)) : null;
+    const normalizedScore = numReviews > 0 ? Number((totalNormalized / numReviews).toFixed(1)) : null;
+    const resumeFileUrl = resumeRow.file_url || candidate.resume_file_url || '';
+
+    return {
+        context: {
+            cycle: { id: activeCycle.id, name: activeCycle.name },
+            round: { id: resumeRound.id, name: resumeRound.name },
+        },
+        resume: {
+            id: resumeRow.id,
+            name: resumeRow.name || candidate.name || 'Unknown',
+            fileUrl: resumeFileUrl,
+            reviewCount: resumeRow.review_count ?? numReviews,
+            submittedAt: resumeRow.created_at,
+        },
+        candidate: mapApplicationCandidate(candidate),
+        candidateId: candidate.id,
+        resumeRoundId: resumeRound.id,
+        activeCycleId,
+        scoring: {
+            metrics: [...metricSet],
+            maxPerCategory: resumeRound.rubric_config?.maxPerCategory || 4,
+            numReviews,
+            aggregateScore,
+            normalizedScore,
+            score: normalizedScore === null ? null : Math.round(normalizedScore),
+            categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
+            reviews: mappedReviews,
+        },
+    };
+}
+
+function respondWithApplicationFetchError(res, err, context) {
+    if (err?.statusCode === 404) {
+        return res.status(404).json({ error: err.message });
+    }
+    if (err?.statusCode === 503) {
+        return res.status(503).json({ error: err.message });
+    }
+    return respondWithServerError(res, err?.cause || err, context);
+}
+
 // Full application record for one scoreboard candidate (resume id).
 exports.getScoreboardApplication = async (req, res) => {
     try {
@@ -1593,149 +1770,81 @@ exports.getScoreboardApplication = async (req, res) => {
             return res.status(400).json({ error: 'resumeId is required' });
         }
 
-        const activeCycle = await getActiveCycleRow();
-        const activeCycleId = activeCycle?.id || null;
-        const resumeRound = activeCycleId
-            ? await getResumeScreenRoundForCycle(activeCycleId)
-            : null;
+        const payload = await fetchScoreboardApplicationPayload(resumeId);
+        const { candidateId, resumeRoundId, activeCycleId, ...responseBody } = payload;
+        return res.json(responseBody);
+    } catch (err) {
+        return respondWithApplicationFetchError(res, err, 'getScoreboardApplication');
+    }
+};
 
-        if (!activeCycleId || !resumeRound) {
-            return res.status(503).json({ error: 'No active resume screening cycle' });
+exports.getScoreboardApplicationSummary = async (req, res) => {
+    try {
+        const resumeId = String(req.params.resumeId || '').trim();
+        if (!resumeId) {
+            return res.status(400).json({ error: 'resumeId is required' });
         }
 
-        const { data: resumeRow, error: resumeError } = await supabase
-            .from('resumes')
-            .select(`
-                id,
-                name,
-                file_url,
-                review_count,
-                created_at,
-                cycle_id,
-                candidates (
-                    id,
-                    name,
-                    email,
-                    phone_number,
-                    major,
-                    gpa,
-                    year,
-                    pronouns,
-                    urm,
-                    linkedin,
-                    gm,
-                    newbie_training,
-                    why_consulting,
-                    why_180dc,
-                    why_social_impact,
-                    extenuating_circumstances,
-                    headshot,
-                    resume_file_url,
-                    created_at,
-                    cycle_id
-                )
-            `)
-            .eq('id', resumeId)
+        if (!isAiSummaryConfigured()) {
+            return res.status(503).json({ error: 'AI summary is not configured on the server' });
+        }
+
+        const forceRefresh = String(req.query.refresh || '').trim() === '1';
+
+        const payload = await fetchScoreboardApplicationPayload(resumeId);
+
+        const { data: roundDecisionRow, error: decisionError } = await supabase
+            .from('round_decisions')
+            .select('decision, notes, updated_at')
+            .eq('cycle_id', payload.activeCycleId)
+            .eq('round_id', payload.resumeRoundId)
+            .eq('candidate_id', payload.candidateId)
             .maybeSingle();
 
-        if (resumeError) return respondWithServerError(res, resumeError, 'getScoreboardApplication resume');
-        if (!resumeRow) {
-            return res.status(404).json({ error: 'Candidate not found' });
+        if (decisionError) {
+            return respondWithServerError(res, decisionError, 'getScoreboardApplicationSummary decision');
         }
 
-        if (resumeRow.cycle_id !== activeCycleId) {
-            return res.status(404).json({ error: 'Candidate is not in the active cycle' });
-        }
+        const roundDecision = roundDecisionRow
+            ? {
+                decision: roundDecisionRow.decision,
+                notes: roundDecisionRow.notes || '',
+                updatedAt: roundDecisionRow.updated_at || null,
+            }
+            : null;
 
-        const candidate = firstRel(resumeRow.candidates);
-        if (!candidate || candidate.cycle_id !== activeCycleId) {
-            return res.status(404).json({ error: 'Candidate is not in the active cycle' });
-        }
-
-        const { data: reviews, error: reviewError } = await supabase
-            .from('resume_reviews')
-            .select('id, scores, notes, submitted_at, graded_by, rubric_snapshot, decision')
-            .eq('resume_id', resumeId)
-            .eq('cycle_id', activeCycleId)
-            .eq('round_id', resumeRound.id)
-            .order('submitted_at', { ascending: true });
-
-        if (reviewError) return respondWithServerError(res, reviewError, 'getScoreboardApplication reviews');
-
-        const gradedByUserLookup = await getGradedByUserLookup((reviews || []).map(review => review.graded_by));
-        const metricSet = new Set(getMetricsFromRubricConfig(resumeRound.rubric_config));
-        const categoryTotals = {};
-        const categoryCounts = {};
-        let totalScore = 0;
-        let totalNormalized = 0;
-
-        const mappedReviews = (reviews || []).map(review => {
-            const snapshot = review.rubric_snapshot || null;
-            const metrics = snapshot?.metrics || Object.keys(review.scores || {});
-            metrics.forEach((metric) => metricSet.add(metric));
-
-            const reviewScore = getReviewScore(review.scores, metrics);
-            const reviewNormalized = resolveReviewNormalizedValue(review, {
-                rubricConfig: resumeRound.rubric_config,
-                candidateYear: candidate.year,
-            });
-
-            totalScore += reviewScore;
-            totalNormalized += reviewNormalized;
-
-            Object.entries(review.scores || {}).forEach(([metric, value]) => {
-                const numericValue = Number(value) || 0;
-                categoryTotals[metric] = (categoryTotals[metric] || 0) + numericValue;
-                categoryCounts[metric] = (categoryCounts[metric] || 0) + 1;
-            });
-
-            const graderFromUsers = review.graded_by != null ? gradedByUserLookup[review.graded_by] : null;
-
-            return {
-                id: review.id,
-                scores: review.scores || {},
-                score: reviewScore,
-                normalizedScore: reviewNormalized,
-                maxScore: snapshot?.maxScore ?? null,
-                decision: review.decision || 'pass',
-                reviewerName: graderFromUsers?.name || null,
-                reviewerEmail: graderFromUsers?.email || null,
-                notes: review.notes || '',
-                submittedAt: review.submitted_at,
-            };
+        const summaryResult = await resolveCandidateSummary(supabase, {
+            resumeId,
+            candidateId: payload.candidateId,
+            cycleId: payload.activeCycleId,
+            roundId: payload.resumeRoundId,
+            applicationPayload: {
+                candidate: payload.candidate,
+                scoring: payload.scoring,
+                context: payload.context,
+                roundDecision,
+            },
+            roundDecision,
+            forceRefresh,
         });
 
-        const numReviews = mappedReviews.length;
-        const aggregateScore = numReviews > 0 ? Number((totalScore / numReviews).toFixed(1)) : null;
-        const normalizedScore = numReviews > 0 ? Number((totalNormalized / numReviews).toFixed(1)) : null;
-        const resumeFileUrl = resumeRow.file_url || candidate.resume_file_url || '';
-
-        return res.json({
-            context: {
-                cycle: { id: activeCycle.id, name: activeCycle.name },
-                round: { id: resumeRound.id, name: resumeRound.name },
-            },
-            resume: {
-                id: resumeRow.id,
-                name: resumeRow.name || candidate.name || 'Unknown',
-                fileUrl: resumeFileUrl,
-                reviewCount: resumeRow.review_count ?? numReviews,
-                submittedAt: resumeRow.created_at,
-            },
-            candidate: mapApplicationCandidate(candidate),
-            scoring: {
-                metrics: [...metricSet],
-                maxPerCategory: resumeRound.rubric_config?.maxPerCategory || 4,
-                numReviews,
-                aggregateScore,
-                normalizedScore,
-                score: normalizedScore === null ? null : Math.round(normalizedScore),
-                categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
-                reviews: mappedReviews,
-            },
-        });
+        return res.json(summaryResult);
     } catch (err) {
-        return respondWithServerError(res, err, 'getScoreboardApplication');
+        if (err?.code === 'AI_NOT_CONFIGURED') {
+            return res.status(503).json({ error: err.message });
+        }
+        if (err?.response?.status === 401) {
+            return res.status(503).json({ error: 'AI summary API key is invalid' });
+        }
+        if (err?.response?.data?.error?.message) {
+            return respondWithServerError(
+                res,
+                err,
+                'getScoreboardApplicationSummary',
+                'Failed to generate AI summary'
+            );
+        }
+        return respondWithApplicationFetchError(res, err, 'getScoreboardApplicationSummary');
     }
 };
 
