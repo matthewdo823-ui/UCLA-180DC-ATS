@@ -53,6 +53,7 @@ Run the SQL migrations in [server/sql/](server/sql/) **once**, in order, in the 
 6. `add_save_resume_review.sql`
 7. `add_resume_review_unique_per_grader.sql`
 8. `add_round_decisions.sql`
+9. `add_round_notifications.sql`
 
 See [server/sql/README.md](server/sql/README.md) for details on fresh vs. existing databases.
 
@@ -76,6 +77,7 @@ cp server/.env.example server/.env
 | `FORMS_SYNC_CRON` | No | Cron expression for in-process sync (default: every 15 min) |
 | `DISABLE_FORMS_SYNC_CRON` | No | Set to `1` when using Vercel cron instead |
 | `CRON_SECRET` | For cron | Shared secret for `POST /cron/forms-sync` |
+| Gmail (advance emails) | Optional | See [server/docs/gmail-setup.md](server/docs/gmail-setup.md) — OAuth for personal Gmail or Workspace delegation |
 
 **Client** — copy the example:
 
