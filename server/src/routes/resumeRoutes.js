@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const resumeController = require('../controllers/resumeController');
+const demographicsController = require('../controllers/demographicsController');
 const { authenticateToken, requireRoles } = require('../middleware/authMiddleware');
 
 router.use(authenticateToken, requireRoles('admin', 'member'));
@@ -19,6 +20,7 @@ router.get('/view/pdf', resumeController.viewPdf);
 router.get('/view/image', resumeController.viewImage);
 router.get('/scoreboard/:resumeId/application', resumeController.getScoreboardApplication);
 router.get('/scoreboard', resumeController.getScoreboard);
+router.get('/demographics', demographicsController.getDemographics);
 router.post('/scoreboard/decisions', requireRoles('admin'), resumeController.upsertRoundDecision);
 router.get('/scoreboard/decisions/export', requireRoles('admin'), resumeController.exportScoreboardDecisions);
 router.get('/grader-scoreboard', requireRoles('admin'), resumeController.getGraderScoreboard);
