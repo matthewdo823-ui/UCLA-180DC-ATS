@@ -708,6 +708,7 @@ export default function ScoreboardPage() {
   /** After first data paint, bump key so sort/filter changes remount rows and replay stagger. */
   const listStaggerBootstrappedRef = useRef(false);
   const pendingDecisionIdsRef = useRef(new Set());
+  const viewingHistorical = data.context?.viewingHistorical === true;
 
   const fetchScoreboard = useCallback(async (opts = {}) => {
     const silent = opts.silent === true;
@@ -820,7 +821,6 @@ export default function ScoreboardPage() {
   const liveActiveRound = data.context?.activeRound;
   const nextRound = data.context?.nextRound;
   const allRounds = data.context?.allRounds ?? [];
-  const viewingHistorical = data.context?.viewingHistorical === true;
   const canDeliberate = data.context?.canDeliberate === true;
   const canEditDeliberations = isAdmin && canDeliberate && !viewingHistorical;
   const canCloseRound = data.context?.canCloseRound === true;
