@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const axios = require("axios");
 
-const DEFAULT_MODEL = "gemini-2.0-flash";
+const DEFAULT_MODEL = "gemini-2.5-flash";
 const DEFAULT_CACHE_TTL_HOURS = 48;
 
 function isAiSummaryConfigured() {

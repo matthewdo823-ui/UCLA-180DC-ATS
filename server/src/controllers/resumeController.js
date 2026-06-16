@@ -1836,12 +1836,16 @@ exports.getScoreboardApplicationSummary = async (req, res) => {
         if (err?.response?.status === 401) {
             return res.status(503).json({ error: 'AI summary API key is invalid' });
         }
-        if (err?.response?.data?.error?.message) {
+        const geminiMessage = err?.response?.data?.error?.message;
+        if (geminiMessage) {
+            return res.status(503).json({ error: geminiMessage });
+        }
+        if (err?.message && err?.code !== 'AI_NOT_CONFIGURED') {
             return respondWithServerError(
                 res,
                 err,
                 'getScoreboardApplicationSummary',
-                'Failed to generate AI summary'
+                err.message
             );
         }
         return respondWithApplicationFetchError(res, err, 'getScoreboardApplicationSummary');
