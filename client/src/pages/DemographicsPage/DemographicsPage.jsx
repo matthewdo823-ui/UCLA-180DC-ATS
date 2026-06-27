@@ -122,7 +122,7 @@ export default function DemographicsPage() {
             Demographics by pipeline stage
           </h1>
           <p style={{ margin: "10px 0 0", maxWidth: 760, fontSize: 14, lineHeight: 1.55, color: css.textGray }}>
-            Composition across applicants, screening pools, and candidates who advance or pass each round.
+            Composition across applicants, screening pools, and candidates advanced to each subsequent round.
             Percentages use the stage total; counts are shown beside each bar and in the tables.
           </p>
         </div>
