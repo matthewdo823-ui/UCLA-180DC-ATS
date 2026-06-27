@@ -663,8 +663,13 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {!cycle.isActive && cycle.status !== "archived" ? (
-              <ActionButton label="Activate cycle" onClick={() => onActivate(cycle.id)} disabled={busy} variant="primary" />
+            {!cycle.isActive ? (
+              <ActionButton
+                label={cycle.status === "archived" ? "Reactivate cycle" : "Activate cycle"}
+                onClick={() => onActivate(cycle.id)}
+                disabled={busy}
+                variant="primary"
+              />
             ) : null}
             {cycle.status !== "archived" ? (
               <ActionButton label="Archive" onClick={() => onArchive(cycle.id)} disabled={busy || cycle.isActive} variant="danger" />
@@ -773,7 +778,7 @@ export default function CycleManagementPage() {
           <h1 style={{ fontFamily: serifFont, fontSize: 30, margin: "0 0 8px", color: css.textDark }}>Cycle management</h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
             Create recruiting cycles (e.g. Winter 26), link a Google Form per cycle, and manage rounds within each cycle.
-            Only one cycle is active at a time. Close a round before activating the next.
+            Only one cycle is active at a time. Close a round before activating the next. Archived cycles can be reactivated here.
           </p>
         </div>
 

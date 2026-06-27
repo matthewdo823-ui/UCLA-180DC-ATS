@@ -65,7 +65,7 @@ const usersIcon = (
   </svg>
 );
 
-const menuLinks = [
+const baseMenuLinks = [
   { path: "/", label: "Home", icon: homeIcon },
   { path: "/grading", label: "Grading", icon: gradingIcon },
   { path: "/scoreboard", label: "Scoreboard", icon: scoreboardIcon },
@@ -150,6 +150,11 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const isAdmin = isAdminRole(user?.role);
+  const menuLinks = baseMenuLinks.map((link) => (
+    link.path === "/" && isAdmin
+      ? { ...link, label: "Admin Home" }
+      : link
+  ));
 
   return (
     <div style={{

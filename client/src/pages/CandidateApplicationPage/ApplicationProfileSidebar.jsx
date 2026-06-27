@@ -45,11 +45,33 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring }
               </p>
               {hasNumericScore(scoring?.normalizedScore) ? (
                 <>
-                  <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>
-                    {formatScore(scoring.normalizedScore)}<span style={{ fontSize: 14 }}>%</span>
-                  </p>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                    <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: scoring?.adminOverride?.overrideScore != null ? "#E24B4A" : cardGreen, lineHeight: 1 }}>
+                      {formatScore(scoring.normalizedScore)}<span style={{ fontSize: 14 }}>%</span>
+                    </p>
+                    {scoring?.adminOverride?.overrideScore != null && (
+                      <span
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          letterSpacing: "0.05em",
+                          textTransform: "uppercase",
+                          padding: "3px 8px",
+                          borderRadius: 20,
+                          background: "rgba(226,75,74,0.12)",
+                          color: "#E24B4A",
+                          border: "1px solid rgba(226,75,74,0.28)",
+                        }}
+                      >
+                        Overridden
+                      </span>
+                    )}
+                  </div>
                   <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
-                    {formatScore(scoring.aggregateScore)} raw pts · {scoring.numReviews} {scoring.numReviews === 1 ? "review" : "reviews"}
+                    {scoring?.adminOverride?.overrideScore != null
+                      ? `Admin override · ${scoring.numReviews} ${scoring.numReviews === 1 ? "review" : "reviews"}`
+                      : `${formatScore(scoring.aggregateScore)} raw pts · ${scoring.numReviews} ${scoring.numReviews === 1 ? "review" : "reviews"}`
+                    }
                   </p>
                 </>
               ) : (
