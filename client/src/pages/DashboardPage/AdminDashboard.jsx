@@ -9,7 +9,7 @@ import {
   ActionItemList,
   QuickActionGrid,
   GraderProgressRows,
-  YearBreakdown,
+  RoundTimeline,
 } from "./dashboardComponents";
 
 export default function AdminDashboard() {
@@ -19,7 +19,6 @@ export default function AdminDashboard() {
   const context = data?.context;
   const pipeline = data?.pipeline;
   const graderSummary = data?.graderSummary;
-  const demographics = data?.demographics;
   const actionItems = data?.actionItems || [];
 
   const isInterview = context?.isInterviewRound;
@@ -85,6 +84,18 @@ export default function AdminDashboard() {
           )}
         </Panel>
 
+        <Panel title="Round timeline">
+          {loading ? (
+            <div style={{ fontSize: 14, color: css.textGray }}>Loading round status…</div>
+          ) : (
+            <RoundTimeline
+              rounds={context?.allRounds}
+              activeRound={context?.activeRound}
+              nextRound={context?.nextRound}
+            />
+          )}
+        </Panel>
+
         <Panel title="Pipeline">
           {loading ? (
             <div style={{ fontSize: 14, color: css.textGray }}>Loading pipeline…</div>
@@ -106,69 +117,37 @@ export default function AdminDashboard() {
           )}
         </Panel>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 28 }}>
-          <Panel title="Grading coverage" style={{ marginBottom: 0 }}>
-            {loading ? (
-              <div style={{ fontSize: 14, color: css.textGray }}>Loading grader coverage…</div>
-            ) : data?.graderLoadError ? (
-              <div style={{ fontSize: 14, color: css.red }}>{data.graderLoadError}</div>
-            ) : !graderSummary ? (
-              <div style={{ fontSize: 14, color: css.textGray }}>No grader data for this cycle.</div>
-            ) : (
-              <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10, marginBottom: 16 }}>
-                  <StatCard label="Active graders" value={graderSummary.activeGraders} sub={`of ${graderSummary.graders} total`} />
-                  <StatCard label="Total reviews" value={graderSummary.totalReviews} sub={`Avg ${graderSummary.avgReviews} per grader`} />
-                  <StatCard label="Goal complete" value={graderSummary.completeCount} sub={`${graderSummary.expectedReviews} reviews each`} />
-                  <StatCard label="Not started" value={graderSummary.notStarted} accent={graderSummary.notStarted > 0 ? css.amber : css.greenDark} />
-                </div>
-                {graderSummary.behindGraders?.length > 0 ? (
-                  <>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                      Behind on goal
-                    </div>
-                    <GraderProgressRows
-                      graders={graderSummary.behindGraders}
-                      expectedReviews={graderSummary.expectedReviews}
-                    />
-                  </>
-                ) : (
-                  <div style={{ fontSize: 13, color: css.textGray }}>All active graders are on track.</div>
-                )}
-              </>
-            )}
-          </Panel>
-
-          <Panel title="Applicant snapshot" style={{ marginBottom: 0 }}>
-            {loading ? (
-              <div style={{ fontSize: 14, color: css.textGray }}>Loading…</div>
-            ) : !demographics ? (
-              <div style={{ fontSize: 14, color: css.textGray }}>No applicant data for this cycle.</div>
-            ) : (
-              <div style={{
-                background: css.cardWhite,
-                border: `1px solid ${css.borderLight}`,
-                borderRadius: 12,
-                padding: "18px 20px",
-              }}
-              >
-                <div style={{ display: "flex", gap: 24, marginBottom: 16 }}>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: css.textGray, textTransform: "uppercase" }}>Total applicants</div>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: css.greenDark, marginTop: 4 }}>{demographics.totalApplicants}</div>
-                  </div>
-                  {demographics.urmPercent != null ? (
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: css.textGray, textTransform: "uppercase" }}>URM</div>
-                      <div style={{ fontSize: 24, fontWeight: 700, color: css.greenDark, marginTop: 4 }}>{demographics.urmPercent}%</div>
-                    </div>
-                  ) : null}
-                </div>
-                <YearBreakdown items={demographics.yearBreakdown} total={demographics.totalApplicants} />
+        <Panel title="Grading coverage">
+          {loading ? (
+            <div style={{ fontSize: 14, color: css.textGray }}>Loading grader coverage…</div>
+          ) : data?.graderLoadError ? (
+            <div style={{ fontSize: 14, color: css.red }}>{data.graderLoadError}</div>
+          ) : !graderSummary ? (
+            <div style={{ fontSize: 14, color: css.textGray }}>No grader data for this cycle.</div>
+          ) : (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10, marginBottom: 16 }}>
+                <StatCard label="Active graders" value={graderSummary.activeGraders} sub={`of ${graderSummary.graders} total`} />
+                <StatCard label="Total reviews" value={graderSummary.totalReviews} sub={`Avg ${graderSummary.avgReviews} per grader`} />
+                <StatCard label="Goal complete" value={graderSummary.completeCount} sub={`${graderSummary.expectedReviews} reviews each`} />
+                <StatCard label="Not started" value={graderSummary.notStarted} accent={graderSummary.notStarted > 0 ? css.amber : css.greenDark} />
               </div>
-            )}
-          </Panel>
-        </div>
+              {graderSummary.behindGraders?.length > 0 ? (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Behind on goal
+                  </div>
+                  <GraderProgressRows
+                    graders={graderSummary.behindGraders}
+                    expectedReviews={graderSummary.expectedReviews}
+                  />
+                </>
+              ) : (
+                <div style={{ fontSize: 13, color: css.textGray }}>All active graders are on track.</div>
+              )}
+            </>
+          )}
+        </Panel>
 
         <Panel title="Quick actions">
           <QuickActionGrid actions={quickActions} onNavigate={navigate} />
