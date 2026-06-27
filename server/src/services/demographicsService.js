@@ -162,34 +162,19 @@ function buildStageCandidateSets({
         candidateIds: resumePoolIds,
       });
 
-      const advancedIds = getAdvancedCandidateIds(round.id, decisionsByRound, allIds);
-      stages.push({
-        id: `advanced_${round.id}`,
-        label: `Advanced · ${round.name}`,
-        roundId: round.id,
-        candidateIds: advancedIds,
-      });
-      priorStageIds = advancedIds;
+      priorStageIds = getAdvancedCandidateIds(round.id, decisionsByRound, allIds);
       return;
     }
 
     if (isInterviewRoundType(round.type)) {
-      const poolIds = priorStageIds || new Set();
       stages.push({
         id: `pool_${round.id}`,
-        label: `${round.name} pool`,
+        label: `Advanced to ${round.name}`,
         roundId: round.id,
-        candidateIds: poolIds,
+        candidateIds: priorStageIds || new Set(),
       });
 
-      const passedIds = getPassedCandidateIds(round.id, interviewByRound, allIds);
-      stages.push({
-        id: `passed_${round.id}`,
-        label: `Passed · ${round.name}`,
-        roundId: round.id,
-        candidateIds: passedIds,
-      });
-      priorStageIds = passedIds;
+      priorStageIds = getPassedCandidateIds(round.id, interviewByRound, allIds);
     }
   });
 
