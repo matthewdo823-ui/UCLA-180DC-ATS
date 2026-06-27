@@ -1771,8 +1771,23 @@ exports.getScoreboardApplication = async (req, res) => {
         }
 
         const payload = await fetchScoreboardApplicationPayload(resumeId);
+
+        // Fetch admin override and apply to scoring
+        const adminOverrideRow = await fetchAdminOverride(
+            payload.candidateId,
+            payload.activeCycleId,
+            payload.resumeRoundId
+        );
+        const adminOverride = mapAdminOverride(adminOverrideRow);
+        if (adminOverride) {
+            applyAdminOverrideToScoring(payload.scoring, adminOverride);
+        }
+
         const { candidateId, resumeRoundId, activeCycleId, ...responseBody } = payload;
-        return res.json(responseBody);
+        return res.json({
+            ...responseBody,
+            adminOverride,
+        });
     } catch (err) {
         return respondWithApplicationFetchError(res, err, 'getScoreboardApplication');
     }
@@ -1849,6 +1864,133 @@ exports.getScoreboardApplicationSummary = async (req, res) => {
             );
         }
         return respondWithApplicationFetchError(res, err, 'getScoreboardApplicationSummary');
+    }
+};
+
+// ── Admin overrides: per-candidate notes + score override for resume screening ──
+
+async function fetchAdminOverride(candidateId, cycleId, roundId) {
+    const { data, error } = await supabase
+        .from('candidate_admin_overrides')
+        .select('*')
+        .eq('candidate_id', candidateId)
+        .eq('cycle_id', cycleId)
+        .eq('round_id', roundId)
+        .maybeSingle();
+
+    if (error) {
+        console.warn('fetchAdminOverride:', error.message);
+        return null;
+    }
+    return data;
+}
+
+function mapAdminOverride(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        candidateId: row.candidate_id,
+        cycleId: row.cycle_id,
+        roundId: row.round_id,
+        adminNotes: row.admin_notes || '',
+        overrideScore: row.override_score != null ? Number(row.override_score) : null,
+        adminUserId: row.admin_user_id ?? null,
+        updatedAt: row.updated_at || null,
+    };
+}
+
+/** Apply admin score override to scoring object (mutates in place). */
+function applyAdminOverrideToScoring(scoring, adminOverride) {
+    if (!adminOverride || adminOverride.overrideScore == null) {
+        scoring.adminOverride = adminOverride ? { adminNotes: adminOverride.adminNotes, overrideScore: null, updatedAt: adminOverride.updatedAt } : null;
+        return;
+    }
+    const overridden = Number(adminOverride.overrideScore);
+    scoring.normalizedScore = overridden;
+    scoring.score = Math.round(overridden);
+    scoring.aggregateScore = null; // clear raw aggregate — not meaningful alongside override
+    scoring.adminOverride = {
+        adminNotes: adminOverride.adminNotes || '',
+        overrideScore: overridden,
+        updatedAt: adminOverride.updatedAt || null,
+    };
+}
+
+/** GET admin override for a candidate on the application page (admin only). */
+exports.getAdminOverride = async (req, res) => {
+    try {
+        const resumeId = String(req.params.resumeId || '').trim();
+        if (!resumeId) {
+            return res.status(400).json({ error: 'resumeId is required' });
+        }
+
+        const payload = await fetchScoreboardApplicationPayload(resumeId);
+        const override = await fetchAdminOverride(
+            payload.candidateId,
+            payload.activeCycleId,
+            payload.resumeRoundId
+        );
+
+        return res.json({ override: mapAdminOverride(override) });
+    } catch (err) {
+        return respondWithApplicationFetchError(res, err, 'getAdminOverride');
+    }
+};
+
+/** UPSERT admin override for a candidate (admin only). */
+exports.upsertAdminOverride = async (req, res) => {
+    try {
+        const resumeId = String(req.params.resumeId || '').trim();
+        if (!resumeId) {
+            return res.status(400).json({ error: 'resumeId is required' });
+        }
+
+        const adminNotes = typeof req.body?.adminNotes === 'string' ? req.body.adminNotes.slice(0, 5000) : '';
+        const rawScore = req.body?.overrideScore;
+        const overrideScore = rawScore != null && rawScore !== '' ? Number(rawScore) : null;
+
+        if (overrideScore !== null && (!Number.isFinite(overrideScore) || overrideScore < 0 || overrideScore > 100)) {
+            return res.status(400).json({ error: 'overrideScore must be a number between 0 and 100' });
+        }
+
+        const payload = await fetchScoreboardApplicationPayload(resumeId);
+        const adminUserId = req.user?.user_id;
+
+        const upsertPayload = {
+            candidate_id: payload.candidateId,
+            cycle_id: payload.activeCycleId,
+            round_id: payload.resumeRoundId,
+            admin_notes: adminNotes || null,
+            override_score: overrideScore,
+            admin_user_id: adminUserId ?? null,
+            updated_at: new Date().toISOString(),
+        };
+
+        // If clearing everything, delete the row
+        if (!adminNotes && overrideScore === null) {
+            const { error: deleteError } = await supabase
+                .from('candidate_admin_overrides')
+                .delete()
+                .eq('candidate_id', payload.candidateId)
+                .eq('cycle_id', payload.activeCycleId)
+                .eq('round_id', payload.resumeRoundId);
+
+            if (deleteError) return respondWithServerError(res, deleteError, 'upsertAdminOverride delete');
+
+            return res.json({ override: null });
+        }
+
+        const { data, error } = await supabase
+            .from('candidate_admin_overrides')
+            .upsert(upsertPayload, { onConflict: 'candidate_id,cycle_id,round_id' })
+            .select('*')
+            .single();
+
+        if (error) return respondWithServerError(res, error, 'upsertAdminOverride upsert');
+
+        return res.json({ override: mapAdminOverride(data) });
+    } catch (err) {
+        return respondWithApplicationFetchError(res, err, 'upsertAdminOverride');
     }
 };
 

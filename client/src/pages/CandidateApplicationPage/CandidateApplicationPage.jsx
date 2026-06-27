@@ -2,6 +2,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import Topbar from "../../components/Topbar/Topbar";
 import { css } from "../../theme/colors";
+import { isAdminRole } from "../../utils/auth";
+import AdminOverridesSection from "./AdminOverridesSection";
 import ApplicationContactSection from "./ApplicationContactSection";
 import ApplicationEvaluationsSection from "./ApplicationEvaluationsSection";
 import ApplicationProfileSidebar from "./ApplicationProfileSidebar";
@@ -14,9 +16,10 @@ import useCandidateApplicationSummary from "./useCandidateApplicationSummary";
 export default function CandidateApplicationPage() {
   const { candidateId: resumeId } = useParams();
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { candidate, resume, scoring, contextLabel, loading, error } = useCandidateApplication(resumeId);
   const summaryState = useCandidateApplicationSummary(resumeId, !loading && !error && Boolean(candidate));
+  const isAdmin = isAdminRole(user?.role);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
@@ -61,6 +64,15 @@ export default function CandidateApplicationPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
               <ApplicationSummarySection {...summaryState} onRefresh={summaryState.refresh} />
               <ApplicationContactSection candidate={candidate} resume={resume} />
+              {isAdmin && (
+                <AdminOverridesSection
+                  resumeId={resumeId}
+                  onOverrideSaved={() => {
+                    // Re-fetch application to get updated scoring
+                    window.location.reload();
+                  }}
+                />
+              )}
               <ApplicationResponsesSection candidate={candidate} />
               <ApplicationResumeSection candidate={candidate} resume={resume} authToken={token} />
               <ApplicationEvaluationsSection scoring={scoring} />
