@@ -135,8 +135,13 @@ export default function useAdminDashboard(enabled = true) {
           ...adminData.context,
           phaseLabel: scoreboardData?.context?.cycle && scoreboardData?.context?.activeRound
             ? `${scoreboardData.context.cycle.name} · ${scoreboardData.context.activeRound.name}`
-            : adminData.context?.phaseLabel || "Admin Dashboard",
-          activeRound: scoreboardData?.context?.activeRound || adminData.context?.activeRound,
+            : scoreboardData?.context?.cycle
+              ? `${scoreboardData.context.cycle.name} · Between rounds`
+              : adminData.context?.phaseLabel || "Admin Dashboard",
+          activeRound: scoreboardData?.context?.activeRound || adminData.context?.activeRound || null,
+          nextRound: scoreboardData?.context?.nextRound || adminData.context?.nextRound || null,
+          allRounds: scoreboardData?.context?.allRounds || adminData.context?.allRounds || [],
+          cycle: scoreboardData?.context?.cycle || adminData.context?.cycle || null,
           isInterviewRound: isInterview,
           isResumeRound: !isInterview,
         },
