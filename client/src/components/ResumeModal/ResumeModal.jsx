@@ -96,7 +96,7 @@ export default function ResumeModal({ open, onClose, title, fileUrl, authToken }
             </button>
           </div>
         </div>
-        <div style={{ flex: 1, minHeight: 0, background: "#F8FAF6" }}>
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "#F8FAF6" }}>
           <PdfViewer
             url={`${API}/view/pdf?url=${encodeURIComponent(fileUrl)}`}
             authToken={authToken}
