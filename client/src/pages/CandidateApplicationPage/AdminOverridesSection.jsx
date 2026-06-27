@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { css } from "../../theme/colors";
 import { cardGreen, cardPale } from "./constants";
 import SectionCard from "./components/SectionCard";
@@ -7,18 +7,14 @@ import useAdminOverrides from "./useAdminOverrides";
 export default function AdminOverridesSection({ resumeId, onOverrideSaved }) {
   const { override, loading, saving, saveError, save } = useAdminOverrides(resumeId);
 
-  const [notes, setNotes] = useState(override?.adminNotes || "");
-  const [scoreStr, setScoreStr] = useState(
-    override?.overrideScore != null ? String(override.overrideScore) : ""
-  );
+  const [notes, setNotes] = useState("");
+  const [scoreStr, setScoreStr] = useState("");
 
-  // Sync local state when override loads
-  const [lastLoadedId, setLastLoadedId] = useState(null);
-  if (!loading && override?.id !== lastLoadedId) {
-    setLastLoadedId(override?.id || null);
+  useEffect(() => {
+    if (loading) return;
     setNotes(override?.adminNotes || "");
     setScoreStr(override?.overrideScore != null ? String(override.overrideScore) : "");
-  }
+  }, [loading, override?.id, override?.adminNotes, override?.overrideScore]);
 
   const hasChanges = notes !== (override?.adminNotes || "") ||
     (scoreStr !== "" ? String(Number(scoreStr)) : "") !== (override?.overrideScore != null ? String(override.overrideScore) : "");

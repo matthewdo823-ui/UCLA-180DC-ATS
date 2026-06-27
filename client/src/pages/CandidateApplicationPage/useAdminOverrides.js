@@ -7,13 +7,13 @@ export default function useAdminOverrides(resumeId, enabled = true) {
   const fetchRef = useRef(authedFetch);
   fetchRef.current = authedFetch;
 
+  const id = String(resumeId || "").trim();
+
   const [override, setOverride] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(enabled && id));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-
-  const id = String(resumeId || "").trim();
 
   // Fetch on mount / resumeId change
   useEffect(() => {
