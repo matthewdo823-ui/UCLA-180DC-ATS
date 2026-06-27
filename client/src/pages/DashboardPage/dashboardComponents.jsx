@@ -137,65 +137,193 @@ export function ActionItemList({ items, onNavigate }) {
   );
 }
 
-const ROUND_STATUS_ICON = {
-  active: "●",
-  closed: "✓",
-  draft: "○",
+const ROUND_STATUS_STYLE = {
+  active: {
+    icon: "●",
+    color: css.green,
+    bg: "rgba(29,158,117,0.10)",
+    bd: "rgba(29,158,117,0.35)",
+    label: "Active",
+  },
+  closed: {
+    icon: "✓",
+    color: css.textGray,
+    bg: "rgba(107,114,128,0.08)",
+    bd: "rgba(107,114,128,0.22)",
+    label: "Closed",
+  },
+  draft: {
+    icon: "○",
+    color: css.amber,
+    bg: "rgba(239,159,39,0.08)",
+    bd: "rgba(239,159,39,0.28)",
+    label: "Draft",
+  },
 };
 
-const ROUND_STATUS_COLOR = {
-  active: css.green,
-  closed: css.textGray,
-  draft: css.amber,
-};
-
-export function RoundTimeline({ rounds }) {
+function getRoundPhaseMessage({ rounds, activeRound, nextRound }) {
   if (!rounds?.length) {
+    return {
+      tone: "neutral",
+      title: "No rounds configured",
+      detail: "Add rounds for this cycle in Cycle Management.",
+    };
+  }
+
+  if (activeRound) {
+    const style = ROUND_STATUS_STYLE.active;
+    return {
+      tone: "active",
+      title: `Currently in ${activeRound.name}`,
+      detail: `${formatRoundKind(activeRound.type)} is open — graders and deliberation run against this round.`,
+      accent: style.color,
+      bg: style.bg,
+      bd: style.bd,
+    };
+  }
+
+  const sorted = [...rounds].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const lastClosed = [...sorted].reverse().find((r) => r.status === "closed");
+  const nextDraft = sorted.find((r) => r.status === "draft");
+  const allClosed = sorted.every((r) => r.status === "closed");
+  const allDraft = sorted.every((r) => r.status === "draft");
+
+  if (allDraft) {
+    return {
+      tone: "between",
+      title: "Recruiting hasn't started",
+      detail: "All rounds are still in draft. Activate Round 1 when applications are ready to review.",
+      accent: css.amber,
+      bg: "rgba(239,159,39,0.10)",
+      bd: "rgba(239,159,39,0.28)",
+    };
+  }
+
+  if (allClosed) {
+    return {
+      tone: "between",
+      title: "Cycle complete",
+      detail: "Every round is closed. Archive this cycle or start a new one when the next recruiting season begins.",
+      accent: css.textGray,
+      bg: "rgba(107,114,128,0.08)",
+      bd: "rgba(107,114,128,0.22)",
+    };
+  }
+
+  const nextName = nextRound?.name || nextDraft?.name;
+  if (lastClosed && nextName) {
+    return {
+      tone: "between",
+      title: "Between rounds",
+      detail: `${lastClosed.name} is closed. Activate ${nextName} in Cycle Management when you're ready to continue.`,
+      accent: css.amber,
+      bg: "rgba(239,159,39,0.10)",
+      bd: "rgba(239,159,39,0.28)",
+    };
+  }
+
+  return {
+    tone: "between",
+    title: "Between rounds",
+    detail: "No round is active right now. Open Cycle Management to activate the next round.",
+    accent: css.amber,
+    bg: "rgba(239,159,39,0.10)",
+    bd: "rgba(239,159,39,0.28)",
+  };
+}
+
+export function RoundTimeline({ rounds, activeRound, nextRound }) {
+  const sorted = [...(rounds || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const phase = getRoundPhaseMessage({ rounds: sorted, activeRound, nextRound });
+
+  if (!sorted.length) {
     return (
-      <div style={{ fontSize: 13, color: css.textGray }}>No rounds configured for this cycle.</div>
+      <div style={{ fontSize: 13, color: css.textGray }}>{phase.detail}</div>
     );
   }
 
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-      {rounds.map((round, index) => {
-        const status = round.status || "draft";
-        return (
-          <div key={round.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{
-              background: css.cardWhite,
-              border: `1px solid ${status === "active" ? "rgba(29,158,117,0.35)" : css.borderLight}`,
-              borderRadius: 999,
-              padding: "8px 14px",
-              fontSize: 12,
-              fontWeight: 600,
-              color: css.textDark,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-            >
-              <span style={{ color: ROUND_STATUS_COLOR[status] || css.textGray, fontSize: 10 }}>
-                {ROUND_STATUS_ICON[status] || "○"}
-              </span>
-              <span>{round.name || formatRoundKind(round.type)}</span>
-              <span style={{
-                fontSize: 10,
-                fontWeight: 800,
-                textTransform: "uppercase",
-                letterSpacing: "0.04em",
-                color: ROUND_STATUS_COLOR[status] || css.textGray,
+    <div style={{
+      background: css.cardWhite,
+      border: `1px solid ${css.borderLight}`,
+      borderRadius: 12,
+      padding: "18px 20px",
+      boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+    }}
+    >
+      <div style={{
+        background: phase.bg || "rgba(29,158,117,0.08)",
+        border: `1px solid ${phase.bd || css.borderLight}`,
+        borderRadius: 10,
+        padding: "14px 16px",
+        marginBottom: 18,
+      }}
+      >
+        <div style={{ fontSize: 15, fontWeight: 700, color: phase.accent || css.greenDark }}>
+          {phase.title}
+        </div>
+        <div style={{ fontSize: 13, color: css.textGray, marginTop: 6, lineHeight: 1.5 }}>
+          {phase.detail}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+        {sorted.map((round, index) => {
+          const status = round.status || "draft";
+          const style = ROUND_STATUS_STYLE[status] || ROUND_STATUS_STYLE.draft;
+          const isCurrent = activeRound?.id === round.id;
+
+          return (
+            <div key={round.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{
+                background: isCurrent ? style.bg : css.cardWhite,
+                border: `2px solid ${isCurrent ? style.color : style.bd}`,
+                borderRadius: 10,
+                padding: "10px 14px",
+                minWidth: 0,
+                boxShadow: isCurrent ? `0 0 0 3px ${style.bg}` : "none",
               }}
               >
-                {status}
-              </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ color: style.color, fontSize: 11, fontWeight: 800 }}>{style.icon}</span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: isCurrent ? 700 : 600, color: css.textDark }}>
+                      {round.name || formatRoundKind(round.type)}
+                      {isCurrent ? (
+                        <span style={{
+                          marginLeft: 8,
+                          fontSize: 10,
+                          fontWeight: 800,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          color: style.color,
+                        }}
+                        >
+                          You are here
+                        </span>
+                      ) : null}
+                    </div>
+                    <div style={{ fontSize: 11, color: css.textGray, marginTop: 2 }}>
+                      {formatRoundKind(round.type)} · {style.label}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {index < sorted.length - 1 ? (
+                <span style={{
+                  color: sorted[index + 1]?.status === "draft" && status === "closed" ? css.amber : css.textGray,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  padding: "0 2px",
+                }}
+                >
+                  →
+                </span>
+              ) : null}
             </div>
-            {index < rounds.length - 1 ? (
-              <span style={{ color: css.textGray, fontSize: 14 }}>→</span>
-            ) : null}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
