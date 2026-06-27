@@ -27,57 +27,54 @@ function trimText(value, maxLen = 2000) {
   return `${text.slice(0, maxLen)}…`;
 }
 
+const FRQ_FIELDS = [
+  ["Why consulting?", "whyConsulting"],
+  ["Why 180 Degrees Consulting?", "why180dc"],
+  ["Why social impact?", "whySocialImpact"],
+];
+
 function formatReviewNotes(reviews = []) {
   return reviews
     .filter((review) => String(review.notes || "").trim())
     .map((review, index) => {
       const reviewer = review.reviewerName || review.reviewerEmail || `Reviewer ${index + 1}`;
-      const scorePart = review.normalizedScore != null ? ` (${review.normalizedScore}% score)` : "";
-      const decisionPart = review.decision && review.decision !== "pass" ? ` [${review.decision}]` : "";
-      return `- ${reviewer}${scorePart}${decisionPart}: ${trimText(review.notes, 500)}`;
+      return `- ${reviewer}: ${trimText(review.notes, 500)}`;
     })
     .join("\n");
 }
 
-function buildSummarySourceHash({ candidate, scoring, roundDecision }) {
-  const payload = {
-    model: getModel(),
-    candidate: {
-      whyConsulting: candidate?.whyConsulting || "",
-      why180dc: candidate?.why180dc || "",
-      whySocialImpact: candidate?.whySocialImpact || "",
-      extenuatingCircumstances: candidate?.extenuatingCircumstances || "",
-      year: candidate?.year || "",
-      major: candidate?.major || "",
-      gpa: candidate?.gpa || "",
-      gm: candidate?.gm || "",
-      newbieTraining: candidate?.newbieTraining || "",
-    },
-    scoring: {
-      numReviews: scoring?.numReviews ?? 0,
-      normalizedScore: scoring?.normalizedScore ?? null,
-      aggregateScore: scoring?.aggregateScore ?? null,
-      categoryScores: scoring?.categoryScores || {},
-      reviews: (scoring?.reviews || [])
-        .map((review) => ({
-          id: review.id,
-          notes: review.notes || "",
-          decision: review.decision || "",
-          normalizedScore: review.normalizedScore ?? null,
-          score: review.score ?? null,
-          scores: review.scores || {},
-          submittedAt: review.submittedAt || null,
-        }))
-        .sort((a, b) => String(a.id).localeCompare(String(b.id))),
-    },
-    roundDecision: roundDecision
-      ? {
-          decision: roundDecision.decision || "",
-          notes: roundDecision.notes || "",
-          updatedAt: roundDecision.updatedAt || roundDecision.updated_at || null,
-        }
-      : null,
-  };
+function hasReviewNotes(reviews = []) {
+  return reviews.some((review) => String(review.notes || "").trim());
+}
+
+function formatFrqBlocks(candidate = {}) {
+  return FRQ_FIELDS
+    .filter(([, key]) => String(candidate[key] || "").trim())
+    .map(([label, key]) => `${label}:\n${trimText(candidate[key], 1200)}`)
+    .join("\n\n");
+}
+
+function buildSummarySourceHash({ candidate, scoring }) {
+  const reviews = (scoring?.reviews || [])
+    .map((review) => ({
+      id: review.id,
+      notes: review.notes || "",
+    }))
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+
+  const payload = hasReviewNotes(reviews)
+    ? {
+        model: getModel(),
+        source: "reviewer_notes",
+        reviews,
+      }
+    : {
+        model: getModel(),
+        source: "frqs",
+        frqs: Object.fromEntries(
+          FRQ_FIELDS.map(([, key]) => [key, candidate?.[key] || ""])
+        ),
+      };
 
   return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
@@ -89,76 +86,45 @@ function isCacheValid(cachedRow, sourceHash, nowMs = Date.now()) {
   return (nowMs - generatedAtMs) < getCacheTtlMs();
 }
 
-function buildSummaryPrompt({ candidate, scoring, roundDecision, context }) {
-  const essayBlocks = [
-    ["Why consulting?", candidate?.whyConsulting],
-    ["Why 180 Degrees Consulting?", candidate?.why180dc],
-    ["Why social impact?", candidate?.whySocialImpact],
-  ]
-    .filter(([, text]) => String(text || "").trim())
-    .map(([label, text]) => `${label}:\n${trimText(text, 1200)}`)
-    .join("\n\n");
-
+function buildSummaryPrompt({ candidate, scoring, context }) {
   const reviewNotes = formatReviewNotes(scoring?.reviews || []);
-  const performanceLines = [];
+  const frqBlocks = formatFrqBlocks(candidate);
+  const candidateLine = `Candidate: ${candidate?.name || "Unknown"}`;
+  const cycleLine = `Cycle: ${context?.cycle?.name || "Current cycle"} · ${context?.round?.name || "Resume screen"}`;
 
-  if (scoring?.normalizedScore != null) {
-    performanceLines.push(`Resume screen normalized score: ${scoring.normalizedScore}% (${scoring.numReviews} review${scoring.numReviews === 1 ? "" : "s"})`);
-  }
-  if (scoring?.categoryScores && Object.keys(scoring.categoryScores).length > 0) {
-    const categories = Object.entries(scoring.categoryScores)
-      .filter(([, value]) => value != null)
-      .map(([metric, value]) => `${metric}: ${value}/${scoring.maxPerCategory || 4} avg`)
-      .join(", ");
-    if (categories) performanceLines.push(`Category averages: ${categories}`);
-  }
+  if (reviewNotes) {
+    return `You are helping UCLA 180 Degrees Consulting recruiters quickly understand a candidate before interviews or committee discussion.
 
-  const profileLines = [
-    candidate?.year && `Year: ${candidate.year}`,
-    candidate?.major && `Major: ${candidate.major}`,
-    candidate?.gpa && `GPA: ${candidate.gpa}`,
-    candidate?.gm && `General member interest: ${candidate.gm}`,
-    candidate?.newbieTraining && `Newbie training: ${candidate.newbieTraining}`,
-  ].filter(Boolean);
+Write a concise candidate briefing (2–4 short paragraphs, plain prose, no bullet lists) based ONLY on the reviewer notes below.
 
-  const deliberationLines = [];
-  if (roundDecision?.decision && roundDecision.decision !== "pending") {
-    deliberationLines.push(`Committee decision: ${roundDecision.decision}`);
-  }
-  if (String(roundDecision?.notes || "").trim()) {
-    deliberationLines.push(`Committee notes: ${trimText(roundDecision.notes, 800)}`);
-  }
+Synthesize themes, agreements, concerns, and standout observations across reviewers. Do not use application essays, scores, profile details, or any information not present in these notes.
 
-  const extenuating = trimText(candidate?.extenuatingCircumstances, 600);
+Be factual, neutral, and specific. Do not invent details.
 
-  return `You are helping UCLA 180 Degrees Consulting recruiters quickly understand a candidate before interviews or committee discussion.
-
-Write a concise candidate briefing (3–5 short paragraphs, plain prose, no bullet lists). Prioritize:
-1. Themes and standout points from application essays and free-response answers
-2. What reviewers noted in their screening notes — agreements, concerns, and unique observations
-3. Brief performance context (scores only as supporting detail, not the focus)
-4. Any extenuating circumstances or committee deliberation notes if present
-5. A closing sentence on overall impression and what to probe in follow-up
-
-Be factual, neutral, and specific. Do not invent details. If information is missing, say so briefly rather than speculating.
-
-Candidate: ${candidate?.name || "Unknown"}
-Cycle: ${context?.cycle?.name || "Current cycle"} · ${context?.round?.name || "Resume screen"}
-
-Profile:
-${profileLines.length ? profileLines.join("\n") : "Not provided"}
-
-Application responses:
-${essayBlocks || "No essay responses provided."}
-
-${extenuating ? `Extenuating circumstances:\n${extenuating}\n` : ""}
-Performance:
-${performanceLines.length ? performanceLines.join("\n") : "No resume screen scores yet."}
+${candidateLine}
+${cycleLine}
 
 Reviewer notes:
-${reviewNotes || "No reviewer notes yet."}
+${reviewNotes}`;
+  }
 
-${deliberationLines.length ? `Deliberation:\n${deliberationLines.join("\n")}` : ""}`;
+  if (frqBlocks) {
+    return `You are helping UCLA 180 Degrees Consulting recruiters quickly understand a candidate before interviews or committee discussion.
+
+Write a concise candidate briefing (2–4 short paragraphs, plain prose, no bullet lists) based ONLY on the candidate's free-response application answers below.
+
+Identify key themes, motivation, and standout points. Do not use reviewer notes, scores, profile details, or any information not present in these answers.
+
+Be factual, neutral, and specific. Do not invent details.
+
+${candidateLine}
+${cycleLine}
+
+Free-response answers:
+${frqBlocks}`;
+  }
+
+  return null;
 }
 
 async function generateCandidateSummary(applicationPayload) {
@@ -172,12 +138,20 @@ async function generateCandidateSummary(applicationPayload) {
   const prompt = buildSummaryPrompt(applicationPayload);
   const model = getModel();
 
+  if (!prompt) {
+    return {
+      summary: "No summary available yet — add reviewer notes or wait for free-response answers to be submitted.",
+      model: null,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
   const response = await axios.post(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
     {
       systemInstruction: {
         parts: [{
-          text: "You write clear, professional recruiting briefings for a student consulting organization. Use complete sentences and short paragraphs.",
+          text: "You write clear, professional recruiting briefings for a student consulting organization. Summarize only the source material provided — never add outside context. Use complete sentences and short paragraphs.",
         }],
       },
       contents: [{
@@ -223,7 +197,6 @@ async function resolveCandidateSummary(supabase, {
   const sourceHash = buildSummarySourceHash({
     candidate: applicationPayload.candidate,
     scoring: applicationPayload.scoring,
-    roundDecision,
   });
 
   if (!forceRefresh) {
