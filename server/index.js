@@ -7,6 +7,7 @@ const resumeRoutes = require('./src/routes/resumeRoutes');
 const cycleRoutes = require('./src/routes/cycleRoutes');
 const interviewRoutes = require('./src/routes/interviewRoutes');
 const userRoutes = require('./src/routes/userRoutes');
+const dashboardRoutes = require('./src/routes/dashboardRoutes');
 const cronRoutes = require('./src/routes/cronRoutes');
 const { startFormsSyncCron } = require('./src/jobs/formsSyncCron');
 
@@ -65,6 +66,7 @@ app.use('/auth', authRoutes);
 app.use('/', cycleRoutes);
 app.use('/', interviewRoutes);
 app.use('/', resumeRoutes);
+app.use('/', dashboardRoutes);
 app.use('/', userRoutes);
 
 const PORT = process.env.PORT || 3000;

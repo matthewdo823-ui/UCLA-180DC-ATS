@@ -37,6 +37,9 @@ export default function useCandidateApplicationSummary(resumeId, enabled = true)
       }
 
       if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error("Summary endpoint not found — restart the API server and try again.");
+        }
         throw new Error(json.error || "Failed to generate summary");
       }
 
