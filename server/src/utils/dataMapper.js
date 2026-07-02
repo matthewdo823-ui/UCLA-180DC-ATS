@@ -55,7 +55,7 @@ function driveViewUrl(fileId) {
 }
 
 /**
- * @param {import('googleapis').forms_v1.Schema$Answer} answer
+ * @param {import('@googleapis/forms').forms_v1.Schema$Answer} answer
  * @returns {string} Plain text / choice text (not file URLs).
  */
 function extractTextFromAnswer(answer) {
@@ -86,7 +86,7 @@ function extractTextFromAnswer(answer) {
 }
 
 /**
- * @param {import('googleapis').forms_v1.Schema$Answer} answer
+ * @param {import('@googleapis/forms').forms_v1.Schema$Answer} answer
  * @returns {string} First uploaded file as Drive view URL, or empty string.
  */
 function extractFileUrlFromAnswer(answer) {
@@ -97,7 +97,7 @@ function extractFileUrlFromAnswer(answer) {
 }
 
 /**
- * @param {import('googleapis').forms_v1.Schema$Answer} answer
+ * @param {import('@googleapis/forms').forms_v1.Schema$Answer} answer
  * @param {string} columnName Supabase column (e.g. resume_file_url).
  */
 function sanitizeResumeFileUrl(url) {
@@ -154,7 +154,7 @@ const CANDIDATE_TEXT_COLUMNS = [
  */
 
 /**
- * @param {import('googleapis').forms_v1.Schema$FormResponse} response
+ * @param {import('@googleapis/forms').forms_v1.Schema$FormResponse} response
  * @param {FormSyncConfig} config
  * @returns {{ google_form_response_id: string, candidateRow: Record<string, unknown>, resumeDerived: { name: string, file_url: string } } | null}
  */

@@ -1,5 +1,7 @@
 const fs = require("fs");
-const { google } = require("googleapis");
+const { GoogleAuth } = require("google-auth-library");
+const { forms } = require("@googleapis/forms");
+const { drive } = require("@googleapis/drive");
 const { resolveFormConfigPath } = require("./formConfigPath");
 
 const SCOPES_READ = [
@@ -189,9 +191,9 @@ async function getFormsClient(scopes = SCOPES_READ) {
     throw new Error(`Google key file not found: ${keyFile}`);
   }
 
-  const auth = new google.auth.GoogleAuth({ keyFile, scopes });
+  const auth = new GoogleAuth({ keyFile, scopes });
   const authClient = await auth.getClient();
-  return google.forms({ version: "v1", auth: authClient });
+  return forms({ version: "v1", auth: authClient });
 }
 
 /** Drive client for streaming form uploads when credentials are configured. */
@@ -199,9 +201,9 @@ async function getDriveClient() {
   const keyFile = getKeyFilePath();
   if (!keyFile || !fs.existsSync(keyFile)) return null;
 
-  const auth = new google.auth.GoogleAuth({ keyFile, scopes: SCOPES_READ });
+  const auth = new GoogleAuth({ keyFile, scopes: SCOPES_READ });
   const authClient = await auth.getClient();
-  return google.drive({ version: "v3", auth: authClient });
+  return drive({ version: "v3", auth: authClient });
 }
 
 async function discoverFormQuestions(formId) {
