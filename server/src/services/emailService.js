@@ -62,11 +62,15 @@ async function getGmailClient() {
   );
 }
 
+function sanitizeEmailHeader(value) {
+  return String(value ?? "").replace(/[\r\n]+/g, " ").trim();
+}
+
 function encodeEmailRaw({ from, to, subject, body }) {
   const lines = [
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
+    `From: ${sanitizeEmailHeader(from)}`,
+    `To: ${sanitizeEmailHeader(to)}`,
+    `Subject: ${sanitizeEmailHeader(subject)}`,
     "MIME-Version: 1.0",
     "Content-Type: text/plain; charset=utf-8",
     "",

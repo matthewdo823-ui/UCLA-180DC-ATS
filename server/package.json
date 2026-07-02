@@ -27,6 +27,6 @@
     "express": "^5.2.1",
     "google-auth-library": "^10.9.0",
     "jsonwebtoken": "^9.0.3",
-    "node-cron": "^3.0.3"
+    "node-cron": "^4.5.0"
   }
 }
