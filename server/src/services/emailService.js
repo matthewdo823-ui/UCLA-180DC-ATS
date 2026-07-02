@@ -1,5 +1,6 @@
 const fs = require("fs");
-const { google } = require("googleapis");
+const { OAuth2Client, JWT } = require("google-auth-library");
+const { gmail } = require("@googleapis/gmail");
 
 const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 
@@ -33,13 +34,13 @@ async function getGmailClient() {
   const clientSecret = process.env.GMAIL_CLIENT_SECRET;
 
   if (refreshToken && clientId && clientSecret) {
-    const oauth2 = new google.auth.OAuth2(
+    const oauth2 = new OAuth2Client(
       clientId,
       clientSecret,
       process.env.GMAIL_OAUTH_REDIRECT_URI || "http://localhost:3000/oauth2callback"
     );
     oauth2.setCredentials({ refresh_token: refreshToken });
-    return google.gmail({ version: "v1", auth: oauth2 });
+    return gmail({ version: "v1", auth: oauth2 });
   }
 
   const impersonate = process.env.GMAIL_IMPERSONATE_USER;
@@ -48,12 +49,12 @@ async function getGmailClient() {
     if (!fs.existsSync(keyFile)) {
       throw new Error(`Google key file not found: ${keyFile}`);
     }
-    const auth = new google.auth.JWT({
+    const auth = new JWT({
       keyFile,
       scopes: [GMAIL_SEND_SCOPE],
       subject: impersonate,
     });
-    return google.gmail({ version: "v1", auth });
+    return gmail({ version: "v1", auth });
   }
 
   throw new Error(

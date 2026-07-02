@@ -18,6 +18,13 @@ function storeToken(token) {
   }
 }
 
+function formatAuthError(err) {
+  if (err instanceof TypeError && err.message === "Failed to fetch") {
+    return new Error("Cannot reach the API server. Make sure the backend is running (cd server && npm start).");
+  }
+  return err;
+}
+
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(getStoredToken);
   const [user, setUser] = useState(null);
@@ -67,11 +74,16 @@ export function AuthProvider({ children }) {
   }, [logout, token]);
 
   const login = useCallback(async ({ email, password }) => {
-    const res = await fetch(`${API}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
+    let res;
+    try {
+      res = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+    } catch (err) {
+      throw formatAuthError(err);
+    }
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
@@ -86,11 +98,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   const createAccount = useCallback(async ({ email, password, first_name, last_name }) => {
-    const res = await fetch(`${API}/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, first_name, last_name }),
-    });
+    let res;
+    try {
+      res = await fetch(`${API}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, first_name, last_name }),
+      });
+    } catch (err) {
+      throw formatAuthError(err);
+    }
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {

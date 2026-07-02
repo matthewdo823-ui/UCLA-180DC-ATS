@@ -3,13 +3,6 @@ const express = require('express');
 const cors = require('cors');
 
 const authRoutes = require('./src/routes/authRoutes');
-const resumeRoutes = require('./src/routes/resumeRoutes');
-const cycleRoutes = require('./src/routes/cycleRoutes');
-const interviewRoutes = require('./src/routes/interviewRoutes');
-const userRoutes = require('./src/routes/userRoutes');
-const dashboardRoutes = require('./src/routes/dashboardRoutes');
-const cronRoutes = require('./src/routes/cronRoutes');
-const { startFormsSyncCron } = require('./src/jobs/formsSyncCron');
 
 const app = express();
 
@@ -60,17 +53,28 @@ app.get('/oauth2callback', (req, res) => {
   );
 });
 
-// Mount routes
-app.use(cronRoutes);
+// Auth first so login works while heavier routes load in the background.
 app.use('/auth', authRoutes);
-app.use('/', cycleRoutes);
-app.use('/', interviewRoutes);
-app.use('/', resumeRoutes);
-app.use('/', dashboardRoutes);
-app.use('/', userRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+
+    const cronRoutes = require('./src/routes/cronRoutes');
+    const cycleRoutes = require('./src/routes/cycleRoutes');
+    const interviewRoutes = require('./src/routes/interviewRoutes');
+    const resumeRoutes = require('./src/routes/resumeRoutes');
+    const dashboardRoutes = require('./src/routes/dashboardRoutes');
+    const userRoutes = require('./src/routes/userRoutes');
+    const { startFormsSyncCron } = require('./src/jobs/formsSyncCron');
+
+    app.use(cronRoutes);
+    app.use('/', cycleRoutes);
+    app.use('/', interviewRoutes);
+    app.use('/', resumeRoutes);
+    app.use('/', dashboardRoutes);
+    app.use('/', userRoutes);
+
+    console.log('API routes loaded');
     startFormsSyncCron();
 });

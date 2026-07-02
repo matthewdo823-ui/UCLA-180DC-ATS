@@ -12,7 +12,7 @@
  */
 require("dotenv").config();
 const readline = require("readline");
-const { google } = require("googleapis");
+const { OAuth2Client } = require("google-auth-library");
 
 const SCOPES = ["https://www.googleapis.com/auth/gmail.send"];
 const REDIRECT_URI =
@@ -37,7 +37,7 @@ async function main() {
     process.exit(1);
   }
 
-  const oauth2 = new google.auth.OAuth2(clientId, clientSecret, REDIRECT_URI);
+  const oauth2 = new OAuth2Client(clientId, clientSecret, REDIRECT_URI);
   const url = oauth2.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
