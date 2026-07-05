@@ -18,13 +18,14 @@ export const sectionTitleStyle = {
   margin: "0 0 14px",
 };
 
-export function StatCard({ label, value, sub, accent }) {
+export function StatCard({ label, value, sub, accent, hero }) {
   return (
     <div style={{
       background: css.cardWhite,
       border: `1px solid ${css.borderLight}`,
+      borderLeft: accent ? `4px solid ${accent}` : `4px solid ${css.greenDark}`,
       borderRadius: 12,
-      padding: "18px 20px",
+      padding: hero ? "20px 22px" : "18px 20px",
       boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
       minWidth: 0,
     }}
@@ -32,7 +33,14 @@ export function StatCard({ label, value, sub, accent }) {
       <div style={{ fontSize: 11, fontWeight: 700, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.05em" }}>
         {label}
       </div>
-      <div style={{ marginTop: 8, fontSize: 28, fontWeight: 700, color: accent || css.greenDark, lineHeight: 1 }}>
+      <div style={{
+        marginTop: 8,
+        fontSize: hero ? 32 : 28,
+        fontWeight: 700,
+        color: accent || css.greenDark,
+        lineHeight: 1,
+      }}
+      >
         {value}
       </div>
       {sub ? (
@@ -41,6 +49,302 @@ export function StatCard({ label, value, sub, accent }) {
     </div>
   );
 }
+
+export function StatusBanner({ context, pipeline, graderSummary, actionItems }) {
+  const chips = [];
+
+  if (context?.activeRound) {
+    chips.push({
+      label: `${context.activeRound.name} active`,
+      tone: "good",
+    });
+  } else if (context?.allRounds?.length) {
+    chips.push({ label: "Between rounds", tone: "warn" });
+  } else {
+    chips.push({ label: "No rounds configured", tone: "neutral" });
+  }
+
+  const criticalCount = actionItems?.filter((item) => item.severity === "critical").length || 0;
+  const warningCount = actionItems?.filter((item) => item.severity === "warning").length || 0;
+
+  if (criticalCount > 0) {
+    chips.push({ label: `${criticalCount} critical`, tone: "bad" });
+  }
+  if (warningCount > 0) {
+    chips.push({ label: `${warningCount} warning${warningCount === 1 ? "" : "s"}`, tone: "warn" });
+  }
+  if (pipeline?.awaitingReviews > 0) {
+    chips.push({ label: `${pipeline.awaitingReviews} awaiting review`, tone: "warn" });
+  }
+  if (pipeline?.undecidedCount > 0) {
+    chips.push({ label: `${pipeline.undecidedCount} undecided`, tone: "warn" });
+  }
+  if (graderSummary?.behindCount > 0) {
+    chips.push({
+      label: `${graderSummary.behindCount} grader${graderSummary.behindCount === 1 ? "" : "s"} behind`,
+      tone: "warn",
+    });
+  }
+
+  const allClear = chips.length === 1 && chips[0].tone === "good";
+  if (allClear) {
+    chips.push({ label: "All clear", tone: "good" });
+  }
+
+  const CHIP_STYLE = {
+    good: { bg: "rgba(29,158,117,0.10)", color: css.green, bd: "rgba(29,158,117,0.28)" },
+    warn: { bg: "rgba(239,159,39,0.10)", color: css.amber, bd: "rgba(239,159,39,0.28)" },
+    bad: { bg: "rgba(226,75,74,0.08)", color: css.red, bd: "rgba(226,75,74,0.22)" },
+    neutral: { bg: "rgba(107,114,128,0.08)", color: css.textGray, bd: "rgba(107,114,128,0.22)" },
+  };
+
+  return (
+    <div style={{
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 24,
+      padding: "14px 18px",
+      background: css.cardWhite,
+      border: `1px solid ${css.borderLight}`,
+      borderRadius: 12,
+      boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+    }}
+    >
+      {chips.map((chip) => {
+        const style = CHIP_STYLE[chip.tone] || CHIP_STYLE.neutral;
+        return (
+          <span
+            key={chip.label}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: style.bg,
+              color: style.color,
+              border: `1px solid ${style.bd}`,
+              borderRadius: 999,
+              fontSize: 12,
+              fontWeight: 700,
+              padding: "5px 12px",
+              letterSpacing: "0.01em",
+            }}
+          >
+            <span style={{ fontSize: 8, lineHeight: 1 }}>●</span>
+            {chip.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function StackedBar({ segments, total }) {
+  if (!total) {
+    return (
+      <div style={{
+        height: 14,
+        background: "#F3F4F6",
+        borderRadius: 7,
+      }}
+      />
+    );
+  }
+
+  return (
+    <div style={{
+      display: "flex",
+      height: 14,
+      borderRadius: 7,
+      overflow: "hidden",
+      background: "#F3F4F6",
+    }}
+    >
+      {segments.filter((seg) => seg.value > 0).map((seg) => (
+        <div
+          key={seg.label}
+          title={`${seg.label}: ${seg.value}`}
+          style={{
+            width: `${(seg.value / total) * 100}%`,
+            background: seg.color,
+            minWidth: seg.value > 0 ? 4 : 0,
+            transition: "width 0.35s ease",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function PipelineBreakdown({ pipeline, isInterview }) {
+  if (!pipeline) return null;
+
+  const applicants = pipeline.applicants || 0;
+  const reviewed = pipeline.reviewed || 0;
+  const reviewPct = applicants > 0 ? Math.round((reviewed / applicants) * 100) : 0;
+
+  const segments = isInterview
+    ? [
+        { label: "Pass", value: pipeline.pass || 0, color: css.green },
+        { label: "Fail", value: pipeline.fail || 0, color: css.red },
+        { label: "Hold", value: pipeline.hold || 0, color: css.amber },
+        { label: "Pending", value: pipeline.pending || 0, color: "#9CA3AF" },
+      ]
+    : [
+        { label: "Advanced", value: pipeline.advanced || 0, color: css.green },
+        { label: "Hold", value: pipeline.hold || 0, color: css.amber },
+        { label: "Rejected", value: pipeline.rejected || 0, color: css.red },
+        { label: "Pending", value: pipeline.pending || 0, color: "#9CA3AF" },
+      ];
+
+  const breakdownTotal = segments.reduce((sum, seg) => sum + seg.value, 0);
+  const breakdownTitle = isInterview ? "Evaluation outcomes" : "Deliberation outcomes";
+
+  return (
+    <div style={{
+      background: css.cardWhite,
+      border: `1px solid ${css.borderLight}`,
+      borderRadius: 12,
+      padding: "18px 20px",
+      boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+    }}
+    >
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: css.textDark }}>
+            {isInterview ? "Evaluation progress" : "Review progress"}
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: css.greenDark }}>
+            {reviewed} / {applicants} ({reviewPct}%)
+          </span>
+        </div>
+        <ProgressBar pct={reviewPct} />
+      </div>
+
+      <div style={{ fontSize: 13, fontWeight: 700, color: css.textDark, marginBottom: 10 }}>
+        {breakdownTitle}
+      </div>
+      <StackedBar segments={segments} total={breakdownTotal} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+        {segments.map((seg) => {
+          const pct = breakdownTotal > 0 ? Math.round((seg.value / breakdownTotal) * 100) : 0;
+          return (
+            <div key={seg.label}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, color: css.textDark }}>
+                  <span style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: seg.color,
+                    flexShrink: 0,
+                  }}
+                  />
+                  {seg.label}
+                </span>
+                <span style={{ fontWeight: 700, color: css.textGray }}>
+                  {seg.value} {breakdownTotal > 0 ? `(${pct}%)` : ""}
+                </span>
+              </div>
+              <ProgressBar pct={breakdownTotal > 0 ? pct : 0} color={seg.color} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const QUICK_LINK_ICONS = {
+  scoreboard: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+      <line x1="3" y1="9" x2="21" y2="9"></line>
+      <line x1="9" y1="21" x2="9" y2="9"></line>
+    </svg>
+  ),
+  graders: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+      <circle cx="9" cy="7" r="4"></circle>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+    </svg>
+  ),
+  flags: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+      <line x1="4" y1="22" x2="4" y2="15"></line>
+    </svg>
+  ),
+  cycles: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <polyline points="12 6 12 12 16 14"></polyline>
+    </svg>
+  ),
+  team: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+      <circle cx="12" cy="7" r="4"></circle>
+    </svg>
+  ),
+  demographics: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
+      <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
+    </svg>
+  ),
+};
+
+export function CompactQuickLinks({ actions, onNavigate }) {
+  return (
+    <div style={{
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 8,
+      padding: "12px 14px",
+      background: css.cardWhite,
+      border: `1px solid ${css.borderLight}`,
+      borderRadius: 12,
+    }}
+    >
+      {actions.map((action) => (
+        <button
+          key={action.path}
+          type="button"
+          onClick={() => onNavigate(action.path)}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            background: "#F8FAFB",
+            border: `1px solid ${css.borderLight}`,
+            borderRadius: 999,
+            padding: "8px 14px",
+            cursor: "pointer",
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: 13,
+            fontWeight: 600,
+            color: css.textDark,
+          }}
+        >
+          <span style={{ color: css.greenDark, display: "flex" }}>
+            {QUICK_LINK_ICONS[action.iconKey]}
+          </span>
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export const twoColumnGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+  gap: 28,
+  alignItems: "start",
+};
 
 export function ProgressBar({ pct, color = css.greenDark }) {
   return (
