@@ -51,6 +51,12 @@ const {
     isAiSummaryConfigured,
     resolveCandidateSummary,
 } = require('../services/candidateSummaryService');
+const {
+    mapReviewOverride,
+    fetchReviewOverridesByReviewIds,
+    applyReviewOverridesToCandidate,
+    applyReviewOverridesToCandidates,
+} = require('../services/reviewOverrideService');
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
@@ -1297,7 +1303,14 @@ exports.getScoreboard = async (req, res) => {
             priorDecisionRows: priorRoundDecisionRows,
         });
 
-        filteredCandidates.sort((a, b) => {
+        const allReviewIds = filteredCandidates.flatMap(c => (c.reviews || []).map(r => r.id));
+        const reviewOverrideLookup = await fetchReviewOverridesByReviewIds(allReviewIds);
+        const candidatesWithOverrides = applyReviewOverridesToCandidates(
+            filteredCandidates,
+            reviewOverrideLookup
+        );
+
+        candidatesWithOverrides.sort((a, b) => {
             if (a.score === null && b.score === null) {
                 return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
             }
@@ -1305,14 +1318,14 @@ exports.getScoreboard = async (req, res) => {
             if (b.score === null) return -1;
             return b.score - a.score;
         });
-        filteredCandidates.forEach((c, index) => { c.rank = index + 1; });
+        candidatesWithOverrides.forEach((c, index) => { c.rank = index + 1; });
 
-        const totalReviewed = filteredCandidates.filter(c => c.numReviews > 0).length;
+        const totalReviewed = candidatesWithOverrides.filter(c => c.numReviews > 0).length;
         const avgScore = reviewCount > 0 ? (totalNormalizedSum / reviewCount).toFixed(1) : 0;
-        const decisionCounts = countDecisions(filteredCandidates);
-        const incompleteSummary = summarizeIncompleteDeliberation(filteredCandidates);
+        const decisionCounts = countDecisions(candidatesWithOverrides);
+        const incompleteSummary = summarizeIncompleteDeliberation(candidatesWithOverrides);
         const undecidedCount = decisionCounts.pending + decisionCounts.hold;
-        const canCloseRound = canDeliberate && incompleteSummary.incompleteCount === 0 && filteredCandidates.length > 0;
+        const canCloseRound = canDeliberate && incompleteSummary.incompleteCount === 0 && candidatesWithOverrides.length > 0;
 
         let notification = null;
         if (req.user?.role === "admin") {
@@ -1349,7 +1362,7 @@ exports.getScoreboard = async (req, res) => {
             metrics,
             maxPerCategory,
             stats: {
-                applicants: filteredCandidates.length,
+                applicants: candidatesWithOverrides.length,
                 reviewed: totalReviewed,
                 advanced: decisionCounts.advance,
                 hold: decisionCounts.hold,
@@ -1357,7 +1370,7 @@ exports.getScoreboard = async (req, res) => {
                 pending: decisionCounts.pending,
                 avgScore: avgScore,
             },
-            candidates: filteredCandidates
+            candidates: candidatesWithOverrides
         });
 
     } catch (err) {
@@ -1723,6 +1736,18 @@ async function fetchScoreboardApplicationPayload(resumeId) {
     const normalizedScore = numReviews > 0 ? Number((totalNormalized / numReviews).toFixed(1)) : null;
     const resumeFileUrl = resumeRow.file_url || candidate.resume_file_url || '';
 
+    const reviewOverrideLookup = await fetchReviewOverridesByReviewIds(mappedReviews.map(r => r.id));
+    const candidateWithOverrides = applyReviewOverridesToCandidate(
+        {
+            reviews: mappedReviews,
+            aggregateScore,
+            normalizedScore,
+            score: normalizedScore === null ? null : Math.round(normalizedScore),
+            numReviews,
+        },
+        reviewOverrideLookup
+    );
+
     return {
         context: {
             cycle: { id: activeCycle.id, name: activeCycle.name },
@@ -1742,12 +1767,12 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         scoring: {
             metrics: [...metricSet],
             maxPerCategory: resumeRound.rubric_config?.maxPerCategory || 4,
-            numReviews,
-            aggregateScore,
-            normalizedScore,
-            score: normalizedScore === null ? null : Math.round(normalizedScore),
+            numReviews: candidateWithOverrides.numReviews,
+            aggregateScore: candidateWithOverrides.aggregateScore,
+            normalizedScore: candidateWithOverrides.normalizedScore,
+            score: candidateWithOverrides.score,
             categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
-            reviews: mappedReviews,
+            reviews: candidateWithOverrides.reviews,
         },
     };
 }
@@ -1991,6 +2016,89 @@ exports.upsertAdminOverride = async (req, res) => {
         return res.json({ override: mapAdminOverride(data) });
     } catch (err) {
         return respondWithApplicationFetchError(res, err, 'upsertAdminOverride');
+    }
+};
+
+/** GET admin review overrides for a candidate's grades (admin only). */
+exports.getReviewOverrides = async (req, res) => {
+    try {
+        const resumeId = String(req.params.resumeId || '').trim();
+        if (!resumeId) {
+            return res.status(400).json({ error: 'resumeId is required' });
+        }
+
+        const payload = await fetchScoreboardApplicationPayload(resumeId);
+        const reviewIds = (payload.scoring?.reviews || []).map(review => review.id);
+        const overrideLookup = await fetchReviewOverridesByReviewIds(reviewIds);
+
+        const overrides = reviewIds
+            .map(reviewId => overrideLookup[reviewId])
+            .filter(Boolean);
+
+        return res.json({ overrides });
+    } catch (err) {
+        return respondWithApplicationFetchError(res, err, 'getReviewOverrides');
+    }
+};
+
+/** UPSERT or clear admin override for a specific review (admin only). */
+exports.upsertReviewOverride = async (req, res) => {
+    try {
+        const resumeId = String(req.params.resumeId || '').trim();
+        const reviewId = String(req.params.reviewId || '').trim();
+        if (!resumeId) {
+            return res.status(400).json({ error: 'resumeId is required' });
+        }
+        if (!reviewId) {
+            return res.status(400).json({ error: 'reviewId is required' });
+        }
+
+        const adminNotes = typeof req.body?.adminNotes === 'string' ? req.body.adminNotes.slice(0, 5000) : '';
+        const rawScore = req.body?.overrideScore;
+        const overrideScore = rawScore != null && rawScore !== '' ? Number(rawScore) : null;
+
+        if (overrideScore !== null && (!Number.isFinite(overrideScore) || overrideScore < 0 || overrideScore > 100)) {
+            return res.status(400).json({ error: 'overrideScore must be a number between 0 and 100' });
+        }
+
+        const payload = await fetchScoreboardApplicationPayload(resumeId);
+        const review = (payload.scoring?.reviews || []).find(row => row.id === reviewId);
+        if (!review) {
+            return res.status(404).json({ error: 'Review not found for this candidate' });
+        }
+
+        const adminUserId = req.user?.user_id;
+
+        if (overrideScore === null && !adminNotes) {
+            const { error: deleteError } = await supabase
+                .from('resume_review_overrides')
+                .delete()
+                .eq('review_id', reviewId);
+
+            if (deleteError) return respondWithServerError(res, deleteError, 'upsertReviewOverride delete');
+
+            return res.json({ override: null });
+        }
+
+        const upsertPayload = {
+            review_id: reviewId,
+            admin_notes: adminNotes || null,
+            override_score: overrideScore,
+            admin_user_id: adminUserId ?? null,
+            updated_at: new Date().toISOString(),
+        };
+
+        const { data, error } = await supabase
+            .from('resume_review_overrides')
+            .upsert(upsertPayload, { onConflict: 'review_id' })
+            .select('*')
+            .single();
+
+        if (error) return respondWithServerError(res, error, 'upsertReviewOverride upsert');
+
+        return res.json({ override: mapReviewOverride(data) });
+    } catch (err) {
+        return respondWithApplicationFetchError(res, err, 'upsertReviewOverride');
     }
 };
 

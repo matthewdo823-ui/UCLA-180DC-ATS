@@ -22,6 +22,8 @@ router.get('/scoreboard/:resumeId/application/summary', resumeController.getScor
 router.get('/scoreboard/:resumeId/application', resumeController.getScoreboardApplication);
 router.get('/scoreboard/:resumeId/application/admin-override', requireRoles('admin'), resumeController.getAdminOverride);
 router.patch('/scoreboard/:resumeId/application/admin-override', requireRoles('admin'), resumeController.upsertAdminOverride);
+router.get('/scoreboard/:resumeId/review-overrides', requireRoles('admin'), resumeController.getReviewOverrides);
+router.patch('/scoreboard/:resumeId/review-overrides/:reviewId', requireRoles('admin'), resumeController.upsertReviewOverride);
 router.get('/scoreboard', resumeController.getScoreboard);
 router.get('/demographics', demographicsController.getDemographics);
 router.post('/scoreboard/decisions', requireRoles('admin'), resumeController.upsertRoundDecision);

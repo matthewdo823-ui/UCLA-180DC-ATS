@@ -21,6 +21,7 @@ import {
 } from "./decisionUtils";
 import { equalizeCandidateScores, recomputeEqualizedStats } from "./equalizeUtils";
 import AdvanceEmailModal from "./AdvanceEmailModal";
+import ReviewOverrideSection from "./ReviewOverrideSection";
 import { formatRoundKind, isInterviewRoundType } from "../../constants/rounds";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
@@ -396,6 +397,17 @@ function getNormalizedScore(candidate) {
   return null;
 }
 
+function getHeadlineScore(candidate, { equalized = false } = {}) {
+  if (equalized) return getNormalizedScore(candidate);
+  if (hasNumericScore(candidate?.score)) return Number(candidate.score);
+  return getNormalizedScore(candidate);
+}
+
+function getSourceNormalizedScore(candidate) {
+  if (hasNumericScore(candidate?.sourceNormalizedScore)) return Number(candidate.sourceNormalizedScore);
+  return getNormalizedScore(candidate);
+}
+
 function getAggregateScore(candidate) {
   if (hasNumericScore(candidate?.aggregateScore)) {
     return Number(candidate.aggregateScore);
@@ -458,7 +470,7 @@ function ScoreTiles({ score, maxScore }) {
   );
 }
 
-function CategoryRow({ metric, value, maxPerCategory = 4 }) {
+function CategoryRow({ metric, value, maxPerCategory = 4, equalized = false }) {
   const pct = hasNumericScore(value) ? Math.max(0, Math.min(100, (Number(value) / maxPerCategory) * 100)) : 0;
 
   return (
@@ -466,7 +478,13 @@ function CategoryRow({ metric, value, maxPerCategory = 4 }) {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
         <span style={{ fontSize: 12, color: css.textDark }}>{titleCase(metric)}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: cardGreen }}>
-          {formatScore(value)} <span style={{ color: css.textGray, fontWeight: 400 }}>/ {maxPerCategory}</span>
+          {equalized ? (
+            <>{formatScore(pct)}%</>
+          ) : (
+            <>
+              {formatScore(value)} <span style={{ color: css.textGray, fontWeight: 400 }}>/ {maxPerCategory}</span>
+            </>
+          )}
         </span>
       </div>
       <div style={{ height: 5, background: "#EEF1EC", borderRadius: 3, overflow: "hidden" }}>
@@ -476,10 +494,20 @@ function CategoryRow({ metric, value, maxPerCategory = 4 }) {
   );
 }
 
-function ScorecardModal({ candidate, onClose, round = null, metrics = [], maxPerCategory = 4, equalized = false }) {
+function ScorecardModal({
+  candidate,
+  onClose,
+  round = null,
+  metrics = [],
+  maxPerCategory = 4,
+  equalized = false,
+  isAdmin = false,
+  onOverrideSaved,
+}) {
   const [reviewersOpen, setReviewersOpen] = useState(false);
+  const headlineScore = getHeadlineScore(candidate, { equalized });
+  const sourceNormalizedScore = getSourceNormalizedScore(candidate);
   const aggregateScore = getAggregateScore(candidate);
-  const normalizedScore = getNormalizedScore(candidate);
   const reviews = candidate?.reviews ?? [];
   const latestNote = [...reviews].reverse().find(review => review.notes)?.notes;
 
@@ -585,12 +613,16 @@ function ScorecardModal({ candidate, onClose, round = null, metrics = [], maxPer
           <div style={{ background: cardPale, padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #DCE7D2" }}>
             <div>
               <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 800, letterSpacing: "0.05em" }}>
-                {equalized ? "EQUALIZED SCORE" : "NORMALIZED SCORE"}
+                {equalized ? "EQUALIZED" : "NORMALIZED"} SCORE
               </p>
               <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
-                {formatScore(normalizedScore)}<span style={{ fontSize: 14, color: "#3B6D11" }}>%</span>
+                {formatScore(headlineScore)}<span style={{ fontSize: 14, color: "#3B6D11" }}>%</span>
               </p>
-              {aggregateScore != null ? (
+              {equalized && sourceNormalizedScore != null ? (
+                <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
+                  Unadjusted: {formatScore(sourceNormalizedScore)}%
+                </p>
+              ) : aggregateScore != null ? (
                 <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
                   Raw avg: {formatScore(aggregateScore)} pts
                 </p>
@@ -598,14 +630,14 @@ function ScorecardModal({ candidate, onClose, round = null, metrics = [], maxPer
             </div>
             <div style={{ textAlign: "right" }}>
               <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 800, letterSpacing: "0.05em" }}>{metrics.length} CATEGORIES</p>
-              <ScoreTiles score={normalizedScore} maxScore={100} />
+              <ScoreTiles score={headlineScore} maxScore={100} />
             </div>
           </div>
 
           <div style={{ padding: "14px 18px 4px" }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 800 }}>CATEGORY BREAKDOWN</p>
             {metrics.map(metric => (
-              <CategoryRow key={metric} metric={metric} maxPerCategory={maxPerCategory} value={normalizeMetricScore(candidate, metric)} />
+              <CategoryRow key={metric} metric={metric} maxPerCategory={maxPerCategory} equalized={equalized} value={normalizeMetricScore(candidate, metric)} />
             ))}
           </div>
 
@@ -633,7 +665,13 @@ function ScorecardModal({ candidate, onClose, round = null, metrics = [], maxPer
 
             {reviewersOpen && (
               <div style={{ marginTop: 10 }}>
-                {reviews.map((review, index) => (
+                {reviews.map((review, index) => {
+                  const reviewOverridden = review?.adminOverride?.overrideScore != null;
+                  const displayScore = equalized && hasNumericScore(review.normalizedScore)
+                    ? `${formatScore(review.normalizedScore)}%`
+                    : `${formatScore(getReviewTotal(review))}/24`;
+
+                  return (
                   <div key={review.id ?? index} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
                     <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#E8F1FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#24529A", flexShrink: 0 }}>
                       {getReviewerInitials(review, index)}
@@ -642,14 +680,27 @@ function ScorecardModal({ candidate, onClose, round = null, metrics = [], maxPer
                       <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{getReviewerLabel(review, index)}</p>
                       <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>
                         {review.submittedAt ? new Date(review.submittedAt).toLocaleDateString() : "Submitted"}
+                        {reviewOverridden ? " · overridden" : ""}
                       </p>
                     </div>
-                    <div style={{ fontSize: 12, color: cardGreen, fontWeight: 800 }}>{formatScore(getReviewTotal(review))}/24</div>
+                    <div style={{ fontSize: 12, color: reviewOverridden ? "#E24B4A" : cardGreen, fontWeight: 800 }}>
+                      {displayScore}
+                    </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
+
+          {isAdmin ? (
+            <ReviewOverrideSection
+              resumeId={candidate.id}
+              reviews={reviews}
+              equalized={equalized}
+              onOverrideSaved={onOverrideSaved}
+            />
+          ) : null}
         </div>
       </div>
     </div>
@@ -1677,10 +1728,14 @@ export default function ScoreboardPage() {
             </div>
 
             <div>
-              <div style={{ color: scoreColor(c.score), fontSize: 18, fontFamily: serifFont, fontWeight: 600 }}>{formatScore(c.score)}%</div>
+              <div style={{ color: scoreColor(getHeadlineScore(c, { equalized: equalizeActive })), fontSize: 18, fontFamily: serifFont, fontWeight: 600 }}>
+                {formatScore(getHeadlineScore(c, { equalized: equalizeActive }))}%
+              </div>
               <div style={{ fontSize: 11, color: t.textMuted }}>
-                {formatScore(getAggregateScore(c))} raw pts · {c.numReviews ?? c.reviews?.length ?? 0} {(c.numReviews ?? c.reviews?.length ?? 0) === 1 ? "review" : "reviews"}
-                {equalizeActive ? " · equalized" : ""}
+                {equalizeActive && getSourceNormalizedScore(c) != null
+                  ? `${formatScore(getSourceNormalizedScore(c))}% unadjusted · `
+                  : `${formatScore(getAggregateScore(c))} raw pts · `}
+                {c.numReviews ?? c.reviews?.length ?? 0} {(c.numReviews ?? c.reviews?.length ?? 0) === 1 ? "review" : "reviews"}
               </div>
             </div>
 
@@ -1739,6 +1794,8 @@ export default function ScoreboardPage() {
           metrics={metrics}
           maxPerCategory={maxPerCategory}
           equalized={equalizeActive}
+          isAdmin={isAdmin}
+          onOverrideSaved={() => fetchScoreboard({ silent: true })}
           onClose={() => setSelectedCandidate(null)}
         />
       )}
