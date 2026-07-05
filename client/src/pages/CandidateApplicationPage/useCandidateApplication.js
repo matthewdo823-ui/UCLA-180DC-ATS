@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 
@@ -10,6 +10,28 @@ export default function useCandidateApplication(resumeId) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    const id = String(resumeId || "").trim();
+    if (!id) return;
+
+    setError("");
+    try {
+      const res = await fetchRef.current(`${API}/scoreboard/${encodeURIComponent(id)}/application`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to load application");
+      }
+      setData(json);
+    } catch (err) {
+      const message = err?.message || "Failed to load application";
+      setError(
+        message === "Failed to fetch"
+          ? "Could not reach the API — check that the server is running on port 3000."
+          : message
+      );
+    }
+  }, [resumeId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,5 +84,6 @@ export default function useCandidateApplication(resumeId) {
     contextLabel,
     loading,
     error,
+    refresh,
   };
 }
