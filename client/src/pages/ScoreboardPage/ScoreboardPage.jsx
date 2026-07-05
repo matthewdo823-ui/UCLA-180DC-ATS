@@ -8,6 +8,7 @@ import Topbar from "../../components/Topbar/Topbar";
 import { serifFont } from "../../theme/typography";
 import { formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
+import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
 import {
   buildDecisionPayload,
   canRecordCommitteeDecision,
@@ -509,7 +510,9 @@ function ScorecardModal({
   const sourceNormalizedScore = getSourceNormalizedScore(candidate);
   const aggregateScore = getAggregateScore(candidate);
   const reviews = candidate?.reviews ?? [];
-  const latestNote = [...reviews].reverse().find(review => review.notes)?.notes;
+  const frqReviews = candidate?.frqReviews ?? [];
+  const totalReviewCount = reviews.length + frqReviews.length;
+  const latestNote = [...reviews, ...frqReviews].reverse().find(review => review.notes)?.notes;
 
   useEffect(() => {
     function onKeyDown(event) {
@@ -625,6 +628,7 @@ function ScorecardModal({
               ) : aggregateScore != null ? (
                 <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
                   Raw avg: {formatScore(aggregateScore)} pts
+                  {candidate.frqPending ? " · FRQ pending" : ""}
                 </p>
               ) : null}
             </div>
@@ -637,7 +641,13 @@ function ScorecardModal({
           <div style={{ padding: "14px 18px 4px" }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 800 }}>CATEGORY BREAKDOWN</p>
             {metrics.map(metric => (
-              <CategoryRow key={metric} metric={metric} maxPerCategory={maxPerCategory} equalized={equalized} value={normalizeMetricScore(candidate, metric)} />
+              <CategoryRow
+                key={metric}
+                metric={metric}
+                maxPerCategory={metric === FRQ_METRIC ? FRQ_MAX_SCORE : maxPerCategory}
+                equalized={equalized}
+                value={normalizeMetricScore(candidate, metric)}
+              />
             ))}
           </div>
 
@@ -655,7 +665,7 @@ function ScorecardModal({
               style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: 0 }}
             >
               <span style={{ fontSize: 11, color: css.textGray, fontWeight: 800, letterSpacing: "0.05em" }}>
-                REVIEWS ({reviews.length})
+                REVIEWS ({totalReviewCount})
               </span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <ReviewerStack reviews={reviews} />
@@ -680,7 +690,7 @@ function ScorecardModal({
                       <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{getReviewerLabel(review, index)}</p>
                       <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>
                         {review.submittedAt ? new Date(review.submittedAt).toLocaleDateString() : "Submitted"}
-                        {reviewOverridden ? " · overridden" : ""}
+                        {reviewOverridden ? " · overridden" : " · Resume"}
                       </p>
                     </div>
                     <div style={{ fontSize: 12, color: reviewOverridden ? "#E24B4A" : cardGreen, fontWeight: 800 }}>
@@ -689,6 +699,39 @@ function ScorecardModal({
                   </div>
                   );
                 })}
+                {frqReviews.map((review, index) => {
+                  const displayScore = equalized && hasNumericScore(review.normalizedScore)
+                    ? `${formatScore(review.normalizedScore)}%`
+                    : `${formatScore(review.score ?? getReviewTotal(review))}/${FRQ_MAX_SCORE}`;
+
+                  return (
+                    <div key={review.id ?? `frq-${index}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
+                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#F3E8FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#6B21A8", flexShrink: 0 }}>
+                        {getReviewerInitials(review, index)}
+                      </div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {getReviewerLabel(review, index)}
+                        </p>
+                        <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>
+                          {review.submittedAt ? new Date(review.submittedAt).toLocaleDateString() : "Submitted"}
+                          {" · Application responses"}
+                        </p>
+                        {review.notes ? (
+                          <p style={{ fontSize: 11, color: css.textDark, margin: "4px 0 0", lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
+                            {review.notes}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div style={{ fontSize: 12, color: cardGreen, fontWeight: 800 }}>
+                        {displayScore}
+                      </div>
+                    </div>
+                  );
+                })}
+                {totalReviewCount === 0 ? (
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: css.textGray }}>No reviews yet.</p>
+                ) : null}
               </div>
             )}
           </div>

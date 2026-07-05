@@ -1,3 +1,5 @@
+import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
+
 function getGraderKey(review) {
   if (review?.gradedBy != null) return String(review.gradedBy);
   if (review?.reviewerEmail) return review.reviewerEmail.trim().toLowerCase();
@@ -22,6 +24,16 @@ function collectReviewEntries(candidates) {
   const entries = [];
   (candidates || []).forEach(candidate => {
     (candidate.reviews || []).forEach(review => {
+      entries.push({ candidate, review });
+    });
+  });
+  return entries;
+}
+
+function collectFrqEntries(candidates) {
+  const entries = [];
+  (candidates || []).forEach(candidate => {
+    (candidate.frqReviews || []).forEach(review => {
       entries.push({ candidate, review });
     });
   });
@@ -145,64 +157,156 @@ function buildCategoryScores(reviews, metrics) {
   return categoryScores;
 }
 
+function averageFrqScore(frqReviews = []) {
+  if (!frqReviews.length) return null;
+  const sum = frqReviews.reduce((acc, review) => acc + (Number(review.score) || 0), 0);
+  return Number((sum / frqReviews.length).toFixed(1));
+}
+
+function applyCompositeFromParts(candidate, resumeAggregateScore, resumeNormalizedScore, frqReviews) {
+  const frqAvg = averageFrqScore(frqReviews);
+  const frqPending = !frqReviews.length;
+  const resumeMax = Number(candidate.compositeMax) - (frqPending ? 0 : FRQ_MAX_SCORE);
+  const compositeMax = frqPending ? resumeMax : resumeMax + FRQ_MAX_SCORE;
+
+  let aggregateScore = resumeAggregateScore;
+  let normalizedScore = resumeNormalizedScore;
+  let score = normalizedScore == null ? null : Math.round(normalizedScore);
+
+  if (frqAvg != null && resumeAggregateScore != null) {
+    aggregateScore = Number((resumeAggregateScore + frqAvg).toFixed(1));
+    normalizedScore = Number(((aggregateScore / compositeMax) * 100).toFixed(1));
+    score = Math.round(normalizedScore);
+  }
+
+  return {
+    aggregateScore,
+    normalizedScore,
+    score,
+    frqScore: frqAvg,
+    frqPending,
+    compositeMax,
+  };
+}
+
+function equalizeFrqReviews(frqReviews, graderStats, globalStats) {
+  return (frqReviews || []).map(review => {
+    const adjustedScores = equalizeReviewScores(review, graderStats, globalStats);
+    const adjustedScore = adjustedScores[FRQ_METRIC];
+    const numericScore = Number.isFinite(adjustedScore) ? adjustedScore : Number(review.score);
+    return {
+      ...review,
+      scores: { [FRQ_METRIC]: numericScore },
+      score: Number(numericScore.toFixed(2)),
+      normalizedScore: Number(((numericScore / FRQ_MAX_SCORE) * 100).toFixed(2)),
+      equalized: true,
+    };
+  });
+}
+
 /**
  * Adjust candidate scores by converting each reviewer's per-metric scores to z-scores
  * relative to that reviewer's historical average, then rescaling to the pool-wide metric mean/std.
+ * Resume categories and FRQ grades are equalized separately, then merged into composite scores.
  */
 export function equalizeCandidateScores(candidates, { metrics = [], maxPerCategory = 4 } = {}) {
   const metricList = metrics.length
     ? metrics
     : [...new Set((candidates || []).flatMap(c => Object.keys(c.categoryScores || {})))];
 
-  const entries = collectReviewEntries(candidates);
-  if (!entries.length) return candidates || [];
+  const resumeMetrics = metricList.filter(metric => metric !== FRQ_METRIC);
+  const resumeEntries = collectReviewEntries(candidates);
+  const frqEntries = collectFrqEntries(candidates);
 
-  const graderStats = buildGraderMetricStats(entries, metricList);
-  const globalStats = buildGlobalMetricStats(entries, metricList);
+  if (!resumeEntries.length && !frqEntries.length) return candidates || [];
+
+  const resumeGraderStats = resumeEntries.length
+    ? buildGraderMetricStats(resumeEntries, resumeMetrics)
+    : {};
+  const resumeGlobalStats = resumeEntries.length
+    ? buildGlobalMetricStats(resumeEntries, resumeMetrics)
+    : {};
+
+  const frqGraderStats = frqEntries.length
+    ? buildGraderMetricStats(frqEntries, [FRQ_METRIC])
+    : {};
+  const frqGlobalStats = frqEntries.length
+    ? buildGlobalMetricStats(frqEntries, [FRQ_METRIC])
+    : {};
 
   return (candidates || []).map(candidate => {
     const reviews = candidate.reviews || [];
-    if (!reviews.length) return candidate;
+    const frqReviews = candidate.frqReviews || [];
 
-    let totalRaw = 0;
-    let totalNormalized = 0;
-    let reviewCount = 0;
+    let resumeAggregateScore = null;
+    let resumeNormalizedScore = null;
+    let equalizedReviews = reviews;
+    let equalizedFrqReviews = frqReviews;
 
-    const equalizedReviews = reviews.map(review => {
-      const adjustedScores = equalizeReviewScores(review, graderStats, globalStats);
-      const rawScore = computeRawScore(adjustedScores, Object.keys(adjustedScores));
-      let normalizedScore = computeNormalizedPercent(adjustedScores, review, maxPerCategory);
+    if (reviews.length && resumeMetrics.length) {
+      let totalRaw = 0;
+      let totalNormalized = 0;
+      let reviewCount = 0;
 
-      if (review?.adminOverride?.overrideScore != null) {
-        normalizedScore = Number(review.adminOverride.overrideScore);
-      }
+      equalizedReviews = reviews.map(review => {
+        const adjustedScores = equalizeReviewScores(review, resumeGraderStats, resumeGlobalStats);
+        const rawScore = computeRawScore(adjustedScores, Object.keys(adjustedScores));
+        let normalizedScore = computeNormalizedPercent(adjustedScores, review, maxPerCategory);
 
-      if (normalizedScore != null) {
-        totalRaw += rawScore;
-        totalNormalized += normalizedScore;
-        reviewCount += 1;
-      }
+        if (review?.adminOverride?.overrideScore != null) {
+          normalizedScore = Number(review.adminOverride.overrideScore);
+        }
 
-      return {
-        ...review,
-        scores: adjustedScores,
-        score: rawScore,
-        normalizedScore,
-        equalized: true,
-      };
-    });
+        if (normalizedScore != null) {
+          totalRaw += rawScore;
+          totalNormalized += normalizedScore;
+          reviewCount += 1;
+        }
 
-    const aggregateScore = reviewCount > 0 ? Number((totalRaw / reviewCount).toFixed(1)) : null;
-    const normalizedScore = reviewCount > 0 ? Number((totalNormalized / reviewCount).toFixed(1)) : null;
-    const categoryScores = buildCategoryScores(equalizedReviews, metricList);
+        return {
+          ...review,
+          scores: adjustedScores,
+          score: rawScore,
+          normalizedScore,
+          equalized: true,
+        };
+      });
+
+      resumeAggregateScore = reviewCount > 0 ? Number((totalRaw / reviewCount).toFixed(1)) : null;
+      resumeNormalizedScore = reviewCount > 0 ? Number((totalNormalized / reviewCount).toFixed(1)) : null;
+    } else if (reviews.length) {
+      resumeAggregateScore = candidate.resumeAggregateScore ?? candidate.aggregateScore ?? null;
+      resumeNormalizedScore = candidate.resumeNormalizedScore ?? candidate.normalizedScore ?? null;
+    }
+
+    if (frqReviews.length) {
+      equalizedFrqReviews = equalizeFrqReviews(frqReviews, frqGraderStats, frqGlobalStats);
+    }
+
+    const composite = applyCompositeFromParts(
+      candidate,
+      resumeAggregateScore ?? candidate.resumeAggregateScore ?? candidate.aggregateScore,
+      resumeNormalizedScore ?? candidate.resumeNormalizedScore ?? candidate.normalizedScore,
+      equalizedFrqReviews
+    );
+
+    const resumeCategoryScores = reviews.length && resumeMetrics.length
+      ? buildCategoryScores(equalizedReviews, resumeMetrics)
+      : {};
 
     return {
       ...candidate,
       reviews: equalizedReviews,
-      aggregateScore,
-      normalizedScore,
-      categoryScores,
-      score: normalizedScore == null ? null : Math.round(normalizedScore),
+      frqReviews: equalizedFrqReviews,
+      resumeAggregateScore,
+      resumeNormalizedScore,
+      aggregateScore: composite.aggregateScore,
+      normalizedScore: composite.normalizedScore,
+      categoryScores: { ...resumeCategoryScores, [FRQ_METRIC]: composite.frqScore },
+      frqScore: composite.frqScore,
+      frqPending: composite.frqPending,
+      compositeMax: composite.compositeMax,
+      score: composite.score,
       sourceNormalizedScore: candidate.normalizedScore ?? candidate.score ?? null,
       sourceAggregateScore: candidate.aggregateScore ?? null,
       equalized: true,

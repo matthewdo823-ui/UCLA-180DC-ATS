@@ -57,6 +57,15 @@ const {
     applyReviewOverridesToCandidate,
     applyReviewOverridesToCandidates,
 } = require('../services/reviewOverrideService');
+const {
+    FRQ_METRIC,
+    FRQ_MAX_SCORE,
+    mapFrqReviewRow,
+    groupFrqReviewsByResumeId,
+    applyCompositeScoringToCandidate,
+    applyCompositeScoringToCandidates,
+    appendFrqMetric,
+} = require('../services/frqScoringService');
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
@@ -639,6 +648,340 @@ exports.patchMyReview = async (req, res) => {
     if (!row) return respondWithServerError(res, new Error('updated review missing'), 'patchMyReview read');
 
     return res.json({ review: mapMyReviewRow(row, cycleRubricConfig) });
+};
+
+function mapMyFrqReviewRow(row) {
+    const resume = firstRel(row.resumes);
+    const cand = firstRel(resume?.candidates);
+    const score = Number(row.score);
+    return {
+        reviewId: row.id,
+        id: row.resume_id,
+        resumeId: row.resume_id,
+        resumeName: resume?.name ?? null,
+        candidateName: cand?.name ?? null,
+        year: cand?.year ?? null,
+        major: cand?.major ?? null,
+        gpa: cand?.gpa ?? null,
+        score,
+        total: score,
+        maxScore: FRQ_MAX_SCORE,
+        normalizedScore: Number(((score / FRQ_MAX_SCORE) * 100).toFixed(2)),
+        notes: row.notes || "",
+        submittedAt: row.submitted_at,
+    };
+}
+
+function formatFrqCandidateRow(row) {
+    const candidate = firstRel(row.candidates);
+    return {
+        id: row.id,
+        name: row.name,
+        candidates: candidate ? {
+            year: candidate.year,
+            name: candidate.name,
+            major: candidate.major,
+            why_consulting: candidate.why_consulting,
+            why_180dc: candidate.why_180dc,
+            why_social_impact: candidate.why_social_impact,
+        } : null,
+    };
+}
+
+async function fetchFrqReviewRowById(reviewId, gradedBy) {
+    return supabase
+        .from("frq_reviews")
+        .select(`
+            id,
+            resume_id,
+            score,
+            notes,
+            submitted_at,
+            resumes (
+                id,
+                name,
+                candidates (
+                    year,
+                    major,
+                    gpa,
+                    name,
+                    why_consulting,
+                    why_180dc,
+                    why_social_impact
+                )
+            )
+        `)
+        .eq("id", reviewId)
+        .eq("graded_by", gradedBy)
+        .maybeSingle();
+}
+
+/** Next candidate for admin FRQ grading (skips already-graded-by-me). */
+exports.getNextFrq = async (req, res) => {
+    if (req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const gradedBy = req.user?.user_id;
+    const screening = await requireActiveResumeScreening();
+    if (screening.error) {
+        return res.status(screening.status).json({ error: screening.error });
+    }
+
+    let reviewedResumeIds = [];
+    if (gradedBy) {
+        const { data: reviewedRows, error: reviewedError } = await supabase
+            .from("frq_reviews")
+            .select("resume_id")
+            .eq("graded_by", gradedBy)
+            .eq("cycle_id", screening.cycle.id);
+
+        if (reviewedError) return respondWithServerError(res, reviewedError, "getNextFrq reviewed");
+        reviewedResumeIds = [...new Set((reviewedRows || []).map((row) => row.resume_id).filter(Boolean))];
+    }
+    const reviewedResumeIdSet = new Set(reviewedResumeIds);
+
+    let query = supabase
+        .from("resumes")
+        .select(`
+            id,
+            name,
+            frq_review_count,
+            candidates (
+                year,
+                name,
+                major,
+                why_consulting,
+                why_180dc,
+                why_social_impact
+            )
+        `)
+        .eq("cycle_id", screening.cycle.id)
+        .order("frq_review_count", { ascending: true })
+        .order("created_at", { ascending: true });
+
+    if (reviewedResumeIds.length) {
+        query = query.not("id", "in", `(${reviewedResumeIds.join(",")})`);
+    }
+
+    const { data: resumeCandidates, error } = await query.limit(100);
+    if (error) return respondWithServerError(res, error, "getNextFrq");
+
+    for (const row of resumeCandidates || []) {
+        if (reviewedResumeIdSet.has(row.id)) continue;
+        return res.json(formatFrqCandidateRow(row));
+    }
+
+    return res.status(404).json({ error: "No candidates available for FRQ grading" });
+};
+
+/** FRQ grades submitted by the authenticated admin. */
+exports.listMyFrqReviews = async (req, res) => {
+    if (req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const gradedBy = req.user?.user_id;
+    if (!gradedBy) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const activeCycleId = await getActiveCycleId();
+    let reviewQuery = supabase
+        .from("frq_reviews")
+        .select(`
+            id,
+            resume_id,
+            score,
+            notes,
+            submitted_at,
+            resumes (
+                id,
+                name,
+                candidates ( year, major, gpa, name )
+            )
+        `)
+        .eq("graded_by", gradedBy)
+        .order("submitted_at", { ascending: false });
+
+    if (activeCycleId) {
+        reviewQuery = reviewQuery.eq("cycle_id", activeCycleId);
+    }
+
+    const { data, error } = await reviewQuery;
+    if (error) return respondWithServerError(res, error, "listMyFrqReviews");
+
+    const reviews = (data || []).map((row) => mapMyFrqReviewRow(row));
+    return res.json({ reviews, count: reviews.length });
+};
+
+/** Load candidate FRQ content for one of the admin's past FRQ grades. */
+exports.getFrqReviewCandidate = async (req, res) => {
+    if (req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const gradedBy = req.user?.user_id;
+    if (!gradedBy) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const reviewId = String(req.params.reviewId || "").trim();
+    if (!reviewId) {
+        return res.status(400).json({ error: "reviewId is required" });
+    }
+
+    const screening = await requireActiveResumeScreening();
+    if (screening.error) {
+        return res.status(screening.status).json({ error: screening.error });
+    }
+
+    const { data: review, error: reviewError } = await fetchFrqReviewRowById(reviewId, gradedBy);
+    if (reviewError) return respondWithServerError(res, reviewError, "getFrqReviewCandidate review");
+    if (!review) {
+        return res.status(404).json({ error: "FRQ review not found" });
+    }
+
+    const resume = firstRel(review.resumes);
+    if (!resume) {
+        return res.status(404).json({ error: "Candidate not found" });
+    }
+
+    return res.json({
+        ...formatFrqCandidateRow(resume),
+        reviewId: review.id,
+        frqScore: Number(review.score),
+        notes: review.notes || "",
+    });
+};
+
+exports.saveFrqReview = async (req, res) => {
+    if (req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const { resume_id, score, notes } = req.body;
+    const gradedBy = req.user?.user_id;
+
+    if (!gradedBy) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!resume_id) {
+        return res.status(400).json({ error: "resume_id is required" });
+    }
+
+    const numericScore = Number(score);
+    if (!Number.isFinite(numericScore) || numericScore < 1 || numericScore > FRQ_MAX_SCORE) {
+        return res.status(400).json({ error: `score must be a number between 1 and ${FRQ_MAX_SCORE}` });
+    }
+
+    const screening = await requireActiveResumeScreening();
+    if (screening.error) {
+        return res.status(screening.status).json({ error: screening.error });
+    }
+
+    const { data: resumeRow, error: resumeError } = await supabase
+        .from("resumes")
+        .select("id, cycle_id")
+        .eq("id", resume_id)
+        .maybeSingle();
+
+    if (resumeError) return respondWithServerError(res, resumeError, "saveFrqReview resume");
+    if (!resumeRow) return res.status(404).json({ error: "Resume not found" });
+    if (resumeRow.cycle_id && resumeRow.cycle_id !== screening.cycle.id) {
+        return res.status(400).json({ error: "Resume is not part of the active cycle" });
+    }
+
+    const { data: existingReview, error: existingError } = await supabase
+        .from("frq_reviews")
+        .select("id")
+        .eq("resume_id", resume_id)
+        .eq("graded_by", gradedBy)
+        .eq("cycle_id", screening.cycle.id)
+        .maybeSingle();
+
+    if (existingError) return respondWithServerError(res, existingError, "saveFrqReview existing");
+    if (existingReview) {
+        const { error: updateError } = await supabase
+            .from("frq_reviews")
+            .update({
+                score: Math.round(numericScore),
+                notes: notes ?? "",
+            })
+            .eq("id", existingReview.id)
+            .eq("graded_by", gradedBy);
+
+        if (updateError) return respondWithServerError(res, updateError, "saveFrqReview update");
+        return res.json({ success: true, updated: true, reviewId: existingReview.id });
+    }
+
+    const { error: saveError } = await supabase.rpc("save_frq_review", {
+        resume_id_input: resume_id,
+        score_input: Math.round(numericScore),
+        notes_input: notes ?? "",
+        graded_by_input: gradedBy,
+        cycle_id_input: screening.cycle.id,
+        round_id_input: screening.round.id,
+    });
+
+    if (saveError) {
+        if (saveError.code === "23505" || /already graded/i.test(saveError.message || "")) {
+            return res.status(409).json({ error: "You have already graded this candidate's application responses" });
+        }
+        return respondWithServerError(res, saveError, "saveFrqReview rpc");
+    }
+
+    return res.json({ success: true });
+};
+
+exports.patchMyFrqReview = async (req, res) => {
+    if (req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const gradedBy = req.user?.user_id;
+    const reviewId = String(req.params.reviewId || "").trim();
+    if (!gradedBy) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!reviewId) {
+        return res.status(400).json({ error: "reviewId is required" });
+    }
+
+    const { score, notes } = req.body;
+    const numericScore = Number(score);
+    if (!Number.isFinite(numericScore) || numericScore < 1 || numericScore > FRQ_MAX_SCORE) {
+        return res.status(400).json({ error: `score must be a number between 1 and ${FRQ_MAX_SCORE}` });
+    }
+
+    const { data: existing, error: fetchError } = await supabase
+        .from("frq_reviews")
+        .select("id")
+        .eq("id", reviewId)
+        .eq("graded_by", gradedBy)
+        .maybeSingle();
+
+    if (fetchError) return respondWithServerError(res, fetchError, "patchMyFrqReview fetch");
+    if (!existing) {
+        return res.status(404).json({ error: "FRQ review not found" });
+    }
+
+    const { error: updateError } = await supabase
+        .from("frq_reviews")
+        .update({
+            score: Math.round(numericScore),
+            notes: notes ?? "",
+        })
+        .eq("id", reviewId)
+        .eq("graded_by", gradedBy);
+
+    if (updateError) return respondWithServerError(res, updateError, "patchMyFrqReview update");
+
+    const { data: row, error: readError } = await fetchFrqReviewRowById(reviewId, gradedBy);
+    if (readError) return respondWithServerError(res, readError, "patchMyFrqReview read");
+    if (!row) return respondWithServerError(res, new Error("updated FRQ review missing"), "patchMyFrqReview read");
+
+    return res.json({ review: mapMyFrqReviewRow(row) });
 };
 
 exports.createCandidateFlag = async (req, res) => {
@@ -1310,7 +1653,24 @@ exports.getScoreboard = async (req, res) => {
             reviewOverrideLookup
         );
 
-        candidatesWithOverrides.sort((a, b) => {
+        const { data: frqRows, error: frqError } = await supabase
+            .from("frq_reviews")
+            .select("id, resume_id, score, notes, graded_by, submitted_at")
+            .eq("cycle_id", activeCycleId)
+            .eq("round_id", resumeRound.id);
+
+        if (frqError) throw frqError;
+
+        const frqGraderIds = (frqRows || []).map((row) => row.graded_by);
+        const frqGraderLookup = await getGradedByUserLookup(frqGraderIds);
+        const frqByResumeId = groupFrqReviewsByResumeId(frqRows, frqGraderLookup);
+        const candidatesWithComposite = applyCompositeScoringToCandidates(candidatesWithOverrides, {
+            frqByResumeId,
+            rubricConfig: resumeRound.rubric_config,
+        });
+        const metricsWithFrq = appendFrqMetric(metrics);
+
+        candidatesWithComposite.sort((a, b) => {
             if (a.score === null && b.score === null) {
                 return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
             }
@@ -1318,14 +1678,14 @@ exports.getScoreboard = async (req, res) => {
             if (b.score === null) return -1;
             return b.score - a.score;
         });
-        candidatesWithOverrides.forEach((c, index) => { c.rank = index + 1; });
+        candidatesWithComposite.forEach((c, index) => { c.rank = index + 1; });
 
-        const totalReviewed = candidatesWithOverrides.filter(c => c.numReviews > 0).length;
+        const totalReviewed = candidatesWithComposite.filter(c => c.numReviews > 0).length;
         const avgScore = reviewCount > 0 ? (totalNormalizedSum / reviewCount).toFixed(1) : 0;
-        const decisionCounts = countDecisions(candidatesWithOverrides);
-        const incompleteSummary = summarizeIncompleteDeliberation(candidatesWithOverrides);
+        const decisionCounts = countDecisions(candidatesWithComposite);
+        const incompleteSummary = summarizeIncompleteDeliberation(candidatesWithComposite);
         const undecidedCount = decisionCounts.pending + decisionCounts.hold;
-        const canCloseRound = canDeliberate && incompleteSummary.incompleteCount === 0 && candidatesWithOverrides.length > 0;
+        const canCloseRound = canDeliberate && incompleteSummary.incompleteCount === 0 && candidatesWithComposite.length > 0;
 
         let notification = null;
         if (req.user?.role === "admin") {
@@ -1359,10 +1719,10 @@ exports.getScoreboard = async (req, res) => {
                 incompleteCount: incompleteSummary.incompleteCount,
                 notification,
             },
-            metrics,
+            metrics: metricsWithFrq,
             maxPerCategory,
             stats: {
-                applicants: candidatesWithOverrides.length,
+                applicants: candidatesWithComposite.length,
                 reviewed: totalReviewed,
                 advanced: decisionCounts.advance,
                 hold: decisionCounts.hold,
@@ -1370,7 +1730,7 @@ exports.getScoreboard = async (req, res) => {
                 pending: decisionCounts.pending,
                 avgScore: avgScore,
             },
-            candidates: candidatesWithOverrides
+            candidates: candidatesWithComposite
         });
 
     } catch (err) {
@@ -1744,9 +2104,31 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             normalizedScore,
             score: normalizedScore === null ? null : Math.round(normalizedScore),
             numReviews,
+            year: candidate.year,
+            categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
         },
         reviewOverrideLookup
     );
+
+    const { data: frqRows, error: frqError } = await supabase
+        .from("frq_reviews")
+        .select("id, resume_id, score, notes, graded_by, submitted_at")
+        .eq("resume_id", resumeId)
+        .eq("cycle_id", activeCycleId)
+        .eq("round_id", resumeRound.id);
+
+    if (frqError) {
+        const err = new Error(frqError.message || "Failed to load FRQ reviews");
+        err.cause = frqError;
+        throw err;
+    }
+
+    const frqGraderLookup = await getGradedByUserLookup((frqRows || []).map((row) => row.graded_by));
+    const frqReviews = (frqRows || []).map((row) => mapFrqReviewRow(row, frqGraderLookup));
+    const compositeCandidate = applyCompositeScoringToCandidate(candidateWithOverrides, {
+        frqReviews,
+        rubricConfig: resumeRound.rubric_config,
+    });
 
     return {
         context: {
@@ -1765,14 +2147,20 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         resumeRoundId: resumeRound.id,
         activeCycleId,
         scoring: {
-            metrics: [...metricSet],
+            metrics: appendFrqMetric([...metricSet]),
             maxPerCategory: resumeRound.rubric_config?.maxPerCategory || 4,
-            numReviews: candidateWithOverrides.numReviews,
-            aggregateScore: candidateWithOverrides.aggregateScore,
-            normalizedScore: candidateWithOverrides.normalizedScore,
-            score: candidateWithOverrides.score,
-            categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
-            reviews: candidateWithOverrides.reviews,
+            numReviews: compositeCandidate.numReviews,
+            aggregateScore: compositeCandidate.aggregateScore,
+            normalizedScore: compositeCandidate.normalizedScore,
+            score: compositeCandidate.score,
+            resumeAggregateScore: compositeCandidate.resumeAggregateScore,
+            resumeNormalizedScore: compositeCandidate.resumeNormalizedScore,
+            frqScore: compositeCandidate.frqScore,
+            frqPending: compositeCandidate.frqPending,
+            numFrqReviews: compositeCandidate.numFrqReviews,
+            categoryScores: compositeCandidate.categoryScores,
+            reviews: compositeCandidate.reviews,
+            frqReviews: compositeCandidate.frqReviews,
         },
     };
 }
