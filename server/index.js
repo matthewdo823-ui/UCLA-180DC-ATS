@@ -1,12 +1,14 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 
 const authRoutes = require('./src/routes/authRoutes');
 
 const app = express();
 
 app.set('trust proxy', 1);
+app.use(helmet({ contentSecurityPolicy: false }));
 
 function parseAllowedOrigins() {
   const raw = process.env.CORS_ALLOWED_ORIGINS || '';
