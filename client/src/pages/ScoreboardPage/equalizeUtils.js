@@ -18,10 +18,6 @@ function stdDev(values, avg) {
   return Math.sqrt(variance);
 }
 
-function clampScore(value, maxPerCategory) {
-  return Math.max(1, Math.min(maxPerCategory, value));
-}
-
 function collectReviewEntries(candidates) {
   const entries = [];
   (candidates || []).forEach(candidate => {
@@ -82,7 +78,7 @@ function buildGlobalMetricStats(entries, metrics) {
   return stats;
 }
 
-function equalizeMetricScore(raw, graderStat, globalStat, maxPerCategory) {
+function equalizeMetricScore(raw, graderStat, globalStat) {
   if (!Number.isFinite(raw)) return null;
   if (!graderStat || !globalStat || graderStat.n < 2 || graderStat.std <= 0 || globalStat.std <= 0) {
     return raw;
@@ -90,10 +86,10 @@ function equalizeMetricScore(raw, graderStat, globalStat, maxPerCategory) {
 
   const z = (raw - graderStat.mean) / graderStat.std;
   const adjusted = globalStat.mean + z * globalStat.std;
-  return Number(clampScore(adjusted, maxPerCategory).toFixed(2));
+  return Number(adjusted.toFixed(2));
 }
 
-function equalizeReviewScores(review, graderStats, globalStats, maxPerCategory) {
+function equalizeReviewScores(review, graderStats, globalStats) {
   const graderKey = getGraderKey(review);
   const graderMetricStats = graderStats[graderKey] || {};
   const adjusted = {};
@@ -104,8 +100,7 @@ function equalizeReviewScores(review, graderStats, globalStats, maxPerCategory) 
     adjusted[metric] = equalizeMetricScore(
       numericRaw,
       graderMetricStats[metric],
-      globalStats[metric],
-      maxPerCategory
+      globalStats[metric]
     );
   });
 
@@ -174,9 +169,13 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
     let reviewCount = 0;
 
     const equalizedReviews = reviews.map(review => {
-      const adjustedScores = equalizeReviewScores(review, graderStats, globalStats, maxPerCategory);
+      const adjustedScores = equalizeReviewScores(review, graderStats, globalStats);
       const rawScore = computeRawScore(adjustedScores, Object.keys(adjustedScores));
-      const normalizedScore = computeNormalizedPercent(adjustedScores, review, maxPerCategory);
+      let normalizedScore = computeNormalizedPercent(adjustedScores, review, maxPerCategory);
+
+      if (review?.adminOverride?.overrideScore != null) {
+        normalizedScore = Number(review.adminOverride.overrideScore);
+      }
 
       if (normalizedScore != null) {
         totalRaw += rawScore;
@@ -204,6 +203,8 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
       normalizedScore,
       categoryScores,
       score: normalizedScore == null ? null : Math.round(normalizedScore),
+      sourceNormalizedScore: candidate.normalizedScore ?? candidate.score ?? null,
+      sourceAggregateScore: candidate.aggregateScore ?? null,
       equalized: true,
     };
   });
