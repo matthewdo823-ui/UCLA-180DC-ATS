@@ -159,24 +159,44 @@ function getLegacyNormalizedScore(scores) {
   return Number(((raw / 24) * 100).toFixed(2));
 }
 
-function resolveReviewNormalizedValue(review, options = {}) {
-  if (Number.isFinite(Number(review?.normalized_score))) {
-    return Number(review.normalized_score);
-  }
+/** Cosmetic % derived from raw rubric scores — never treat as source of truth. */
+function computeNormalizedFromAggregate(aggregateScore, maxScore) {
+  const raw = Number(aggregateScore);
+  const max = Number(maxScore);
+  if (!Number.isFinite(raw) || !Number.isFinite(max) || max <= 0) return null;
+  return Number(((raw / max) * 100).toFixed(1));
+}
 
+function computeReviewNormalizedFromScores(review, options = {}) {
   const scores = review?.scores || {};
-  const snapshot = review?.rubric_snapshot;
+  if (!Object.keys(scores).length) return null;
+
+  const snapshot = review?.rubric_snapshot || review?.rubricSnapshot || null;
   if (snapshot) {
     return computeNormalizedScore(scores, snapshot);
   }
 
   const { rubricConfig, candidateYear } = options;
   if (rubricConfig) {
-    const dynamicSnapshot = buildRubricSnapshot(rubricConfig, candidateYear);
-    return computeNormalizedScore(scores, dynamicSnapshot);
+    return computeNormalizedScore(scores, buildRubricSnapshot(rubricConfig, candidateYear));
   }
 
   return getLegacyNormalizedScore(scores);
+}
+
+/**
+ * Resolve a review's display % from raw scores when available.
+ * Stored normalized_score is only used as a fallback when scores are missing.
+ */
+function resolveReviewNormalizedValue(review, options = {}) {
+  const fromScores = computeReviewNormalizedFromScores(review, options);
+  if (fromScores != null) return fromScores;
+
+  if (Number.isFinite(Number(review?.normalized_score))) {
+    return Number(review.normalized_score);
+  }
+
+  return null;
 }
 
 module.exports = {
@@ -193,5 +213,7 @@ module.exports = {
   computeNormalizedScore,
   getMetricsFromRubricConfig,
   getLegacyNormalizedScore,
+  computeNormalizedFromAggregate,
+  computeReviewNormalizedFromScores,
   resolveReviewNormalizedValue,
 };

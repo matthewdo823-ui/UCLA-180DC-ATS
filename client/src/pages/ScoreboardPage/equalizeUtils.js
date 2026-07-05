@@ -171,18 +171,16 @@ function applyCompositeFromParts(candidate, resumeAggregateScore, resumeNormaliz
 
   let aggregateScore = resumeAggregateScore;
   let normalizedScore = resumeNormalizedScore;
-  let score = normalizedScore == null ? null : Math.round(normalizedScore);
 
   if (frqAvg != null && resumeAggregateScore != null) {
     aggregateScore = Number((resumeAggregateScore + frqAvg).toFixed(1));
     normalizedScore = Number(((aggregateScore / compositeMax) * 100).toFixed(1));
-    score = Math.round(normalizedScore);
   }
 
   return {
     aggregateScore,
     normalizedScore,
-    score,
+    score: normalizedScore == null ? null : Math.round(normalizedScore),
     frqScore: frqAvg,
     frqPending,
     compositeMax,
@@ -245,23 +243,18 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
 
     if (reviews.length && resumeMetrics.length) {
       let totalRaw = 0;
-      let totalNormalized = 0;
       let reviewCount = 0;
 
       equalizedReviews = reviews.map(review => {
         const adjustedScores = equalizeReviewScores(review, resumeGraderStats, resumeGlobalStats);
         const rawScore = computeRawScore(adjustedScores, Object.keys(adjustedScores));
-        let normalizedScore = computeNormalizedPercent(adjustedScores, review, maxPerCategory);
 
-        if (review?.adminOverride?.overrideScore != null) {
-          normalizedScore = Number(review.adminOverride.overrideScore);
-        }
-
-        if (normalizedScore != null) {
+        if (Number.isFinite(rawScore)) {
           totalRaw += rawScore;
-          totalNormalized += normalizedScore;
           reviewCount += 1;
         }
+
+        const normalizedScore = computeNormalizedPercent(adjustedScores, review, maxPerCategory);
 
         return {
           ...review,
@@ -273,7 +266,11 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
       });
 
       resumeAggregateScore = reviewCount > 0 ? Number((totalRaw / reviewCount).toFixed(1)) : null;
-      resumeNormalizedScore = reviewCount > 0 ? Number((totalNormalized / reviewCount).toFixed(1)) : null;
+      const resumeMax = Number(candidate.compositeMax) - (frqReviews.length ? FRQ_MAX_SCORE : 0)
+        || resumeMetrics.length * maxPerCategory;
+      resumeNormalizedScore = resumeAggregateScore != null && resumeMax > 0
+        ? Number(((resumeAggregateScore / resumeMax) * 100).toFixed(1))
+        : null;
     } else if (reviews.length) {
       resumeAggregateScore = candidate.resumeAggregateScore ?? candidate.aggregateScore ?? null;
       resumeNormalizedScore = candidate.resumeNormalizedScore ?? candidate.normalizedScore ?? null;
