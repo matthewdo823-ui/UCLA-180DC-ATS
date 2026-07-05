@@ -22,7 +22,7 @@ import {
 } from "./decisionUtils";
 import { equalizeCandidateScores, recomputeEqualizedStats } from "./equalizeUtils";
 import AdvanceEmailModal from "./AdvanceEmailModal";
-import ReviewOverrideSection from "./ReviewOverrideSection";
+import ReviewOverrideSection from "../../components/ReviewOverride/ReviewOverrideSection";
 import { formatRoundKind, isInterviewRoundType } from "../../constants/rounds";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";

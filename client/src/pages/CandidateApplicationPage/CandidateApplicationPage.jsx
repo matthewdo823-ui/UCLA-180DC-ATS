@@ -17,7 +17,7 @@ export default function CandidateApplicationPage() {
   const { candidateId: resumeId } = useParams();
   const navigate = useNavigate();
   const { token, user } = useAuth();
-  const { candidate, resume, scoring, contextLabel, loading, error } = useCandidateApplication(resumeId);
+  const { candidate, resume, scoring, contextLabel, loading, error, refresh } = useCandidateApplication(resumeId);
   const summaryState = useCandidateApplicationSummary(resumeId, !loading && !error && Boolean(candidate));
   const isAdmin = isAdminRole(user?.role);
 
@@ -67,10 +67,8 @@ export default function CandidateApplicationPage() {
               {isAdmin && (
                 <AdminOverridesSection
                   resumeId={resumeId}
-                  onOverrideSaved={() => {
-                    // Re-fetch application to get updated scoring
-                    window.location.reload();
-                  }}
+                  scoring={scoring}
+                  onOverrideSaved={() => refresh()}
                 />
               )}
               <ApplicationResponsesSection candidate={candidate} />

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { css } from "../../theme/colors";
-import MetricRow from "../../components/ScoringPanel/MetricRow";
+import MetricRow from "../ScoringPanel/MetricRow";
 import { formatScore } from "../../utils/format";
 import useReviewOverrides from "./useReviewOverrides";
 
@@ -48,6 +48,7 @@ export default function ReviewOverrideSection({
   metrics = [],
   maxPerCategory = 4,
   onOverrideSaved,
+  embedded = false,
 }) {
   const {
     overrideByReviewId,
@@ -147,9 +148,17 @@ export default function ReviewOverrideSection({
     }
   };
 
+  const shellStyle = embedded
+    ? { display: "flex", flexDirection: "column", gap: 12 }
+    : {
+        padding: "12px 18px 18px",
+        borderTop: "1px solid #EAEAEA",
+        background: "#FAFCF8",
+      };
+
   if (loading) {
     return (
-      <div style={{ padding: "12px 18px 18px", borderTop: "1px solid #EAEAEA" }}>
+      <div style={shellStyle}>
         <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>Loading override controls…</p>
       </div>
     );
@@ -157,7 +166,7 @@ export default function ReviewOverrideSection({
 
   if (!reviewOptions.length) {
     return (
-      <div style={{ padding: "12px 18px 18px", borderTop: "1px solid #EAEAEA" }}>
+      <div style={shellStyle}>
         <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>No grades to override yet.</p>
       </div>
     );
@@ -166,17 +175,21 @@ export default function ReviewOverrideSection({
   const baselineTotal = getReviewRawTotal({ scores: baselineScores });
   const currentTotal = getReviewRawTotal({ scores });
   const maxScore = selectedReview?.maxScore || reviewMetrics.length * maxPerCategory;
+  const selectId = embedded ? "app-review-override-select" : "review-override-select";
+  const notesId = embedded ? "app-review-override-notes" : "review-override-notes";
 
   return (
-    <div style={{ padding: "12px 18px 18px", borderTop: "1px solid #EAEAEA", background: "#FAFCF8" }}>
-      <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 800 }}>
-        ADMIN · OVERRIDE GRADE
-      </p>
+    <div style={shellStyle}>
+      {!embedded ? (
+        <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 800 }}>
+          ADMIN · OVERRIDE GRADE
+        </p>
+      ) : null}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div>
           <label
-            htmlFor="review-override-select"
+            htmlFor={selectId}
             style={{
               display: "block",
               margin: "0 0 6px",
@@ -190,7 +203,7 @@ export default function ReviewOverrideSection({
             Select grader
           </label>
           <select
-            id="review-override-select"
+            id={selectId}
             value={selectedReviewId}
             onChange={(e) => setSelectedReviewId(e.target.value)}
             style={{
@@ -249,7 +262,7 @@ export default function ReviewOverrideSection({
 
         <div>
           <label
-            htmlFor="review-override-notes"
+            htmlFor={notesId}
             style={{
               display: "block",
               margin: "0 0 6px",
@@ -263,7 +276,7 @@ export default function ReviewOverrideSection({
             Admin notes
           </label>
           <textarea
-            id="review-override-notes"
+            id={notesId}
             value={notes}
             onChange={(e) => setNotes(e.target.value.slice(0, 5000))}
             placeholder="Why this grade was adjusted…"
