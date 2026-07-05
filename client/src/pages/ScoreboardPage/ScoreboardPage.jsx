@@ -85,17 +85,19 @@ function countActiveFilters(filters) {
 
 function passesScoreBand(candidate, scoreBand) {
   const n = candidate?.numReviews ?? candidate?.reviews?.length ?? 0;
-  const score = hasNumericScore(candidate?.score) ? Number(candidate.score) : null;
+  const displayPct = hasNumericScore(candidate?.normalizedScore)
+    ? Number(candidate.normalizedScore)
+    : null;
 
   switch (scoreBand) {
     case "top":
-      return score !== null && score >= 80;
+      return displayPct !== null && displayPct >= 80;
     case "strong":
-      return score !== null && score >= 70;
+      return displayPct !== null && displayPct >= 70;
     case "low":
-      return score !== null && score < 60 && n > 0;
+      return displayPct !== null && displayPct < 60 && n > 0;
     case "pending":
-      return n === 0 || score === null;
+      return n === 0 || displayPct === null;
     default:
       return true;
   }
@@ -314,8 +316,8 @@ function compareCandidates(a, b, sortBy) {
 
   switch (sortBy) {
     case "performance_desc": {
-      const as = hasNumericScore(a.score) ? Number(a.score) : null;
-      const bs = hasNumericScore(b.score) ? Number(b.score) : null;
+      const as = getPerformanceSortScore(a);
+      const bs = getPerformanceSortScore(b);
       if (as === null && bs === null) primary = (getCreatedMs(a) ?? 0) - (getCreatedMs(b) ?? 0);
       else if (as === null) primary = 1;
       else if (bs === null) primary = -1;
@@ -323,8 +325,8 @@ function compareCandidates(a, b, sortBy) {
       break;
     }
     case "performance_asc": {
-      const as = hasNumericScore(a.score) ? Number(a.score) : null;
-      const bs = hasNumericScore(b.score) ? Number(b.score) : null;
+      const as = getPerformanceSortScore(a);
+      const bs = getPerformanceSortScore(b);
       if (as === null && bs === null) primary = (getCreatedMs(a) ?? 0) - (getCreatedMs(b) ?? 0);
       else if (as === null) primary = 1;
       else if (bs === null) primary = -1;
@@ -394,13 +396,11 @@ function normalizeMetricScore(candidate, metric) {
 
 function getNormalizedScore(candidate) {
   if (hasNumericScore(candidate?.normalizedScore)) return Number(candidate.normalizedScore);
-  if (hasNumericScore(candidate?.score)) return Number(candidate.score);
   return null;
 }
 
-function getHeadlineScore(candidate, { equalized = false } = {}) {
-  if (equalized) return getNormalizedScore(candidate);
-  if (hasNumericScore(candidate?.score)) return Number(candidate.score);
+/** Cosmetic display % — derived from raw scores, not used for ranking. */
+function getHeadlineScore(candidate) {
   return getNormalizedScore(candidate);
 }
 
@@ -414,6 +414,11 @@ function getAggregateScore(candidate) {
     return Number(candidate.aggregateScore);
   }
   return null;
+}
+
+/** Raw pts average — source of truth for ranking/sorting. */
+function getPerformanceSortScore(candidate) {
+  return getAggregateScore(candidate);
 }
 
 function ReviewerStack({ reviews }) {
@@ -506,7 +511,7 @@ function ScorecardModal({
   onOverrideSaved,
 }) {
   const [reviewersOpen, setReviewersOpen] = useState(false);
-  const headlineScore = getHeadlineScore(candidate, { equalized });
+  const headlineScore = getHeadlineScore(candidate);
   const sourceNormalizedScore = getSourceNormalizedScore(candidate);
   const aggregateScore = getAggregateScore(candidate);
   const reviews = candidate?.reviews ?? [];
@@ -676,7 +681,7 @@ function ScorecardModal({
             {reviewersOpen && (
               <div style={{ marginTop: 10 }}>
                 {reviews.map((review, index) => {
-                  const reviewOverridden = review?.adminOverride?.overrideScore != null;
+                  const reviewOverridden = Boolean(review?.adminOverride?.overrideScores);
                   const displayScore = equalized && hasNumericScore(review.normalizedScore)
                     ? `${formatScore(review.normalizedScore)}%`
                     : `${formatScore(getReviewTotal(review))}/24`;
@@ -740,7 +745,8 @@ function ScorecardModal({
             <ReviewOverrideSection
               resumeId={candidate.id}
               reviews={reviews}
-              equalized={equalized}
+              metrics={metrics}
+              maxPerCategory={maxPerCategory}
               onOverrideSaved={onOverrideSaved}
             />
           ) : null}
@@ -1771,8 +1777,8 @@ export default function ScoreboardPage() {
             </div>
 
             <div>
-              <div style={{ color: scoreColor(getHeadlineScore(c, { equalized: equalizeActive })), fontSize: 18, fontFamily: serifFont, fontWeight: 600 }}>
-                {formatScore(getHeadlineScore(c, { equalized: equalizeActive }))}%
+              <div style={{ color: scoreColor(getHeadlineScore(c)), fontSize: 18, fontFamily: serifFont, fontWeight: 600 }}>
+                {formatScore(getHeadlineScore(c))}%
               </div>
               <div style={{ fontSize: 11, color: t.textMuted }}>
                 {equalizeActive && getSourceNormalizedScore(c) != null

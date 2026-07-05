@@ -1,5 +1,5 @@
 const { FRQ_METRIC, FRQ_MAX_SCORE } = require("../constants/frq");
-const { getRubricForYear, getRubricMaxScore } = require("../utils/rubric");
+const { getRubricForYear, getRubricMaxScore, computeNormalizedFromAggregate } = require("../utils/rubric");
 
 function getResumeMaxForYear(rubricConfig, year) {
   const rubricForYear = getRubricForYear(rubricConfig, year);
@@ -43,15 +43,17 @@ function averageFrqScore(frqReviews = []) {
 
 /**
  * Merge resume-only aggregates with FRQ grades into composite headline scores.
- * When FRQ is missing, headline scores stay resume-only (Option A).
+ * aggregateScore = source of truth (raw pts). normalizedScore/score = cosmetic % for display.
  */
 function applyCompositeScoringToCandidate(candidate, {
   frqReviews = [],
   rubricConfig = null,
 } = {}) {
   const resumeAggregateScore = candidate.aggregateScore ?? null;
-  const resumeNormalizedScore = candidate.normalizedScore ?? null;
   const resumeMax = getResumeMaxForYear(rubricConfig, candidate.year);
+  const resumeNormalizedScore = computeNormalizedFromAggregate(resumeAggregateScore, resumeMax)
+    ?? candidate.normalizedScore
+    ?? null;
   const frqAvg = averageFrqScore(frqReviews);
   const numFrqReviews = frqReviews.length;
 
@@ -64,23 +66,22 @@ function applyCompositeScoringToCandidate(candidate, {
 
   let aggregateScore = resumeAggregateScore;
   let normalizedScore = resumeNormalizedScore;
-  let score = candidate.score ?? (normalizedScore == null ? null : Math.round(normalizedScore));
   const frqPending = numFrqReviews === 0;
 
   if (frqAvg != null && resumeAggregateScore != null) {
     aggregateScore = Number((resumeAggregateScore + frqAvg).toFixed(1));
     const compositeMax = resumeMax + FRQ_MAX_SCORE;
-    normalizedScore = Number(((aggregateScore / compositeMax) * 100).toFixed(1));
-    score = Math.round(normalizedScore);
+    normalizedScore = computeNormalizedFromAggregate(aggregateScore, compositeMax);
   }
 
   return {
     ...candidate,
     resumeAggregateScore,
     resumeNormalizedScore,
+    resumeMax,
     aggregateScore,
     normalizedScore,
-    score,
+    score: normalizedScore == null ? null : Math.round(normalizedScore),
     frqPending,
     frqScore: frqAvg,
     numFrqReviews,
