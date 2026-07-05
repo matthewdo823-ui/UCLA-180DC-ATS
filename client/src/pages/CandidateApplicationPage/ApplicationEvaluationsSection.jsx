@@ -4,14 +4,19 @@ import { hasText } from "./applicationUtils";
 import CategoryRow from "./components/CategoryRow";
 import RoundEvaluationPanel from "./components/RoundEvaluationPanel";
 import SectionCard from "./components/SectionCard";
+import { FRQ_METRIC } from "../../constants/frq";
 import { cardGreen, ROUND_1_LABEL, UPCOMING_EVALUATION_ROUNDS } from "./constants";
 
 export default function ApplicationEvaluationsSection({ scoring }) {
+  const hasResumeReviews = (scoring?.numReviews ?? 0) > 0;
+  const hasFrqReviews = (scoring?.numFrqReviews ?? scoring?.frqReviews?.length ?? 0) > 0;
+  const hasScoring = hasResumeReviews || hasFrqReviews;
+
   return (
     <SectionCard title="Evaluations">
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <RoundEvaluationPanel title={ROUND_1_LABEL} status="active">
-          {scoring?.numReviews > 0 ? (
+          {hasScoring ? (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
                 <div>
@@ -23,7 +28,9 @@ export default function ApplicationEvaluationsSection({ scoring }) {
                   </p>
                 </div>
                 <p style={{ margin: 0, fontSize: 13, color: css.textGray, paddingTop: 14 }}>
-                  {formatScore(scoring.aggregateScore)} raw pts · {scoring.numReviews} {scoring.numReviews === 1 ? "review" : "reviews"}
+                  {formatScore(scoring.aggregateScore)} raw pts
+                  {hasResumeReviews ? ` · ${scoring.numReviews} ${scoring.numReviews === 1 ? "review" : "reviews"}` : ""}
+                  {scoring.frqPending ? " · FRQ pending" : hasFrqReviews ? ` · ${scoring.numFrqReviews} FRQ ${scoring.numFrqReviews === 1 ? "grade" : "grades"}` : ""}
                 </p>
               </div>
 
@@ -32,7 +39,7 @@ export default function ApplicationEvaluationsSection({ scoring }) {
                   key={metric}
                   metric={metric}
                   value={scoring.categoryScores?.[metric]}
-                  maxPerCategory={scoring.maxPerCategory}
+                  maxPerCategory={metric === FRQ_METRIC ? 4 : scoring.maxPerCategory}
                 />
               ))}
 
@@ -51,6 +58,28 @@ export default function ApplicationEvaluationsSection({ scoring }) {
                       </div>
                       <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: cardGreen }}>
                         {formatScore(review.normalizedScore)}% · {formatScore(review.score)} raw
+                      </p>
+                    </div>
+                    {hasText(review.notes) && (
+                      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: css.textDark, whiteSpace: "pre-wrap" }}>
+                        {review.notes.trim()}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {(scoring.frqReviews || []).map((review, index) => (
+                  <div key={review.id} style={{ padding: "12px 14px", background: "#F8FAF6", borderRadius: 8, border: `1px solid ${css.borderLight}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: review.notes ? 8 : 0 }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: css.textDark }}>
+                          {review.reviewerName || review.reviewerEmail || `FRQ grader ${index + 1}`}
+                        </p>
+                        <p style={{ margin: "2px 0 0", fontSize: 12, color: css.textGray }}>
+                          {formatDate(review.submittedAt, { style: "datetime" })} · Application responses
+                        </p>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: cardGreen }}>
+                        {formatScore(review.score)}/4
                       </p>
                     </div>
                     {hasText(review.notes) && (

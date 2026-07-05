@@ -6,6 +6,11 @@ const { authenticateToken, requireRoles } = require('../middleware/authMiddlewar
 
 router.use(authenticateToken, requireRoles('admin', 'member'));
 
+router.get('/next-frq', requireRoles('admin'), resumeController.getNextFrq);
+router.get('/frq-reviews', requireRoles('admin'), resumeController.listMyFrqReviews);
+router.get('/frq-reviews/:reviewId/candidate', requireRoles('admin'), resumeController.getFrqReviewCandidate);
+router.post('/frq-reviews', requireRoles('admin'), resumeController.saveFrqReview);
+router.patch('/frq-reviews/:reviewId', requireRoles('admin'), resumeController.patchMyFrqReview);
 router.get('/next-resume', resumeController.getNextResume);
 router.get('/resume/:id', resumeController.getResumeById);
 router.get('/reviews', resumeController.listMyReviews);
