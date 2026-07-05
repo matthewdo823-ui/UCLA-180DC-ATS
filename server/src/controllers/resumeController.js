@@ -15,7 +15,9 @@ const {
     buildRubricSnapshot,
     computeRawScore,
     computeNormalizedScore,
+    computeNormalizedFromAggregate,
     getMetricsFromRubricConfig,
+    getRubricMaxScore,
     resolveReviewNormalizedValue,
 } = require('../utils/rubric');
 const { firstRel } = require('../utils/supabaseHelpers');
@@ -1608,7 +1610,8 @@ exports.getScoreboard = async (req, res) => {
 
         const candidates = Object.values(candidateMap).map(c => {
             const aggregateScore = c.numReviews > 0 ? c.totalScore / c.numReviews : null;
-            const normalizedScore = c.numReviews > 0 ? c.totalNormalized / c.numReviews : null;
+            const resumeMax = getRubricMaxScore(getRubricForYear(resumeRound.rubric_config, c.year));
+            const normalizedScore = computeNormalizedFromAggregate(aggregateScore, resumeMax);
             const categoryScores = buildCategoryScores(c.categoryTotals, c.categoryCounts);
 
             const decision = resolveCandidateDecision(c.candidateId, decisionLookup, decisionOptions);
@@ -1628,12 +1631,12 @@ exports.getScoreboard = async (req, res) => {
                 newbieTraining: c.newbieTraining,
                 headshot: c.headshot || '',
                 aggregateScore: aggregateScore === null ? null : Number(aggregateScore.toFixed(1)),
-                normalizedScore: normalizedScore === null ? null : Number(normalizedScore.toFixed(1)),
-                maxScore: null,
+                normalizedScore,
+                maxScore: resumeMax,
                 categoryScores,
                 numReviews: c.numReviews,
                 reviews: c.reviews.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt)),
-                score: normalizedScore === null ? null : Math.round(normalizedScore),
+                score: normalizedScore == null ? null : Math.round(normalizedScore),
                 createdAt: c.createdAt,
                 decision,
                 canDecide: c.canDecide,
@@ -1650,7 +1653,8 @@ exports.getScoreboard = async (req, res) => {
         const reviewOverrideLookup = await fetchReviewOverridesByReviewIds(allReviewIds);
         const candidatesWithOverrides = applyReviewOverridesToCandidates(
             filteredCandidates,
-            reviewOverrideLookup
+            reviewOverrideLookup,
+            { rubricConfig: resumeRound.rubric_config, metrics }
         );
 
         const { data: frqRows, error: frqError } = await supabase
@@ -1671,12 +1675,12 @@ exports.getScoreboard = async (req, res) => {
         const metricsWithFrq = appendFrqMetric(metrics);
 
         candidatesWithComposite.sort((a, b) => {
-            if (a.score === null && b.score === null) {
+            if (a.aggregateScore === null && b.aggregateScore === null) {
                 return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
             }
-            if (a.score === null) return 1;
-            if (b.score === null) return -1;
-            return b.score - a.score;
+            if (a.aggregateScore === null) return 1;
+            if (b.aggregateScore === null) return -1;
+            return b.aggregateScore - a.aggregateScore;
         });
         candidatesWithComposite.forEach((c, index) => { c.rank = index + 1; });
 
@@ -1898,14 +1902,17 @@ exports.exportScoreboardDecisions = async (req, res) => {
             const embedded = firstRel(resume.candidates) || {};
             const linked = applyResumeCandidateLink(resume, embedded, candidateLinkLookups);
             const resumeReviews = reviewsByResume[resume.id] || [];
-            const normalizedScores = resumeReviews
-                .map((review) => resolveReviewNormalizedValue(review, {
-                    rubricConfig: resumeRound.rubric_config,
-                    candidateYear: linked.year,
-                }))
-                .filter((v) => Number.isFinite(v));
-            const avgScore = normalizedScores.length
-                ? Math.round(normalizedScores.reduce((a, b) => a + b, 0) / normalizedScores.length)
+            let totalRaw = 0;
+            let rawCount = 0;
+            resumeReviews.forEach((review) => {
+                const snapshot = review.rubric_snapshot || null;
+                const metrics = snapshot?.metrics || Object.keys(review.scores || {});
+                const reviewRaw = getReviewScore(review.scores, metrics);
+                totalRaw += reviewRaw;
+                rawCount += 1;
+            });
+            const avgRawScore = rawCount > 0
+                ? Number((totalRaw / rawCount).toFixed(1))
                 : null;
 
             return {
@@ -1916,7 +1923,7 @@ exports.exportScoreboardDecisions = async (req, res) => {
                 major: linked.major,
                 year: linked.year,
                 gpa: linked.gpa,
-                score: avgScore,
+                score: avgRawScore,
                 numReviews: resumeReviews.length,
                 decision: resolveCandidateDecision(linked.candidateId, decisionLookup),
             };
@@ -2093,7 +2100,8 @@ async function fetchScoreboardApplicationPayload(resumeId) {
 
     const numReviews = mappedReviews.length;
     const aggregateScore = numReviews > 0 ? Number((totalScore / numReviews).toFixed(1)) : null;
-    const normalizedScore = numReviews > 0 ? Number((totalNormalized / numReviews).toFixed(1)) : null;
+    const resumeMax = getRubricMaxScore(getRubricForYear(resumeRound.rubric_config, candidate.year));
+    const normalizedScore = computeNormalizedFromAggregate(aggregateScore, resumeMax);
     const resumeFileUrl = resumeRow.file_url || candidate.resume_file_url || '';
 
     const reviewOverrideLookup = await fetchReviewOverridesByReviewIds(mappedReviews.map(r => r.id));
@@ -2105,9 +2113,11 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             score: normalizedScore === null ? null : Math.round(normalizedScore),
             numReviews,
             year: candidate.year,
+            metrics: [...metricSet],
             categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
         },
-        reviewOverrideLookup
+        reviewOverrideLookup,
+        { rubricConfig: resumeRound.rubric_config, candidateYear: candidate.year, metrics: [...metricSet] }
     );
 
     const { data: frqRows, error: frqError } = await supabase
@@ -2318,10 +2328,10 @@ function applyAdminOverrideToScoring(scoring, adminOverride) {
         scoring.adminOverride = adminOverride ? { adminNotes: adminOverride.adminNotes, overrideScore: null, updatedAt: adminOverride.updatedAt } : null;
         return;
     }
+    // Cosmetic-only: replaces display % without changing underlying raw rubric data.
     const overridden = Number(adminOverride.overrideScore);
     scoring.normalizedScore = overridden;
     scoring.score = Math.round(overridden);
-    scoring.aggregateScore = null; // clear raw aggregate — not meaningful alongside override
     scoring.adminOverride = {
         adminNotes: adminOverride.adminNotes || '',
         overrideScore: overridden,
@@ -2442,22 +2452,75 @@ exports.upsertReviewOverride = async (req, res) => {
         }
 
         const adminNotes = typeof req.body?.adminNotes === 'string' ? req.body.adminNotes.slice(0, 5000) : '';
-        const rawScore = req.body?.overrideScore;
-        const overrideScore = rawScore != null && rawScore !== '' ? Number(rawScore) : null;
+        const rawScores = req.body?.overrideScores;
+        const hasScores = rawScores && typeof rawScores === 'object' && !Array.isArray(rawScores);
 
-        if (overrideScore !== null && (!Number.isFinite(overrideScore) || overrideScore < 0 || overrideScore > 100)) {
-            return res.status(400).json({ error: 'overrideScore must be a number between 0 and 100' });
+        const activeCycle = await getActiveCycleRow();
+        const activeCycleId = activeCycle?.id || null;
+        const resumeRound = activeCycleId
+            ? await getResumeScreenRoundForCycle(activeCycleId)
+            : null;
+
+        if (!activeCycleId || !resumeRound) {
+            return res.status(503).json({ error: 'No active resume screening cycle' });
         }
 
-        const payload = await fetchScoreboardApplicationPayload(resumeId);
-        const review = (payload.scoring?.reviews || []).find(row => row.id === reviewId);
-        if (!review) {
+        const { data: reviewRow, error: reviewError } = await supabase
+            .from('resume_reviews')
+            .select(`
+                id,
+                resume_id,
+                scores,
+                rubric_snapshot,
+                cycle_id,
+                round_id,
+                resumes (
+                    cycle_id,
+                    candidates ( year )
+                )
+            `)
+            .eq('id', reviewId)
+            .eq('resume_id', resumeId)
+            .maybeSingle();
+
+        if (reviewError) return respondWithServerError(res, reviewError, 'upsertReviewOverride review');
+        if (!reviewRow) {
             return res.status(404).json({ error: 'Review not found for this candidate' });
+        }
+        if (reviewRow.cycle_id !== activeCycleId || reviewRow.round_id !== resumeRound.id) {
+            return res.status(400).json({ error: 'Review is not part of the active resume screening round' });
+        }
+
+        const resume = firstRel(reviewRow.resumes);
+        if (resume?.cycle_id !== activeCycleId) {
+            return res.status(404).json({ error: 'Candidate is not in the active cycle' });
+        }
+
+        const candidateYear = firstRel(resume?.candidates)?.year;
+        const snapshot = reviewRow.rubric_snapshot || null;
+        const rubricForYear = snapshot
+            ? {
+                metrics: snapshot.metrics || Object.keys(reviewRow.scores || {}),
+                maxPerCategory: snapshot.maxPerCategory || 4,
+                maxScore: snapshot.maxScore,
+            }
+            : getRubricForYear(resumeRound.rubric_config, candidateYear);
+
+        let overrideScores = null;
+        if (hasScores) {
+            const { scores: normalizedOverrideScores, error: scoreError } = normalizeScreeningScoresInput(
+                rawScores,
+                rubricForYear
+            );
+            if (scoreError) {
+                return res.status(400).json({ error: scoreError });
+            }
+            overrideScores = normalizedOverrideScores;
         }
 
         const adminUserId = req.user?.user_id;
 
-        if (overrideScore === null && !adminNotes) {
+        if (!overrideScores && !adminNotes) {
             const { error: deleteError } = await supabase
                 .from('resume_review_overrides')
                 .delete()
@@ -2468,10 +2531,14 @@ exports.upsertReviewOverride = async (req, res) => {
             return res.json({ override: null });
         }
 
+        if (!overrideScores) {
+            return res.status(400).json({ error: 'overrideScores is required when saving a grade override' });
+        }
+
         const upsertPayload = {
             review_id: reviewId,
             admin_notes: adminNotes || null,
-            override_score: overrideScore,
+            override_scores: overrideScores,
             admin_user_id: adminUserId ?? null,
             updated_at: new Date().toISOString(),
         };
