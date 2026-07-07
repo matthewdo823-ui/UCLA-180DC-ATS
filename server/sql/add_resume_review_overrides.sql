@@ -1,9 +1,10 @@
 -- Run once in Supabase SQL Editor (or psql).
--- Admin-only per-review rubric score overrides for resume screening grades.
+-- Admin-only per-review total score overrides for resume screening grades.
 
 CREATE TABLE IF NOT EXISTS resume_review_overrides (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   review_id       UUID NOT NULL REFERENCES resume_reviews(id) ON DELETE CASCADE,
+  override_score  NUMERIC,
   override_scores JSONB,
   admin_notes     TEXT,
   admin_user_id   INT REFERENCES users(user_id) ON DELETE SET NULL,

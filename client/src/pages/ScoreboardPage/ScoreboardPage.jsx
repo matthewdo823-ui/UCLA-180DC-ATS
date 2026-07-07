@@ -577,11 +577,11 @@ function ScorecardModal({
           ×
         </button>
 
-        <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", color: "#FFF", textAlign: "center", margin: "0 0 10px" }}>
+        <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", color: "#FFF", textAlign: "center", margin: "0 0 10px", flexShrink: 0 }}>
           {roundBanner}
         </p>
 
-        <div style={{ borderRadius: 16, border: `2px solid ${cardGreen}`, overflow: "hidden", background: "#FFF", boxShadow: "0 24px 70px rgba(0,0,0,0.26)" }}>
+        <div className="scorecard-body" style={{ borderRadius: 16, border: `2px solid ${cardGreen}`, background: "#FFF", boxShadow: "0 24px 70px rgba(0,0,0,0.26)" }}>
           <div style={{ background: cardGreen, padding: "18px 18px 16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
               <span style={{ background: "#04342C", color: "#9FE1CB", fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 20, letterSpacing: "0.04em" }}>
@@ -681,7 +681,7 @@ function ScorecardModal({
             {reviewersOpen && (
               <div style={{ marginTop: 10 }}>
                 {reviews.map((review, index) => {
-                  const reviewOverridden = Boolean(review?.adminOverride?.overrideScores);
+                  const reviewOverridden = review?.adminOverride?.overrideScore != null;
                   const displayScore = equalized && hasNumericScore(review.normalizedScore)
                     ? `${formatScore(review.normalizedScore)}%`
                     : `${formatScore(getReviewTotal(review))}/24`;

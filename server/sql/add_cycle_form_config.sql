@@ -15,6 +15,7 @@ CREATE INDEX IF NOT EXISTS idx_cycles_google_form_id
 -- Allow the same Google response id in different cycles (one form per cycle).
 DROP INDEX IF EXISTS idx_candidates_google_form_response_id;
 
+-- Full index (not partial): Supabase/PostgREST upsert cannot target partial indexes.
+-- NULL google_form_response_id rows remain allowed (Postgres treats NULLs as distinct).
 CREATE UNIQUE INDEX IF NOT EXISTS idx_candidates_cycle_google_form_response
-  ON candidates (cycle_id, google_form_response_id)
-  WHERE google_form_response_id IS NOT NULL;
+  ON candidates (cycle_id, google_form_response_id);

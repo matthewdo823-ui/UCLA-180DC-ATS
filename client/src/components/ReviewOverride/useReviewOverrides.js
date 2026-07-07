@@ -67,7 +67,7 @@ export default function useReviewOverrides(resumeId, enabled = true) {
   }, [enabled, id, load]);
 
   const save = useCallback(
-    async ({ reviewId, adminNotes, overrideScores }) => {
+    async ({ reviewId, adminNotes, overrideScore }) => {
       const reviewKey = String(reviewId || "").trim();
       if (!id || !reviewKey) {
         setSaveError("Missing review");
@@ -79,7 +79,7 @@ export default function useReviewOverrides(resumeId, enabled = true) {
       try {
         const body = {};
         if (adminNotes !== undefined) body.adminNotes = adminNotes;
-        if (overrideScores !== undefined) body.overrideScores = overrideScores;
+        if (overrideScore !== undefined) body.overrideScore = overrideScore;
 
         const res = await fetchRef.current(
           `${API}/scoreboard/${encodeURIComponent(id)}/review-overrides/${encodeURIComponent(reviewKey)}`,
