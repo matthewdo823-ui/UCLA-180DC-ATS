@@ -23,6 +23,7 @@ import {
 import { equalizeCandidateScores, recomputeEqualizedStats } from "./equalizeUtils";
 import AdvanceEmailModal from "./AdvanceEmailModal";
 import ReviewOverrideSection from "../../components/ReviewOverride/ReviewOverrideSection";
+import CandidateSignalActions, { CandidateSignalBadges } from "../../components/CandidateSignalActions/CandidateSignalActions";
 import { formatRoundKind, isInterviewRoundType } from "../../constants/rounds";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
@@ -77,6 +78,7 @@ const defaultFilters = {
   reviews: "all",
   scoreBand: "all",
   decision: "all",
+  signals: "all",
 };
 
 function countActiveFilters(filters) {
@@ -117,6 +119,21 @@ function passesReviewFilter(candidate, reviews) {
   }
 }
 
+function passesSignalFilter(candidate, signals) {
+  switch (signals) {
+    case "referred":
+      return (candidate.referralCount || 0) > 0;
+    case "flagged":
+      return (candidate.flagCount || 0) > 0;
+    default:
+      return true;
+  }
+}
+
+function getReferralCount(c) {
+  return c?.referralCount || 0;
+}
+
 function normalizePhoneDigits(value) {
   return String(value || "").replace(/\D/g, "");
 }
@@ -152,6 +169,7 @@ function filterCandidates(list, filters, searchQuery = "") {
     if (!passesReviewFilter(c, filters.reviews)) return false;
     if (!passesScoreBand(c, filters.scoreBand)) return false;
     if (!passesDecisionFilter(c, filters.decision)) return false;
+    if (!passesSignalFilter(c, filters.signals)) return false;
     return true;
   });
 }
@@ -272,6 +290,7 @@ function DecisionButtons({ status, disabled, saving, onSelect, dark }) {
 const SORT_TABS = [
   { id: "performance_desc", label: "Score · high to low" },
   { id: "performance_asc", label: "Score · low to high" },
+  { id: "referrals_desc", label: "Referrals · most" },
   { id: "last_review_desc", label: "Last grade · newest" },
   { id: "last_review_asc", label: "Last grade · oldest" },
   { id: "name_asc", label: "Name · A–Z" },
@@ -363,6 +382,9 @@ function compareCandidates(a, b, sortBy) {
     case "reviews_asc":
       primary = getNumReviews(a) - getNumReviews(b);
       break;
+    case "referrals_desc":
+      primary = getReferralCount(b) - getReferralCount(a);
+      break;
     case "created_desc": {
       const ta = getCreatedMs(a);
       const tb = getCreatedMs(b);
@@ -386,6 +408,8 @@ function compareCandidates(a, b, sortBy) {
   }
 
   if (primary !== 0) return primary;
+  const referralTiebreak = getReferralCount(b) - getReferralCount(a);
+  if (referralTiebreak !== 0) return referralTiebreak;
   return cmpName(a, b) || cmpId(a, b);
 }
 
@@ -868,7 +892,7 @@ export default function ScoreboardPage() {
       return;
     }
     setListMotionKey(k => k + 1);
-  }, [loading, sortBy, searchQuery, filters.major, filters.year, filters.reviews, filters.scoreBand, filters.decision]);
+  }, [loading, sortBy, searchQuery, filters.major, filters.year, filters.reviews, filters.scoreBand, filters.decision, filters.signals]);
 
   useEffect(() => {
     fetchScoreboard();
@@ -990,6 +1014,39 @@ export default function ScoreboardPage() {
       setSavingDecisionId(null);
     }
   }, [authedFetch, canEditDeliberations, deliberationMode]);
+
+  const handleSignalUpdated = useCallback((update) => {
+    setData(prev => ({
+      ...prev,
+      candidates: (prev.candidates || []).map((c) => {
+        if (c.id !== update.resumeId) return c;
+        const next = { ...c };
+        if (update.type === "flag") {
+          next.flagCount = typeof update.flagCount === "number" ? update.flagCount : (c.flagCount || 0) + 1;
+          next.flaggedByMe = true;
+        } else {
+          next.referralCount = typeof update.referralCount === "number" ? update.referralCount : (c.referralCount || 0) + 1;
+          next.referredByMe = true;
+        }
+        return next;
+      }),
+    }));
+    setSelectedCandidate(prev => {
+      if (!prev || prev.id !== update.resumeId) return prev;
+      if (update.type === "flag") {
+        return {
+          ...prev,
+          flagCount: typeof update.flagCount === "number" ? update.flagCount : (prev.flagCount || 0) + 1,
+          flaggedByMe: true,
+        };
+      }
+      return {
+        ...prev,
+        referralCount: typeof update.referralCount === "number" ? update.referralCount : (prev.referralCount || 0) + 1,
+        referredByMe: true,
+      };
+    });
+  }, []);
 
   const handleAdvanceRound = useCallback(async () => {
     if (!isAdmin || !activeRound?.id || !canDeliberate) return;
@@ -1555,6 +1612,19 @@ export default function ScoreboardPage() {
                 </select>
               </label>
 
+              <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
+                Flags / referrals
+                <select
+                  value={filters.signals}
+                  onChange={e => setFilters(f => ({ ...f, signals: e.target.value }))}
+                  style={filterSelectStyle}
+                >
+                  <option value="all">All candidates</option>
+                  <option value="referred">Referred only</option>
+                  <option value="flagged">Flagged only</option>
+                </select>
+              </label>
+
               {deliberationMode ? (
                 <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
                   Committee decision
@@ -1773,6 +1843,11 @@ export default function ScoreboardPage() {
                     {getCommitteeLinkWarning(c)}
                   </span>
                 ) : null}
+                <CandidateSignalBadges
+                  flagCount={c.flagCount}
+                  referralCount={c.referralCount}
+                  dark={deliberationMode}
+                />
               </div>
             </div>
 
@@ -1810,7 +1885,16 @@ export default function ScoreboardPage() {
               </div>
             ) : null}
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <CandidateSignalActions
+                candidateId={c.candidateId}
+                resumeId={c.id}
+                flaggedByMe={c.flaggedByMe}
+                referredByMe={c.referredByMe}
+                authedFetch={authedFetch}
+                onUpdated={handleSignalUpdated}
+                dark={deliberationMode}
+              />
               <button
                 type="button"
                 onClick={() => setSelectedCandidate(c)}
