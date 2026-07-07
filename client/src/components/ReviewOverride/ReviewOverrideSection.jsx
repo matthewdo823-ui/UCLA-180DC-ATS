@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { css } from "../../theme/colors";
-import MetricRow from "../ScoringPanel/MetricRow";
 import { formatScore } from "../../utils/format";
 import useReviewOverrides from "./useReviewOverrides";
 
@@ -12,34 +11,28 @@ function getReviewerLabel(review, index) {
 }
 
 function getReviewRawTotal(review) {
+  if (Number.isFinite(Number(review?.score))) return Number(review.score);
   return Object.values(review?.scores ?? {}).reduce(
     (sum, value) => sum + (Number(value) || 0),
     0
   );
 }
 
-function getReviewScoreLabel(review) {
+function getReviewScoreLabel(review, maxScore) {
   const total = getReviewRawTotal(review);
-  const max = review?.maxScore || Object.keys(review?.scores || {}).length * 4 || 24;
+  const max = maxScore || review?.maxScore || Object.keys(review?.scores || {}).length * 4 || 24;
   return `${formatScore(total)}/${max} pts`;
 }
 
-function scoresMatch(a = {}, b = {}) {
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-  for (const key of keys) {
-    if (String(Number(a[key])) !== String(Number(b[key]))) return false;
-  }
-  return true;
+function getBaselineTotal(review) {
+  const sourceScores = review?.sourceScores || review?.scores || {};
+  return Object.values(sourceScores).reduce((sum, value) => sum + (Number(value) || 0), 0);
 }
 
-function getBaselineScores(review) {
-  return review?.sourceScores || review?.scores || {};
-}
-
-function getEffectiveScores(review, override) {
-  if (override?.overrideScores) return override.overrideScores;
-  if (review?.adminOverride?.overrideScores) return review.adminOverride.overrideScores;
-  return review?.scores || {};
+function getEffectiveOverrideScore(review, override) {
+  if (override?.overrideScore != null) return Number(override.overrideScore);
+  if (review?.adminOverride?.overrideScore != null) return Number(review.adminOverride.overrideScore);
+  return getBaselineTotal(review);
 }
 
 export default function ReviewOverrideSection({
@@ -59,35 +52,35 @@ export default function ReviewOverrideSection({
   } = useReviewOverrides(resumeId);
 
   const [selectedReviewId, setSelectedReviewId] = useState("");
-  const [scores, setScores] = useState({});
+  const [overrideScore, setOverrideScore] = useState("");
   const [notes, setNotes] = useState("");
-
-  const reviewMetrics = useMemo(() => {
-    if (metrics.length) return metrics;
-    const selected = reviews.find(row => row.id === selectedReviewId);
-    return Object.keys(selected?.scores || {});
-  }, [metrics, reviews, selectedReviewId]);
 
   const reviewOptions = useMemo(
     () => (reviews || []).map((review, index) => {
       const override = overrideByReviewId[review.id] || review?.adminOverride;
-      const hasOverride = Boolean(override?.overrideScores);
+      const hasOverride = override?.overrideScore != null;
+      const maxScore = review?.maxScore || metrics.length * maxPerCategory;
+      const displayReview = hasOverride
+        ? { ...review, score: override.overrideScore }
+        : review;
+
       return {
         review,
         index,
         label: getReviewerLabel(review, index),
-        scoreLabel: getReviewScoreLabel(hasOverride ? { ...review, scores: override.overrideScores } : review),
+        scoreLabel: getReviewScoreLabel(displayReview, maxScore),
         hasOverride,
+        maxScore,
       };
     }),
-    [reviews, overrideByReviewId]
+    [reviews, overrideByReviewId, metrics.length, maxPerCategory]
   );
 
   useEffect(() => {
     if (loading) return;
     if (!reviewOptions.length) {
       setSelectedReviewId("");
-      setScores({});
+      setOverrideScore("");
       setNotes("");
       return;
     }
@@ -104,30 +97,30 @@ export default function ReviewOverrideSection({
     const review = reviews.find(row => row.id === selectedReviewId);
     const override = overrideByReviewId[selectedReviewId] || review?.adminOverride;
     setNotes(override?.adminNotes || "");
-    setScores(getEffectiveScores(review, override));
+    setOverrideScore(String(getEffectiveOverrideScore(review, override)));
   }, [selectedReviewId, reviews, overrideByReviewId]);
 
   const selectedReview = reviews.find(row => row.id === selectedReviewId);
+  const selectedOption = reviewOptions.find(opt => opt.review.id === selectedReviewId);
   const activeOverride = selectedReviewId
     ? overrideByReviewId[selectedReviewId] || selectedReview?.adminOverride
     : null;
-  const isOverridden = Boolean(activeOverride?.overrideScores);
-  const baselineScores = selectedReview ? getBaselineScores(selectedReview) : {};
+  const isOverridden = activeOverride?.overrideScore != null;
+  const baselineTotal = selectedReview ? getBaselineTotal(selectedReview) : 0;
+  const maxScore = selectedOption?.maxScore || selectedReview?.maxScore || metrics.length * maxPerCategory || 24;
+  const parsedOverrideScore = Number(overrideScore);
+  const effectiveOverrideScore = getEffectiveOverrideScore(selectedReview, activeOverride);
 
   const hasChanges =
     notes !== (activeOverride?.adminNotes || "") ||
-    !scoresMatch(scores, getEffectiveScores(selectedReview, activeOverride));
-
-  const handleMetricScore = (metric, value) => {
-    setScores(prev => ({ ...prev, [metric]: value }));
-  };
+    (Number.isFinite(parsedOverrideScore) && parsedOverrideScore !== effectiveOverrideScore);
 
   const handleSave = async () => {
-    if (!selectedReviewId) return;
+    if (!selectedReviewId || !Number.isFinite(parsedOverrideScore)) return;
     const result = await save({
       reviewId: selectedReviewId,
       adminNotes: notes,
-      overrideScores: scores,
+      overrideScore: parsedOverrideScore,
     });
     if (result !== null && onOverrideSaved) {
       onOverrideSaved(result);
@@ -137,11 +130,11 @@ export default function ReviewOverrideSection({
   const handleUndo = async () => {
     if (!selectedReviewId) return;
     setNotes("");
-    setScores(baselineScores);
+    setOverrideScore(String(baselineTotal));
     const result = await save({
       reviewId: selectedReviewId,
       adminNotes: "",
-      overrideScores: null,
+      overrideScore: null,
     });
     if (result === null && onOverrideSaved) {
       onOverrideSaved(null);
@@ -172,10 +165,8 @@ export default function ReviewOverrideSection({
     );
   }
 
-  const baselineTotal = getReviewRawTotal({ scores: baselineScores });
-  const currentTotal = getReviewRawTotal({ scores });
-  const maxScore = selectedReview?.maxScore || reviewMetrics.length * maxPerCategory;
   const selectId = embedded ? "app-review-override-select" : "review-override-select";
+  const scoreId = embedded ? "app-review-override-score" : "review-override-score";
   const notesId = embedded ? "app-review-override-notes" : "review-override-notes";
 
   return (
@@ -232,25 +223,45 @@ export default function ReviewOverrideSection({
           background: isOverridden ? "#FFF8F8" : "#FFF",
         }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <p style={{ margin: 0, fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: css.textGray }}>
-              Rubric scores (1–{maxPerCategory})
-            </p>
-            <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: isOverridden ? "#E24B4A" : cardGreen, fontFamily: "'DM Mono', monospace" }}>
-              {formatScore(currentTotal)}/{maxScore} pts
-            </p>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {reviewMetrics.map(metric => (
-              <MetricRow
-                key={metric}
-                metric={metric}
-                value={scores[metric]}
-                onScore={handleMetricScore}
-                maxScore={maxPerCategory}
-              />
-            ))}
+          <label
+            htmlFor={scoreId}
+            style={{
+              display: "block",
+              margin: "0 0 8px",
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: css.textGray,
+            }}
+          >
+            Total score (0–{maxScore} pts)
+          </label>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <input
+              id={scoreId}
+              type="number"
+              min={0}
+              max={maxScore}
+              step={0.5}
+              value={overrideScore}
+              onChange={(e) => setOverrideScore(e.target.value)}
+              style={{
+                flex: 1,
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: `1px solid ${isOverridden ? "rgba(226,75,74,0.35)" : css.borderLight}`,
+                background: "#FFF",
+                fontSize: 16,
+                fontWeight: 700,
+                color: isOverridden ? "#E24B4A" : cardGreen,
+                fontFamily: "'DM Mono', monospace",
+                outline: "none",
+              }}
+            />
+            <span style={{ fontSize: 13, color: css.textGray, fontWeight: 600, whiteSpace: "nowrap" }}>
+              / {maxScore} pts
+            </span>
           </div>
 
           {isOverridden ? (
@@ -302,7 +313,7 @@ export default function ReviewOverrideSection({
           <button
             type="button"
             onClick={handleSave}
-            disabled={!hasChanges || Boolean(savingReviewId)}
+            disabled={!hasChanges || Boolean(savingReviewId) || !Number.isFinite(parsedOverrideScore)}
             style={{
               padding: "8px 18px",
               borderRadius: 8,

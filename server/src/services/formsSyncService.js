@@ -40,14 +40,47 @@ async function upsertCandidateAndResume(client, mapped, cycleId) {
 
   candidateRow.cycle_id = cycleId;
 
-  const { data, error } = await client
-    .from("candidates")
-    .upsert(candidateRow, { onConflict: "cycle_id,google_form_response_id" })
-    .select("id")
-    .single();
+  // PostgREST upsert cannot target partial unique indexes (see postgrest-js#403).
+  const responseId = candidateRow.google_form_response_id;
+  let candidateId;
 
-  if (error) throw error;
-  const candidateId = data.id;
+  if (responseId) {
+    const { data: existing, error: selectError } = await client
+      .from("candidates")
+      .select("id")
+      .eq("cycle_id", cycleId)
+      .eq("google_form_response_id", responseId)
+      .maybeSingle();
+
+    if (selectError) throw selectError;
+
+    if (existing) {
+      const { data, error } = await client
+        .from("candidates")
+        .update(candidateRow)
+        .eq("id", existing.id)
+        .select("id")
+        .single();
+      if (error) throw error;
+      candidateId = data.id;
+    } else {
+      const { data, error } = await client
+        .from("candidates")
+        .insert(candidateRow)
+        .select("id")
+        .single();
+      if (error) throw error;
+      candidateId = data.id;
+    }
+  } else {
+    const { data, error } = await client
+      .from("candidates")
+      .insert(candidateRow)
+      .select("id")
+      .single();
+    if (error) throw error;
+    candidateId = data.id;
+  }
 
   if (!resumeDerived.file_url) {
     console.warn(
