@@ -78,6 +78,96 @@ function getReviewScore(scores = {}, metrics = null) {
     return computeRawScore(scores, metrics);
 }
 
+async function resolveCandidateIdForSignal({ candidate_id, resume_id }) {
+    let candidateId = candidate_id;
+
+    if (!candidateId && resume_id) {
+        const { data, error } = await supabase
+            .from('resumes')
+            .select('candidate_id')
+            .eq('id', resume_id)
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!data) {
+            return { error: "Resume not found", status: 404 };
+        }
+        candidateId = data.candidate_id;
+    }
+
+    if (!candidateId) {
+        return { error: "candidate_id or a linked resume_id is required", status: 400 };
+    }
+
+    const { data: candidate, error: candidateError } = await supabase
+        .from('candidates')
+        .select('id, cycle_id')
+        .eq('id', candidateId)
+        .maybeSingle();
+
+    if (candidateError) throw candidateError;
+    if (!candidate) {
+        return { error: "Candidate not found", status: 404 };
+    }
+
+    return { candidateId, candidate };
+}
+
+async function loadCandidateSignalLookups(candidateIds, userId) {
+    const ids = [...new Set((candidateIds || []).filter(Boolean))];
+    if (!ids.length) {
+        return {
+            flagCounts: {},
+            referralCounts: {},
+            flaggedByMe: new Set(),
+            referredByMe: new Set(),
+        };
+    }
+
+    const [flagRes, referralRes] = await Promise.all([
+        supabase
+            .from('candidate_flags')
+            .select('candidate_id, flagged_by')
+            .eq('status', 'open')
+            .in('candidate_id', ids),
+        supabase
+            .from('candidate_referrals')
+            .select('candidate_id, referred_by')
+            .in('candidate_id', ids),
+    ]);
+
+    if (flagRes.error) throw flagRes.error;
+    if (referralRes.error) throw referralRes.error;
+
+    const flagCounts = {};
+    const referralCounts = {};
+    const flaggedByMe = new Set();
+    const referredByMe = new Set();
+
+    (flagRes.data || []).forEach((row) => {
+        flagCounts[row.candidate_id] = (flagCounts[row.candidate_id] || 0) + 1;
+        if (userId != null && row.flagged_by === userId) flaggedByMe.add(row.candidate_id);
+    });
+
+    (referralRes.data || []).forEach((row) => {
+        referralCounts[row.candidate_id] = (referralCounts[row.candidate_id] || 0) + 1;
+        if (userId != null && row.referred_by === userId) referredByMe.add(row.candidate_id);
+    });
+
+    return { flagCounts, referralCounts, flaggedByMe, referredByMe };
+}
+
+function applyCandidateSignals(candidate, lookups) {
+    const candidateId = candidate.candidateId;
+    return {
+        ...candidate,
+        flagCount: candidateId ? (lookups.flagCounts[candidateId] || 0) : 0,
+        referralCount: candidateId ? (lookups.referralCounts[candidateId] || 0) : 0,
+        flaggedByMe: candidateId ? lookups.flaggedByMe.has(candidateId) : false,
+        referredByMe: candidateId ? lookups.referredByMe.has(candidateId) : false,
+    };
+}
+
 function buildCategoryScores(categoryTotals = {}, categoryCounts = {}) {
     const keys = new Set([
         ...Object.keys(categoryTotals),
@@ -995,38 +1085,30 @@ exports.createCandidateFlag = async (req, res) => {
             return res.status(503).json({ error: "No active recruiting cycle" });
         }
 
-        let candidateId = candidate_id;
-
-        if (!candidateId && resume_id) {
-            const { data, error } = await supabase
-                .from('resumes')
-                .select('candidate_id')
-                .eq('id', resume_id)
-                .maybeSingle();
-
-            if (error) return respondWithServerError(res, error, 'createCandidateFlag resume lookup');
-            if (!data) {
-                return res.status(404).json({ error: "Resume not found" });
-            }
-            candidateId = data.candidate_id;
+        const resolved = await resolveCandidateIdForSignal({ candidate_id, resume_id });
+        if (resolved.error) {
+            return res.status(resolved.status).json({ error: resolved.error });
         }
 
-        if (!candidateId) {
-            return res.status(400).json({ error: "candidate_id or a linked resume_id is required" });
-        }
-
-        const { data: candidate, error: candidateError } = await supabase
-            .from('candidates')
-            .select('id, cycle_id')
-            .eq('id', candidateId)
-            .maybeSingle();
-
-        if (candidateError) return respondWithServerError(res, candidateError, 'createCandidateFlag candidate lookup');
-        if (!candidate) {
-            return res.status(404).json({ error: "Candidate not found" });
-        }
+        const { candidateId, candidate } = resolved;
         if (candidate.cycle_id !== activeCycleId) {
             return res.status(400).json({ error: "Candidate is not in the active cycle" });
+        }
+
+        const userId = req.user?.user_id ?? null;
+        if (userId != null) {
+            const { data: existing, error: existingError } = await supabase
+                .from('candidate_flags')
+                .select('id')
+                .eq('candidate_id', candidateId)
+                .eq('flagged_by', userId)
+                .eq('status', 'open')
+                .maybeSingle();
+
+            if (existingError) return respondWithServerError(res, existingError, 'createCandidateFlag existing');
+            if (existing) {
+                return res.status(409).json({ error: "You have already flagged this candidate" });
+            }
         }
 
         const { data, error } = await supabase
@@ -1034,7 +1116,7 @@ exports.createCandidateFlag = async (req, res) => {
             .insert({
                 candidate_id: candidateId,
                 resume_id: resume_id || null,
-                flagged_by: req.user?.user_id,
+                flagged_by: userId,
                 reason: reason || "Flagged for admin review",
             })
             .select('id')
@@ -1042,9 +1124,67 @@ exports.createCandidateFlag = async (req, res) => {
 
         if (error) return respondWithServerError(res, error, 'createCandidateFlag insert');
 
-        return res.status(201).json({ success: true, flag: data });
+        const lookups = await loadCandidateSignalLookups([candidateId], userId);
+
+        return res.status(201).json({
+            success: true,
+            flag: data,
+            flagCount: lookups.flagCounts[candidateId] || 0,
+            flaggedByMe: true,
+        });
     } catch (err) {
         return respondWithServerError(res, err, 'createCandidateFlag');
+    }
+};
+
+exports.createCandidateReferral = async (req, res) => {
+    const { candidate_id, resume_id, note } = req.body;
+
+    try {
+        const activeCycleId = await getActiveCycleId();
+        if (!activeCycleId) {
+            return res.status(503).json({ error: "No active recruiting cycle" });
+        }
+
+        const resolved = await resolveCandidateIdForSignal({ candidate_id, resume_id });
+        if (resolved.error) {
+            return res.status(resolved.status).json({ error: resolved.error });
+        }
+
+        const { candidateId, candidate } = resolved;
+        if (candidate.cycle_id !== activeCycleId) {
+            return res.status(400).json({ error: "Candidate is not in the active cycle" });
+        }
+
+        const userId = req.user?.user_id ?? null;
+        const { data, error } = await supabase
+            .from('candidate_referrals')
+            .insert({
+                candidate_id: candidateId,
+                resume_id: resume_id || null,
+                referred_by: userId,
+                note: note?.trim() || null,
+            })
+            .select('id')
+            .single();
+
+        if (error) {
+            if (error.code === '23505') {
+                return res.status(409).json({ error: "You have already referred this candidate" });
+            }
+            return respondWithServerError(res, error, 'createCandidateReferral insert');
+        }
+
+        const lookups = await loadCandidateSignalLookups([candidateId], userId);
+
+        return res.status(201).json({
+            success: true,
+            referral: data,
+            referralCount: lookups.referralCounts[candidateId] || 0,
+            referredByMe: true,
+        });
+    } catch (err) {
+        return respondWithServerError(res, err, 'createCandidateReferral');
     }
 };
 
@@ -1674,7 +1814,15 @@ exports.getScoreboard = async (req, res) => {
         });
         const metricsWithFrq = appendFrqMetric(metrics);
 
-        candidatesWithComposite.sort((a, b) => {
+        const signalCandidateIds = [
+            ...new Set(candidatesWithComposite.map((c) => c.candidateId).filter(Boolean)),
+        ];
+        const signalLookups = await loadCandidateSignalLookups(signalCandidateIds, req.user?.user_id);
+        const candidatesWithSignals = candidatesWithComposite.map((c) =>
+            applyCandidateSignals(c, signalLookups)
+        );
+
+        candidatesWithSignals.sort((a, b) => {
             if (a.aggregateScore === null && b.aggregateScore === null) {
                 return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
             }
@@ -1682,14 +1830,14 @@ exports.getScoreboard = async (req, res) => {
             if (b.aggregateScore === null) return -1;
             return b.aggregateScore - a.aggregateScore;
         });
-        candidatesWithComposite.forEach((c, index) => { c.rank = index + 1; });
+        candidatesWithSignals.forEach((c, index) => { c.rank = index + 1; });
 
-        const totalReviewed = candidatesWithComposite.filter(c => c.numReviews > 0).length;
+        const totalReviewed = candidatesWithSignals.filter(c => c.numReviews > 0).length;
         const avgScore = reviewCount > 0 ? (totalNormalizedSum / reviewCount).toFixed(1) : 0;
-        const decisionCounts = countDecisions(candidatesWithComposite);
-        const incompleteSummary = summarizeIncompleteDeliberation(candidatesWithComposite);
+        const decisionCounts = countDecisions(candidatesWithSignals);
+        const incompleteSummary = summarizeIncompleteDeliberation(candidatesWithSignals);
         const undecidedCount = decisionCounts.pending + decisionCounts.hold;
-        const canCloseRound = canDeliberate && incompleteSummary.incompleteCount === 0 && candidatesWithComposite.length > 0;
+        const canCloseRound = canDeliberate && incompleteSummary.incompleteCount === 0 && candidatesWithSignals.length > 0;
 
         let notification = null;
         if (req.user?.role === "admin") {
@@ -1726,7 +1874,7 @@ exports.getScoreboard = async (req, res) => {
             metrics: metricsWithFrq,
             maxPerCategory,
             stats: {
-                applicants: candidatesWithComposite.length,
+                applicants: candidatesWithSignals.length,
                 reviewed: totalReviewed,
                 advanced: decisionCounts.advance,
                 hold: decisionCounts.hold,
@@ -1734,7 +1882,7 @@ exports.getScoreboard = async (req, res) => {
                 pending: decisionCounts.pending,
                 avgScore: avgScore,
             },
-            candidates: candidatesWithComposite
+            candidates: candidatesWithSignals
         });
 
     } catch (err) {

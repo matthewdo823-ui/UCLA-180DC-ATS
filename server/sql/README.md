@@ -20,14 +20,15 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 14 | `alter_resume_review_overrides_scores.sql` | **Legacy only** — migrates single `override_score` to `override_scores` JSONB |
 | 15 | `alter_resume_review_overrides_total_score.sql` | Adds `override_score` back for total raw score overrides (e.g. 24/24) |
 | 16 | `add_candidate_admin_overrides.sql` | Admin per-candidate notes + score override on the application page |
-| 17 | `add_candidate_summaries.sql` | Cached AI candidate summaries for the full application view |
-| 18 | `backfill_resume_candidate_ids.sql` | **Optional data repair** — link orphan `resumes` to `candidates` by name / Drive file id |
+| 17 | `add_candidate_referrals.sql` | Member referrals (positive counterpart to flags) |
+| 18 | `add_candidate_summaries.sql` | Cached AI candidate summaries for the full application view |
+| 19 | `backfill_resume_candidate_ids.sql` | **Optional data repair** — link orphan `resumes` to `candidates` by name / Drive file id |
 
 ## Notes
 
-- **Fresh database:** run 1–4, then 6–13, 15–17 in order. Skip 5, 14, and 18 unless noted below.
+- **Fresh database:** run 1–4, then 6–13, 15–18 in order. Skip 5, 14, and 19 unless noted below.
 - **Existing database:** skip scripts you have already applied. Each file uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` where possible, but re-running `init.sql` or seed blocks in `add_cycles_and_rounds.sql` may fail or duplicate data.
 - **`init.sql`** begins with a large commented block (legacy candidate/resume DDL); the active statements start at the `user_role` enum.
 - **`fix_candidates_form_sync_upsert.sql` (#5):** Run only if you applied an older `add_cycle_form_config.sql` that created a **partial** unique index (`WHERE google_form_response_id IS NOT NULL`). Fresh installs get the full index from #4 and can skip this. The server also handles form sync without relying on PostgREST upsert.
 - **`alter_resume_review_overrides_scores.sql` (#14):** Run only if `resume_review_overrides` was created with a single `override_score` column and no `override_scores`. **Do not run** if you applied the current `add_resume_review_overrides.sql`, which creates both columns.
-- **`backfill_resume_candidate_ids.sql` (#18):** Run only when you have `resumes` rows with `candidate_id IS NULL` that should be linked to existing candidates.
+- **`backfill_resume_candidate_ids.sql` (#19):** Run only when you have `resumes` rows with `candidate_id IS NULL` that should be linked to existing candidates.
