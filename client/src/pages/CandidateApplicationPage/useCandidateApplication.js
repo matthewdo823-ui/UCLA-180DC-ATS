@@ -81,6 +81,7 @@ export default function useCandidateApplication(resumeId) {
     candidate: data?.candidate,
     resume: data?.resume,
     scoring: data?.scoring,
+    signals: data?.signals,
     contextLabel,
     loading,
     error,
