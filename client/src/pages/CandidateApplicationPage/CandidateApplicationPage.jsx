@@ -9,6 +9,7 @@ import ApplicationEvaluationsSection from "./ApplicationEvaluationsSection";
 import ApplicationProfileSidebar from "./ApplicationProfileSidebar";
 import ApplicationResponsesSection from "./ApplicationResponsesSection";
 import ApplicationResumeSection from "./ApplicationResumeSection";
+import ApplicationSignalsSection from "./ApplicationSignalsSection";
 import ApplicationSummarySection from "./ApplicationSummarySection";
 import useCandidateApplication from "./useCandidateApplication";
 import useCandidateApplicationSummary from "./useCandidateApplicationSummary";
@@ -17,7 +18,7 @@ export default function CandidateApplicationPage() {
   const { candidateId: resumeId } = useParams();
   const navigate = useNavigate();
   const { token, user } = useAuth();
-  const { candidate, resume, scoring, contextLabel, loading, error, refresh } = useCandidateApplication(resumeId);
+  const { candidate, resume, scoring, signals, contextLabel, loading, error, refresh } = useCandidateApplication(resumeId);
   const summaryState = useCandidateApplicationSummary(resumeId, !loading && !error && Boolean(candidate));
   const isAdmin = isAdminRole(user?.role);
 
@@ -64,6 +65,7 @@ export default function CandidateApplicationPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
               <ApplicationSummarySection {...summaryState} onRefresh={summaryState.refresh} />
               <ApplicationContactSection candidate={candidate} resume={resume} />
+              <ApplicationSignalsSection signals={signals} />
               {isAdmin && (
                 <AdminOverridesSection
                   resumeId={resumeId}

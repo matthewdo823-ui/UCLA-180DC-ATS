@@ -157,6 +157,89 @@ async function loadCandidateSignalLookups(candidateIds, userId) {
     return { flagCounts, referralCounts, flaggedByMe, referredByMe };
 }
 
+async function fetchCandidateSignalsDetail(candidateId, userId) {
+    if (!candidateId) {
+        return {
+            flags: [],
+            referrals: [],
+            flagCount: 0,
+            referralCount: 0,
+            flaggedByMe: false,
+            referredByMe: false,
+        };
+    }
+
+    const [flagRes, referralRes] = await Promise.all([
+        supabase
+            .from('candidate_flags')
+            .select(`
+                id,
+                reason,
+                created_at,
+                flagged_by,
+                users (
+                    user_id,
+                    email,
+                    first_name,
+                    last_name
+                )
+            `)
+            .eq('candidate_id', candidateId)
+            .eq('status', 'open')
+            .order('created_at', { ascending: false }),
+        supabase
+            .from('candidate_referrals')
+            .select(`
+                id,
+                note,
+                created_at,
+                referred_by,
+                users (
+                    user_id,
+                    email,
+                    first_name,
+                    last_name
+                )
+            `)
+            .eq('candidate_id', candidateId)
+            .order('created_at', { ascending: false }),
+    ]);
+
+    if (flagRes.error) throw flagRes.error;
+    if (referralRes.error) throw referralRes.error;
+
+    const flags = (flagRes.data || []).map((row) => ({
+        id: row.id,
+        reason: row.reason || '',
+        createdAt: row.created_at,
+        flaggedBy: row.users ? {
+            id: row.users.user_id,
+            name: getUserName(row.users),
+            email: row.users.email || '',
+        } : null,
+    }));
+
+    const referrals = (referralRes.data || []).map((row) => ({
+        id: row.id,
+        note: row.note || '',
+        createdAt: row.created_at,
+        referredBy: row.users ? {
+            id: row.users.user_id,
+            name: getUserName(row.users),
+            email: row.users.email || '',
+        } : null,
+    }));
+
+    return {
+        flags,
+        referrals,
+        flagCount: flags.length,
+        referralCount: referrals.length,
+        flaggedByMe: userId != null && flags.some((flag) => flag.flaggedBy?.id === userId),
+        referredByMe: userId != null && referrals.some((referral) => referral.referredBy?.id === userId),
+    };
+}
+
 function applyCandidateSignals(candidate, lookups) {
     const candidateId = candidate.candidateId;
     return {
@@ -2342,13 +2425,17 @@ exports.getScoreboardApplication = async (req, res) => {
         }
 
         const payload = await fetchScoreboardApplicationPayload(resumeId);
+        const userId = req.user?.user_id ?? null;
 
-        // Fetch admin override and apply to scoring
-        const adminOverrideRow = await fetchAdminOverride(
-            payload.candidateId,
-            payload.activeCycleId,
-            payload.resumeRoundId
-        );
+        const [adminOverrideRow, signals] = await Promise.all([
+            fetchAdminOverride(
+                payload.candidateId,
+                payload.activeCycleId,
+                payload.resumeRoundId
+            ),
+            fetchCandidateSignalsDetail(payload.candidateId, userId),
+        ]);
+
         const adminOverride = mapAdminOverride(adminOverrideRow);
         if (adminOverride) {
             applyAdminOverrideToScoring(payload.scoring, adminOverride);
@@ -2358,6 +2445,7 @@ exports.getScoreboardApplication = async (req, res) => {
         return res.json({
             ...responseBody,
             adminOverride,
+            signals,
         });
     } catch (err) {
         return respondWithApplicationFetchError(res, err, 'getScoreboardApplication');
