@@ -44,7 +44,9 @@ export default function ApplicationEvaluationsSection({ scoring }) {
               ))}
 
               <div style={{ marginTop: 18, borderTop: `1px solid ${css.borderLight}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-                {(scoring.reviews || []).map((review, index) => (
+                {(scoring.reviews || []).map((review, index) => {
+                  const reviewOverridden = review?.adminOverride?.overrideScore != null;
+                  return (
                   <div key={review.id} style={{ padding: "12px 14px", background: "#F8FAF6", borderRadius: 8, border: `1px solid ${css.borderLight}` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: review.notes ? 8 : 0 }}>
                       <div>
@@ -54,9 +56,10 @@ export default function ApplicationEvaluationsSection({ scoring }) {
                         <p style={{ margin: "2px 0 0", fontSize: 12, color: css.textGray }}>
                           {formatDate(review.submittedAt, { style: "datetime" })}
                           {review.decision && review.decision !== "pass" ? ` · ${titleCase(review.decision)}` : ""}
+                          {reviewOverridden ? " · overridden" : ""}
                         </p>
                       </div>
-                      <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: cardGreen }}>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: reviewOverridden ? "#E24B4A" : cardGreen }}>
                         {formatScore(review.normalizedScore)}% · {formatScore(review.score)} raw
                       </p>
                     </div>
@@ -66,7 +69,8 @@ export default function ApplicationEvaluationsSection({ scoring }) {
                       </p>
                     )}
                   </div>
-                ))}
+                  );
+                })}
                 {(scoring.frqReviews || []).map((review, index) => (
                   <div key={review.id} style={{ padding: "12px 14px", background: "#F8FAF6", borderRadius: 8, border: `1px solid ${css.borderLight}` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: review.notes ? 8 : 0 }}>

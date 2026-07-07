@@ -1,20 +1,28 @@
 const supabase = require("../config/supabase");
 const {
   computeRawScore,
-  computeReviewNormalizedFromScores,
   computeNormalizedFromAggregate,
   getRubricForYear,
   getRubricMaxScore,
 } = require("../utils/rubric");
 
+function resolveOverrideScore(row) {
+  if (row?.override_score != null && Number.isFinite(Number(row.override_score))) {
+    return Number(row.override_score);
+  }
+  if (row?.override_scores && typeof row.override_scores === "object") {
+    return computeRawScore(row.override_scores);
+  }
+  return null;
+}
+
 function mapReviewOverride(row) {
   if (!row) return null;
+  const overrideScore = resolveOverrideScore(row);
   return {
     id: row.id,
     reviewId: row.review_id,
-    overrideScores: row.override_scores && typeof row.override_scores === "object"
-      ? row.override_scores
-      : null,
+    overrideScore: overrideScore == null ? null : overrideScore,
     adminNotes: row.admin_notes || "",
     adminUserId: row.admin_user_id ?? null,
     updatedAt: row.updated_at || null,
@@ -76,30 +84,47 @@ function resolveResumeMaxScore(options = {}, candidateYear) {
   return null;
 }
 
-function applyReviewOverrideToReview(review, override, { rubricConfig, candidateYear } = {}) {
-  if (!override?.overrideScores || typeof override.overrideScores !== "object") {
+function resolveReviewMaxScore(review, options = {}) {
+  if (Number.isFinite(Number(review?.maxScore)) && review.maxScore > 0) {
+    return Number(review.maxScore);
+  }
+
+  const snapshot = review?.rubricSnapshot || review?.rubric_snapshot || null;
+  if (Number.isFinite(Number(snapshot?.maxScore)) && snapshot.maxScore > 0) {
+    return Number(snapshot.maxScore);
+  }
+
+  if (options.rubricConfig) {
+    return getRubricMaxScore(getRubricForYear(options.rubricConfig, options.candidateYear));
+  }
+
+  const metrics = Object.keys(review?.scores || {});
+  return metrics.length > 0 ? metrics.length * 4 : 24;
+}
+
+function applyReviewOverrideToReview(review, override, options = {}) {
+  const overrideScore = override?.overrideScore;
+  if (!Number.isFinite(Number(overrideScore))) {
     return review;
   }
 
+  const totalOverride = Number(overrideScore);
   const sourceScores = review.sourceScores || review.scores || {};
-  const effectiveScores = override.overrideScores;
-  const metrics = Object.keys(effectiveScores);
-  const rawScore = computeRawScore(effectiveScores, metrics);
-  const normalizedScore = computeReviewNormalizedFromScores(
-    { scores: effectiveScores, rubricSnapshot: review.rubricSnapshot || null },
-    { rubricConfig, candidateYear }
-  );
+  const metrics = Object.keys(sourceScores);
+  const sourceScore = computeRawScore(sourceScores, metrics);
+  const maxScore = resolveReviewMaxScore(review, options);
+  const normalizedScore = computeNormalizedFromAggregate(totalOverride, maxScore);
 
   return {
     ...review,
     sourceScores,
-    scores: effectiveScores,
-    score: rawScore,
-    sourceScore: computeRawScore(sourceScores, metrics),
+    scores: sourceScores,
+    score: totalOverride,
+    sourceScore,
     sourceNormalizedScore: review.sourceNormalizedScore ?? review.normalizedScore,
     normalizedScore,
     adminOverride: {
-      overrideScores: override.overrideScores,
+      overrideScore: totalOverride,
       adminNotes: override.adminNotes || "",
       updatedAt: override.updatedAt || null,
     },

@@ -2452,8 +2452,8 @@ exports.upsertReviewOverride = async (req, res) => {
         }
 
         const adminNotes = typeof req.body?.adminNotes === 'string' ? req.body.adminNotes.slice(0, 5000) : '';
-        const rawScores = req.body?.overrideScores;
-        const hasScores = rawScores && typeof rawScores === 'object' && !Array.isArray(rawScores);
+        const rawScore = req.body?.overrideScore;
+        const hasScore = rawScore !== undefined && rawScore !== null && rawScore !== '';
 
         const activeCycle = await getActiveCycleRow();
         const activeCycleId = activeCycle?.id || null;
@@ -2506,21 +2506,18 @@ exports.upsertReviewOverride = async (req, res) => {
             }
             : getRubricForYear(resumeRound.rubric_config, candidateYear);
 
-        let overrideScores = null;
-        if (hasScores) {
-            const { scores: normalizedOverrideScores, error: scoreError } = normalizeScreeningScoresInput(
-                rawScores,
-                rubricForYear
-            );
-            if (scoreError) {
-                return res.status(400).json({ error: scoreError });
+        let overrideScore = null;
+        const maxAllowed = rubricForYear.maxScore || getRubricMaxScore(rubricForYear);
+        if (hasScore) {
+            overrideScore = Number(rawScore);
+            if (!Number.isFinite(overrideScore) || overrideScore < 0 || overrideScore > maxAllowed) {
+                return res.status(400).json({ error: `overrideScore must be a number between 0 and ${maxAllowed}` });
             }
-            overrideScores = normalizedOverrideScores;
         }
 
         const adminUserId = req.user?.user_id;
 
-        if (!overrideScores && !adminNotes) {
+        if (overrideScore === null && !adminNotes) {
             const { error: deleteError } = await supabase
                 .from('resume_review_overrides')
                 .delete()
@@ -2531,14 +2528,15 @@ exports.upsertReviewOverride = async (req, res) => {
             return res.json({ override: null });
         }
 
-        if (!overrideScores) {
-            return res.status(400).json({ error: 'overrideScores is required when saving a grade override' });
+        if (overrideScore === null) {
+            return res.status(400).json({ error: 'overrideScore is required when saving a grade override' });
         }
 
         const upsertPayload = {
             review_id: reviewId,
             admin_notes: adminNotes || null,
-            override_scores: overrideScores,
+            override_score: overrideScore,
+            override_scores: null,
             admin_user_id: adminUserId ?? null,
             updated_at: new Date().toISOString(),
         };
