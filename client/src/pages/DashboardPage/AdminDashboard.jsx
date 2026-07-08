@@ -44,7 +44,7 @@ export default function AdminDashboard() {
   const quickActions = [
     { label: "Scoreboard", path: "/scoreboard", iconKey: "scoreboard" },
     { label: "Graders", path: "/grader-scoreboard", iconKey: "graders" },
-    { label: "Flags", path: "/flagged-candidates", iconKey: "flags" },
+    { label: "Flag / Refer", path: "/flagged-candidates", iconKey: "flags" },
     { label: "Cycles", path: "/cycle-management", iconKey: "cycles" },
     { label: "Team", path: "/user-management", iconKey: "team" },
     { label: "Demographics", path: "/demographics", iconKey: "demographics" },

@@ -21,6 +21,7 @@ router.post('/candidate-flags', resumeController.createCandidateFlag);
 router.post('/candidate-referrals', resumeController.createCandidateReferral);
 router.get('/candidate-flags', requireRoles('admin'), resumeController.getCandidateFlags);
 router.patch('/candidate-flags/:id/resolve', requireRoles('admin'), resumeController.resolveCandidateFlag);
+router.get('/candidate-referrals', requireRoles('admin'), resumeController.getCandidateReferrals);
 router.get('/resume/:id/file', resumeController.getResumeFile);
 router.get('/view/pdf', resumeController.viewPdf);
 router.get('/view/image', resumeController.viewImage);
