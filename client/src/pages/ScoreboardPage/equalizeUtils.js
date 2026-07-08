@@ -174,7 +174,7 @@ function applyCompositeFromParts(candidate, resumeAggregateScore, resumeNormaliz
 
   if (frqAvg != null && resumeAggregateScore != null) {
     aggregateScore = Number((resumeAggregateScore + frqAvg).toFixed(1));
-    normalizedScore = Number(((aggregateScore / compositeMax) * 100).toFixed(1));
+    normalizedScore = Number(Math.min(100, (aggregateScore / compositeMax) * 100).toFixed(1));
   }
 
   return {

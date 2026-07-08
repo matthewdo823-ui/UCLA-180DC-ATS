@@ -1425,13 +1425,25 @@ exports.getResumeFile = async (req, res) => {
 };
 
 function sendDriveProxyError(res, err, label) {
-    console.error(`Proxy error (${label}):`, err.message);
+    const isExpectedAccessFailure =
+        err.code === 'INVALID_URL'
+        || err.code === 'DRIVE_INACCESSIBLE'
+        || err.response?.status === 404
+        || err.response?.status === 403;
+
+    if (!isExpectedAccessFailure) {
+        console.error(`Proxy error (${label}):`, err.message);
+    }
+
     if (err.code === 'INVALID_URL' || err.code === 'DRIVE_INACCESSIBLE') {
         return res.status(404).send(err.message);
     }
     const upstreamStatus = err.response?.status;
     if (upstreamStatus === 404) {
         return res.status(404).send('Drive file not found');
+    }
+    if (upstreamStatus === 403) {
+        return res.status(404).send('Drive file is not publicly accessible');
     }
     return res.status(502).send(`Error fetching ${label} from Drive`);
 }
@@ -1834,7 +1846,9 @@ exports.getScoreboard = async (req, res) => {
         const candidates = Object.values(candidateMap).map(c => {
             const aggregateScore = c.numReviews > 0 ? c.totalScore / c.numReviews : null;
             const resumeMax = getRubricMaxScore(getRubricForYear(resumeRound.rubric_config, c.year));
-            const normalizedScore = computeNormalizedFromAggregate(aggregateScore, resumeMax);
+            const normalizedScore = c.numReviews > 0
+                ? Number((c.totalNormalized / c.numReviews).toFixed(1))
+                : null;
             const categoryScores = buildCategoryScores(c.categoryTotals, c.categoryCounts);
 
             const decision = resolveCandidateDecision(c.candidateId, decisionLookup, decisionOptions);
@@ -2332,7 +2346,9 @@ async function fetchScoreboardApplicationPayload(resumeId) {
     const numReviews = mappedReviews.length;
     const aggregateScore = numReviews > 0 ? Number((totalScore / numReviews).toFixed(1)) : null;
     const resumeMax = getRubricMaxScore(getRubricForYear(resumeRound.rubric_config, candidate.year));
-    const normalizedScore = computeNormalizedFromAggregate(aggregateScore, resumeMax);
+    const normalizedScore = numReviews > 0
+        ? Number((totalNormalized / numReviews).toFixed(1))
+        : null;
     const resumeFileUrl = resumeRow.file_url || candidate.resume_file_url || '';
 
     const reviewOverrideLookup = await fetchReviewOverridesByReviewIds(mappedReviews.map(r => r.id));

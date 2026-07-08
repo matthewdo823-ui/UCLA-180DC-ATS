@@ -51,28 +51,37 @@ async function fetchPublicDriveStream(fileId) {
     validateStatus: (status) => status >= 200 && status < 400,
   };
 
-  let response = await axios.get(downloadUrl, { ...baseConfig, responseType: 'stream' });
-  if (!isHtmlContentType(response.headers['content-type'])) {
-    return response;
-  }
-
-  response.data.destroy();
-
-  const textResponse = await axios.get(downloadUrl, { ...baseConfig, responseType: 'text' });
-  const body = typeof textResponse.data === 'string' ? textResponse.data : '';
-
-  if (body.includes('virus scan warning')) {
-    const confirm = body.match(/confirm=([0-9A-Za-z_-]+)/)?.[1];
-    if (confirm) {
-      return axios.get(`${downloadUrl}&confirm=${confirm}`, { ...baseConfig, responseType: 'stream' });
+  try {
+    let response = await axios.get(downloadUrl, { ...baseConfig, responseType: 'stream' });
+    if (!isHtmlContentType(response.headers['content-type'])) {
+      return response;
     }
-  }
 
-  if (body.trimStart().startsWith('<!')) {
-    throw driveAccessError('Drive file is not publicly accessible');
-  }
+    response.data.destroy();
 
-  return axios.get(downloadUrl, { ...baseConfig, responseType: 'stream' });
+    const textResponse = await axios.get(downloadUrl, { ...baseConfig, responseType: 'text' });
+    const body = typeof textResponse.data === 'string' ? textResponse.data : '';
+
+    if (body.includes('virus scan warning')) {
+      const confirm = body.match(/confirm=([0-9A-Za-z_-]+)/)?.[1];
+      if (confirm) {
+        return axios.get(`${downloadUrl}&confirm=${confirm}`, { ...baseConfig, responseType: 'stream' });
+      }
+    }
+
+    if (body.trimStart().startsWith('<!')) {
+      throw driveAccessError('Drive file is not publicly accessible');
+    }
+
+    return axios.get(downloadUrl, { ...baseConfig, responseType: 'stream' });
+  } catch (err) {
+    if (err.code === 'DRIVE_INACCESSIBLE') throw err;
+    const status = err?.response?.status;
+    if (status === 404 || status === 403) {
+      throw driveAccessError('Drive file is not publicly accessible');
+    }
+    throw err;
+  }
 }
 
 function pipeStreamWithHtmlGuard(readable, res, contentType) {
