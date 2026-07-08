@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 
+const MIN_NOTE_LENGTH = 20;
+
 const iconBtnStyle = (active, disabled, accent) => ({
   display: "inline-flex",
   alignItems: "center",
@@ -73,8 +75,11 @@ export default function CandidateSignalActions({
     setError("");
   }
 
+  const trimmedNote = note.trim();
+  const noteTooShort = trimmedNote.length < MIN_NOTE_LENGTH;
+
   async function submit() {
-    if (!open || !canAct) return;
+    if (!open || !canAct || noteTooShort) return;
     setBusy(true);
     setError("");
 
@@ -83,8 +88,8 @@ export default function CandidateSignalActions({
       candidate_id: candidateId || undefined,
     };
     const isFlag = open === "flag";
-    if (isFlag) body.reason = note.trim() || "Flagged from scoreboard";
-    else body.note = note.trim() || null;
+    if (isFlag) body.reason = trimmedNote;
+    else body.note = trimmedNote;
 
     try {
       const res = await authedFetch(`${API}/${isFlag ? "candidate-flags" : "candidate-referrals"}`, {
@@ -165,7 +170,7 @@ export default function CandidateSignalActions({
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value.slice(0, 300))}
-            placeholder={open === "flag" ? "Reason (optional)" : "Why are you referring them? (optional)"}
+            placeholder={open === "flag" ? "Reason (required, min 20 characters)" : "Why are you referring them? (required, min 20 characters)"}
             rows={3}
             style={{
               width: "100%",
@@ -180,6 +185,9 @@ export default function CandidateSignalActions({
               fontFamily: "'DM Sans', sans-serif",
             }}
           />
+          <div style={{ marginTop: 4, fontSize: 10, fontWeight: 600, color: noteTooShort ? css.amber : css.textGray }}>
+            {trimmedNote.length}/{MIN_NOTE_LENGTH} characters minimum
+          </div>
           {error ? (
             <div style={{ marginTop: 8, fontSize: 11, color: css.red, fontWeight: 600 }}>{error}</div>
           ) : null}
@@ -206,7 +214,7 @@ export default function CandidateSignalActions({
             </button>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || noteTooShort}
               onClick={submit}
               style={{
                 padding: "6px 10px",
@@ -216,8 +224,8 @@ export default function CandidateSignalActions({
                 color: open === "flag" ? css.textDark : "#FFF",
                 fontSize: 11,
                 fontWeight: 700,
-                cursor: busy ? "wait" : "pointer",
-                opacity: busy ? 0.7 : 1,
+                cursor: busy || noteTooShort ? "not-allowed" : "pointer",
+                opacity: busy || noteTooShort ? 0.5 : 1,
               }}
             >
               {busy ? "Saving…" : open === "flag" ? "Flag" : "Refer"}
