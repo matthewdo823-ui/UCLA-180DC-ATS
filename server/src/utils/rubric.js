@@ -1,5 +1,15 @@
 const RUBRIC_MAX_PER_CATEGORY = 4;
 
+/** Pre-2026 rubric: four categories scored 1–6 (max 24). */
+const LEGACY_RUBRIC_METRICS = [
+  "experience",
+  "leadership",
+  "communication",
+  "social impact",
+];
+const LEGACY_RUBRIC_MAX_PER_CATEGORY = 6;
+const LEGACY_RUBRIC_MAX_SCORE = LEGACY_RUBRIC_METRICS.length * LEGACY_RUBRIC_MAX_PER_CATEGORY;
+
 const DEFAULT_RUBRIC_CONFIG = {
   maxPerCategory: RUBRIC_MAX_PER_CATEGORY,
   byYear: {
@@ -130,6 +140,114 @@ function buildRubricSnapshot(rubricConfig, yearRaw) {
   };
 }
 
+function isLegacyReviewScores(scores = {}) {
+  const keys = Object.keys(scores || {});
+  return keys.some((key) => LEGACY_RUBRIC_METRICS.includes(key));
+}
+
+function buildLegacyRubricSnapshot() {
+  return {
+    legacy: true,
+    label: "Legacy",
+    metrics: LEGACY_RUBRIC_METRICS,
+    maxPerCategory: LEGACY_RUBRIC_MAX_PER_CATEGORY,
+    maxScore: LEGACY_RUBRIC_MAX_SCORE,
+  };
+}
+
+/**
+ * Resolve which metrics and max score apply to a stored review.
+ * Legacy reviews (no snapshot, old metric names) use the 24-point scale.
+ */
+function resolveReviewScoringContext(review, options = {}) {
+  const scores = review?.scores || {};
+  const snapshot = review?.rubric_snapshot || review?.rubricSnapshot || null;
+
+  if (snapshot?.metrics?.length) {
+    const maxPerCategory = snapshot.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
+    return {
+      metrics: snapshot.metrics,
+      maxScore: Number.isFinite(Number(snapshot.maxScore)) && snapshot.maxScore > 0
+        ? Number(snapshot.maxScore)
+        : getRubricMaxScore({ metrics: snapshot.metrics, maxPerCategory }),
+      maxPerCategory,
+      legacy: !!snapshot.legacy,
+      snapshot,
+    };
+  }
+
+  if (isLegacyReviewScores(scores)) {
+    const legacySnapshot = buildLegacyRubricSnapshot();
+    const metrics = LEGACY_RUBRIC_METRICS.filter((metric) => scores[metric] != null);
+    return {
+      metrics: metrics.length ? metrics : LEGACY_RUBRIC_METRICS,
+      maxScore: LEGACY_RUBRIC_MAX_SCORE,
+      maxPerCategory: LEGACY_RUBRIC_MAX_PER_CATEGORY,
+      legacy: true,
+      snapshot: legacySnapshot,
+    };
+  }
+
+  const { rubricConfig, candidateYear } = options;
+  if (rubricConfig) {
+    const rubricForYear = getRubricForYear(rubricConfig, candidateYear);
+    return {
+      metrics: rubricForYear.metrics,
+      maxScore: getRubricMaxScore(rubricForYear),
+      maxPerCategory: rubricForYear.maxPerCategory,
+      legacy: false,
+      snapshot: buildRubricSnapshot(rubricConfig, candidateYear),
+    };
+  }
+
+  const metrics = Object.keys(scores);
+  return {
+    metrics,
+    maxScore: metrics.length ? metrics.length * RUBRIC_MAX_PER_CATEGORY : null,
+    maxPerCategory: RUBRIC_MAX_PER_CATEGORY,
+    legacy: false,
+    snapshot: null,
+  };
+}
+
+function resolveCandidateResumeMax(reviews = [], options = {}) {
+  if (!reviews?.length) {
+    if (options.rubricConfig) {
+      return getRubricMaxScore(getRubricForYear(options.rubricConfig, options.candidateYear));
+    }
+    return null;
+  }
+
+  const maxScores = reviews
+    .map((review) => {
+      if (Number.isFinite(Number(review?.maxScore)) && review.maxScore > 0) {
+        return Number(review.maxScore);
+      }
+      return resolveReviewScoringContext(review, options).maxScore;
+    })
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  const unique = [...new Set(maxScores)];
+  if (unique.length === 1) return unique[0];
+
+  if (options.rubricConfig) {
+    return getRubricMaxScore(getRubricForYear(options.rubricConfig, options.candidateYear));
+  }
+
+  return maxScores[0] ?? null;
+}
+
+function getReviewScoring(review, options = {}) {
+  const context = resolveReviewScoringContext(review, options);
+  const score = computeRawScore(review?.scores || {}, context.metrics);
+  const normalizedScore = computeNormalizedFromAggregate(score, context.maxScore);
+  return {
+    ...context,
+    score,
+    normalizedScore,
+  };
+}
+
 function computeRawScore(scores = {}, metrics = []) {
   if (metrics.length) {
     return metrics.reduce((sum, metric) => sum + (Number(scores[metric]) || 0), 0);
@@ -171,17 +289,9 @@ function computeReviewNormalizedFromScores(review, options = {}) {
   const scores = review?.scores || {};
   if (!Object.keys(scores).length) return null;
 
-  const snapshot = review?.rubric_snapshot || review?.rubricSnapshot || null;
-  if (snapshot) {
-    return computeNormalizedScore(scores, snapshot);
-  }
-
-  const { rubricConfig, candidateYear } = options;
-  if (rubricConfig) {
-    return computeNormalizedScore(scores, buildRubricSnapshot(rubricConfig, candidateYear));
-  }
-
-  return getLegacyNormalizedScore(scores);
+  const context = resolveReviewScoringContext(review, options);
+  const raw = computeRawScore(scores, context.metrics);
+  return computeNormalizedFromAggregate(raw, context.maxScore);
 }
 
 /**
@@ -201,6 +311,9 @@ function resolveReviewNormalizedValue(review, options = {}) {
 
 module.exports = {
   RUBRIC_MAX_PER_CATEGORY,
+  LEGACY_RUBRIC_METRICS,
+  LEGACY_RUBRIC_MAX_PER_CATEGORY,
+  LEGACY_RUBRIC_MAX_SCORE,
   DEFAULT_RUBRIC_CONFIG,
   normalizeYearKey,
   getRubricForYear,
@@ -209,6 +322,11 @@ module.exports = {
   validateScreeningScores,
   normalizeScreeningScoresInput,
   buildRubricSnapshot,
+  isLegacyReviewScores,
+  buildLegacyRubricSnapshot,
+  resolveReviewScoringContext,
+  resolveCandidateResumeMax,
+  getReviewScoring,
   computeRawScore,
   computeNormalizedScore,
   getMetricsFromRubricConfig,

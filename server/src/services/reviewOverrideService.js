@@ -4,6 +4,7 @@ const {
   computeNormalizedFromAggregate,
   getRubricForYear,
   getRubricMaxScore,
+  resolveReviewScoringContext,
 } = require("../utils/rubric");
 
 function resolveOverrideScore(row) {
@@ -89,13 +90,12 @@ function resolveReviewMaxScore(review, options = {}) {
     return Number(review.maxScore);
   }
 
-  const snapshot = review?.rubricSnapshot || review?.rubric_snapshot || null;
-  if (Number.isFinite(Number(snapshot?.maxScore)) && snapshot.maxScore > 0) {
-    return Number(snapshot.maxScore);
-  }
-
-  if (options.rubricConfig) {
-    return getRubricMaxScore(getRubricForYear(options.rubricConfig, options.candidateYear));
+  const context = resolveReviewScoringContext(review, {
+    rubricConfig: options.rubricConfig,
+    candidateYear: options.candidateYear,
+  });
+  if (Number.isFinite(Number(context.maxScore)) && context.maxScore > 0) {
+    return Number(context.maxScore);
   }
 
   const metrics = Object.keys(review?.scores || {});
