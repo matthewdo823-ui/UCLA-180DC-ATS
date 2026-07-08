@@ -87,9 +87,7 @@ function countActiveFilters(filters) {
 
 function passesScoreBand(candidate, scoreBand) {
   const n = candidate?.numReviews ?? candidate?.reviews?.length ?? 0;
-  const displayPct = hasNumericScore(candidate?.normalizedScore)
-    ? Number(candidate.normalizedScore)
-    : null;
+  const displayPct = getHeadlineScore(candidate);
 
   switch (scoreBand) {
     case "top":
@@ -526,9 +524,24 @@ function getNormalizedScore(candidate) {
   return null;
 }
 
-/** Cosmetic display % — derived from raw scores, not used for ranking. */
+function getScoreMaxTotal(candidate) {
+  if (hasNumericScore(candidate?.compositeMax)) return Number(candidate.compositeMax);
+  if (hasNumericScore(candidate?.maxScore)) return Number(candidate.maxScore);
+  return null;
+}
+
+/** Cosmetic display % — capped at 100, not used for ranking. */
 function getHeadlineScore(candidate) {
-  return getNormalizedScore(candidate);
+  const normalized = getNormalizedScore(candidate);
+  if (normalized == null) return null;
+  return Math.min(100, normalized);
+}
+
+function formatScorePointsLine(candidate) {
+  const pts = getAggregateScore(candidate);
+  const max = getScoreMaxTotal(candidate);
+  if (!hasNumericScore(pts) || max == null) return null;
+  return `${formatScore(pts)} pts / ${formatScore(max)}`;
 }
 
 function getSourceNormalizedScore(candidate) {
@@ -759,7 +772,7 @@ function ScorecardModal({
                 </p>
               ) : aggregateScore != null ? (
                 <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
-                  Raw avg: {formatScore(aggregateScore)} pts
+                  Raw avg: {formatScorePointsLine(candidate) ?? `${formatScore(aggregateScore)} pts`}
                   {candidate.frqPending ? " · FRQ pending" : ""}
                 </p>
               ) : null}
@@ -810,7 +823,7 @@ function ScorecardModal({
                 {reviews.map((review, index) => {
                   const reviewOverridden = review?.adminOverride?.overrideScore != null;
                   const displayScore = equalized && hasNumericScore(review.normalizedScore)
-                    ? `${formatScore(review.normalizedScore)}%`
+                    ? `${formatScore(Math.min(100, review.normalizedScore))}%`
                     : `${formatScore(getReviewTotal(review))}/24`;
 
                   return (
@@ -833,7 +846,7 @@ function ScorecardModal({
                 })}
                 {frqReviews.map((review, index) => {
                   const displayScore = equalized && hasNumericScore(review.normalizedScore)
-                    ? `${formatScore(review.normalizedScore)}%`
+                    ? `${formatScore(Math.min(100, review.normalizedScore))}%`
                     : `${formatScore(review.score ?? getReviewTotal(review))}/${FRQ_MAX_SCORE}`;
 
                   return (
@@ -2154,8 +2167,7 @@ export default function ScoreboardPage() {
                 {hasNumericScore(headlineScore) ? `${formatScore(headlineScore)}%` : "—"}
               </div>
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, lineHeight: 1.35 }}>
-                {equalizeActive ? "Equalized" : "Normalized"}
-                {hasNumericScore(getAggregateScore(c)) ? ` · ${formatScore(getAggregateScore(c))} pts` : ""}
+                {formatScorePointsLine(c) ?? (equalizeActive ? "Equalized" : "No score")}
                 <br />
                 {reviewCount} {reviewCount === 1 ? "review" : "reviews"}
               </div>

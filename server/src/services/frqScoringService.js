@@ -51,8 +51,8 @@ function applyCompositeScoringToCandidate(candidate, {
 } = {}) {
   const resumeAggregateScore = candidate.aggregateScore ?? null;
   const resumeMax = getResumeMaxForYear(rubricConfig, candidate.year);
-  const resumeNormalizedScore = computeNormalizedFromAggregate(resumeAggregateScore, resumeMax)
-    ?? candidate.normalizedScore
+  const resumeNormalizedScore = candidate.normalizedScore
+    ?? computeNormalizedFromAggregate(resumeAggregateScore, resumeMax)
     ?? null;
   const frqAvg = averageFrqScore(frqReviews);
   const numFrqReviews = frqReviews.length;

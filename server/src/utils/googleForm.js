@@ -1,5 +1,5 @@
 const fs = require("fs");
-const { GoogleAuth } = require("google-auth-library");
+const { GoogleAuth, JWT } = require("google-auth-library");
 const { forms } = require("@googleapis/forms");
 const { drive } = require("@googleapis/drive");
 const { resolveFormConfigPath } = require("./formConfigPath");
@@ -53,6 +53,15 @@ const TITLE_COLUMN_HINTS = [
 
 function getKeyFilePath() {
   return process.env.GOOGLE_CLOUD_KEY_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS || "";
+}
+
+/** Workspace user who owns the form / upload folder (domain-wide delegation). */
+function getDriveImpersonateUser() {
+  return (
+    process.env.GOOGLE_DRIVE_IMPERSONATE_USER
+    || process.env.GMAIL_IMPERSONATE_USER
+    || ""
+  ).trim();
 }
 
 function parseGoogleFormId(input) {
@@ -201,6 +210,16 @@ async function getDriveClient() {
   const keyFile = getKeyFilePath();
   if (!keyFile || !fs.existsSync(keyFile)) return null;
 
+  const impersonate = getDriveImpersonateUser();
+  if (impersonate) {
+    const auth = new JWT({
+      keyFile,
+      scopes: SCOPES_READ,
+      subject: impersonate,
+    });
+    return drive({ version: "v3", auth });
+  }
+
   const auth = new GoogleAuth({ keyFile, scopes: SCOPES_READ });
   const authClient = await auth.getClient();
   return drive({ version: "v3", auth: authClient });
@@ -244,6 +263,7 @@ module.exports = {
   loadLegacyFormConfig,
   getFormsClient,
   getDriveClient,
+  getDriveImpersonateUser,
   discoverFormQuestions,
   isGoogleFormsConfigured,
 };
