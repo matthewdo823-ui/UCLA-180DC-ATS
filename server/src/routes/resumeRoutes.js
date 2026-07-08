@@ -35,5 +35,6 @@ router.get('/demographics', demographicsController.getDemographics);
 router.post('/scoreboard/decisions', requireRoles('admin'), resumeController.upsertRoundDecision);
 router.get('/scoreboard/decisions/export', requireRoles('admin'), resumeController.exportScoreboardDecisions);
 router.get('/grader-scoreboard', requireRoles('admin'), resumeController.getGraderScoreboard);
+router.get('/frq-grader-scoreboard', requireRoles('admin'), resumeController.getFrqGraderScoreboard);
 
 module.exports = router;
