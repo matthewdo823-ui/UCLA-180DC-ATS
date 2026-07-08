@@ -1,5 +1,10 @@
 const { FRQ_METRIC, FRQ_MAX_SCORE } = require("../constants/frq");
-const { getRubricForYear, getRubricMaxScore, computeNormalizedFromAggregate } = require("../utils/rubric");
+const {
+  getRubricForYear,
+  getRubricMaxScore,
+  computeNormalizedFromAggregate,
+  resolveCandidateResumeMax,
+} = require("../utils/rubric");
 
 function getResumeMaxForYear(rubricConfig, year) {
   const rubricForYear = getRubricForYear(rubricConfig, year);
@@ -50,7 +55,12 @@ function applyCompositeScoringToCandidate(candidate, {
   rubricConfig = null,
 } = {}) {
   const resumeAggregateScore = candidate.aggregateScore ?? null;
-  const resumeMax = getResumeMaxForYear(rubricConfig, candidate.year);
+  const resumeMax = candidate.resumeMax
+    ?? resolveCandidateResumeMax(candidate.reviews, {
+      rubricConfig,
+      candidateYear: candidate.year,
+    })
+    ?? getResumeMaxForYear(rubricConfig, candidate.year);
   const resumeNormalizedScore = candidate.normalizedScore
     ?? computeNormalizedFromAggregate(resumeAggregateScore, resumeMax)
     ?? null;

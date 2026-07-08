@@ -19,6 +19,8 @@ const {
     getMetricsFromRubricConfig,
     getRubricMaxScore,
     resolveReviewNormalizedValue,
+    getReviewScoring,
+    resolveCandidateResumeMax,
 } = require('../utils/rubric');
 const { firstRel } = require('../utils/supabaseHelpers');
 const { getUserName } = require('../utils/userDisplay');
@@ -269,8 +271,10 @@ function mapMyReviewRow(row, rubricConfig = null) {
     const resume = firstRel(row.resumes);
     const cand = firstRel(resume?.candidates);
     const snapshot = row.rubric_snapshot || null;
-    const metrics = snapshot?.metrics || Object.keys(row.scores || {});
-    const rawTotal = getReviewScore(row.scores || {}, metrics);
+    const scoring = getReviewScoring(row, {
+        rubricConfig,
+        candidateYear: cand?.year,
+    });
     return {
         reviewId: row.id,
         id: row.resume_id,
@@ -281,11 +285,11 @@ function mapMyReviewRow(row, rubricConfig = null) {
         major: cand?.major ?? null,
         gpa: cand?.gpa ?? null,
         scores: row.scores || {},
-        rubricSnapshot: snapshot,
-        metrics,
-        total: rawTotal,
-        maxScore: snapshot?.maxScore ?? null,
-        normalizedScore: resolveReviewNormalizedValue(row, {
+        rubricSnapshot: snapshot || scoring.snapshot,
+        metrics: scoring.metrics,
+        total: scoring.score,
+        maxScore: scoring.maxScore,
+        normalizedScore: scoring.normalizedScore ?? resolveReviewNormalizedValue(row, {
             rubricConfig,
             candidateYear: cand?.year,
         }),
@@ -1769,13 +1773,15 @@ exports.getScoreboard = async (req, res) => {
             if (!review.resumes) return;
             const resumeId = review.resumes.id;
 
-            const snapshot = review.rubric_snapshot || null;
-            const metrics = snapshot?.metrics || Object.keys(review.scores || {});
-            metrics.forEach((metric) => metricSet.add(metric));
-
             const candidateYear = firstRel(review.resumes?.candidates)?.year;
-            const reviewScore = getReviewScore(review.scores, metrics);
-            const reviewNormalized = resolveReviewNormalizedValue(review, {
+            const scoring = getReviewScoring(review, {
+                rubricConfig: resumeRound.rubric_config,
+                candidateYear,
+            });
+            scoring.metrics.forEach((metric) => metricSet.add(metric));
+
+            const reviewScore = scoring.score;
+            const reviewNormalized = scoring.normalizedScore ?? resolveReviewNormalizedValue(review, {
                 rubricConfig: resumeRound.rubric_config,
                 candidateYear,
             });
@@ -1831,7 +1837,8 @@ exports.getScoreboard = async (req, res) => {
                 scores: review.scores || {},
                 score: reviewScore,
                 normalizedScore: reviewNormalized,
-                maxScore: snapshot?.maxScore ?? null,
+                maxScore: scoring.maxScore,
+                legacy: scoring.legacy,
                 gradedBy: review.graded_by ?? null,
                 reviewerName: graderFromUsers?.name || null,
                 reviewerEmail: graderFromUsers?.email || null,
@@ -1845,7 +1852,10 @@ exports.getScoreboard = async (req, res) => {
 
         const candidates = Object.values(candidateMap).map(c => {
             const aggregateScore = c.numReviews > 0 ? c.totalScore / c.numReviews : null;
-            const resumeMax = getRubricMaxScore(getRubricForYear(resumeRound.rubric_config, c.year));
+            const resumeMax = resolveCandidateResumeMax(c.reviews, {
+                rubricConfig: resumeRound.rubric_config,
+                candidateYear: c.year,
+            });
             const normalizedScore = c.numReviews > 0
                 ? Number((c.totalNormalized / c.numReviews).toFixed(1))
                 : null;
@@ -1870,6 +1880,7 @@ exports.getScoreboard = async (req, res) => {
                 aggregateScore: aggregateScore === null ? null : Number(aggregateScore.toFixed(1)),
                 normalizedScore,
                 maxScore: resumeMax,
+                resumeMax,
                 categoryScores,
                 numReviews: c.numReviews,
                 reviews: c.reviews.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt)),
@@ -2150,10 +2161,11 @@ exports.exportScoreboardDecisions = async (req, res) => {
             let totalRaw = 0;
             let rawCount = 0;
             resumeReviews.forEach((review) => {
-                const snapshot = review.rubric_snapshot || null;
-                const metrics = snapshot?.metrics || Object.keys(review.scores || {});
-                const reviewRaw = getReviewScore(review.scores, metrics);
-                totalRaw += reviewRaw;
+                const scoring = getReviewScoring(review, {
+                    rubricConfig: resumeRound.rubric_config,
+                    candidateYear: linked.year,
+                });
+                totalRaw += scoring.score;
                 rawCount += 1;
             });
             const avgRawScore = rawCount > 0
@@ -2308,12 +2320,14 @@ async function fetchScoreboardApplicationPayload(resumeId) {
     let totalNormalized = 0;
 
     const mappedReviews = (reviews || []).map(review => {
-        const snapshot = review.rubric_snapshot || null;
-        const metrics = snapshot?.metrics || Object.keys(review.scores || {});
-        metrics.forEach((metric) => metricSet.add(metric));
+        const scoring = getReviewScoring(review, {
+            rubricConfig: resumeRound.rubric_config,
+            candidateYear: candidate.year,
+        });
+        scoring.metrics.forEach((metric) => metricSet.add(metric));
 
-        const reviewScore = getReviewScore(review.scores, metrics);
-        const reviewNormalized = resolveReviewNormalizedValue(review, {
+        const reviewScore = scoring.score;
+        const reviewNormalized = scoring.normalizedScore ?? resolveReviewNormalizedValue(review, {
             rubricConfig: resumeRound.rubric_config,
             candidateYear: candidate.year,
         });
@@ -2334,7 +2348,8 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             scores: review.scores || {},
             score: reviewScore,
             normalizedScore: reviewNormalized,
-            maxScore: snapshot?.maxScore ?? null,
+            maxScore: scoring.maxScore,
+            legacy: scoring.legacy,
             decision: review.decision || 'pass',
             reviewerName: graderFromUsers?.name || null,
             reviewerEmail: graderFromUsers?.email || null,
@@ -2345,7 +2360,10 @@ async function fetchScoreboardApplicationPayload(resumeId) {
 
     const numReviews = mappedReviews.length;
     const aggregateScore = numReviews > 0 ? Number((totalScore / numReviews).toFixed(1)) : null;
-    const resumeMax = getRubricMaxScore(getRubricForYear(resumeRound.rubric_config, candidate.year));
+    const resumeMax = resolveCandidateResumeMax(mappedReviews, {
+        rubricConfig: resumeRound.rubric_config,
+        candidateYear: candidate.year,
+    });
     const normalizedScore = numReviews > 0
         ? Number((totalNormalized / numReviews).toFixed(1))
         : null;
@@ -2878,13 +2896,15 @@ exports.getGraderScoreboard = async (req, res) => {
             const grader = graderMap[review.graded_by];
             if (!grader) return;
 
-            const snapshot = review.rubric_snapshot || null;
-            const metrics = snapshot?.metrics || Object.keys(review.scores || {});
-            metrics.forEach((metric) => metricSet.add(metric));
-
             const candidateYear = firstRel(review.resumes?.candidates)?.year;
-            const reviewScore = getReviewScore(review.scores, metrics);
-            const reviewNormalized = resolveReviewNormalizedValue(review, {
+            const scoring = getReviewScoring(review, {
+                rubricConfig: resumeRound?.rubric_config,
+                candidateYear,
+            });
+            scoring.metrics.forEach((metric) => metricSet.add(metric));
+
+            const reviewScore = scoring.score;
+            const reviewNormalized = scoring.normalizedScore ?? resolveReviewNormalizedValue(review, {
                 rubricConfig: resumeRound?.rubric_config,
                 candidateYear,
             });
@@ -2905,6 +2925,7 @@ exports.getGraderScoreboard = async (req, res) => {
                 scores: review.scores || {},
                 score: reviewScore,
                 normalizedScore: reviewNormalized,
+                maxScore: scoring.maxScore,
                 notes: review.notes || '',
                 submittedAt: review.submitted_at,
             });
