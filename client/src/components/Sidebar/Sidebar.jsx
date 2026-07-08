@@ -75,7 +75,7 @@ const baseMenuLinks = [
 const adminLinks = [
   { path: "/grader-scoreboard", label: "Graders", icon: gradersIcon },
   { path: "/cycle-management", label: "Cycles", icon: cyclesIcon },
-  { path: "/flagged-candidates", label: "Flags", icon: flagsIcon },
+  { path: "/flagged-candidates", label: "Flag / Refer", icon: flagsIcon },
   { path: "/user-management", label: "Team", icon: usersIcon },
 ];
 

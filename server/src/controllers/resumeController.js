@@ -79,6 +79,7 @@ const FRQ_REVIEW_GOAL = Number.isFinite(configuredFrqReviewGoal) && configuredFr
     ? configuredFrqReviewGoal
     : GRADER_REVIEW_GOAL;
 const VALID_REVIEW_DECISIONS = new Set(["pass", "flag", "reject"]);
+const MIN_SIGNAL_NOTE_LENGTH = 20;
 
 function getReviewScore(scores = {}, metrics = null) {
     return computeRawScore(scores, metrics);
@@ -1169,6 +1170,11 @@ exports.patchMyFrqReview = async (req, res) => {
 
 exports.createCandidateFlag = async (req, res) => {
     const { candidate_id, resume_id, reason } = req.body;
+    const trimmedReason = String(reason || "").trim();
+
+    if (trimmedReason.length < MIN_SIGNAL_NOTE_LENGTH) {
+        return res.status(400).json({ error: `Reason must be at least ${MIN_SIGNAL_NOTE_LENGTH} characters` });
+    }
 
     try {
         const activeCycleId = await getActiveCycleId();
@@ -1208,7 +1214,7 @@ exports.createCandidateFlag = async (req, res) => {
                 candidate_id: candidateId,
                 resume_id: resume_id || null,
                 flagged_by: userId,
-                reason: reason || "Flagged for admin review",
+                reason: trimmedReason,
             })
             .select('id')
             .single();
@@ -1230,6 +1236,11 @@ exports.createCandidateFlag = async (req, res) => {
 
 exports.createCandidateReferral = async (req, res) => {
     const { candidate_id, resume_id, note } = req.body;
+    const trimmedNote = String(note || "").trim();
+
+    if (trimmedNote.length < MIN_SIGNAL_NOTE_LENGTH) {
+        return res.status(400).json({ error: `Note must be at least ${MIN_SIGNAL_NOTE_LENGTH} characters` });
+    }
 
     try {
         const activeCycleId = await getActiveCycleId();
@@ -1254,7 +1265,7 @@ exports.createCandidateReferral = async (req, res) => {
                 candidate_id: candidateId,
                 resume_id: resume_id || null,
                 referred_by: userId,
-                note: note?.trim() || null,
+                note: trimmedNote,
             })
             .select('id')
             .single();
@@ -1376,6 +1387,101 @@ exports.getCandidateFlags = async (req, res) => {
         });
     } catch (err) {
         return respondWithServerError(res, err, 'getCandidateFlags');
+    }
+};
+
+exports.getCandidateReferrals = async (req, res) => {
+    try {
+        const activeCycleId = await getActiveCycleId();
+        if (!activeCycleId) {
+            return res.json({
+                stats: { referrals: 0, candidates: 0 },
+                referrals: [],
+            });
+        }
+
+        const { data, error } = await supabase
+            .from('candidate_referrals')
+            .select(`
+                id,
+                candidate_id,
+                resume_id,
+                referred_by,
+                note,
+                created_at,
+                candidates!inner (
+                    id,
+                    name,
+                    email,
+                    phone_number,
+                    major,
+                    gpa,
+                    year,
+                    pronouns,
+                    linkedin,
+                    gm,
+                    newbie_training,
+                    extenuating_circumstances,
+                    cycle_id
+                ),
+                resumes (
+                    id,
+                    name,
+                    file_url
+                ),
+                users (
+                    user_id,
+                    email,
+                    first_name,
+                    last_name
+                )
+            `)
+            .eq('candidates.cycle_id', activeCycleId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const referrals = (data || []).map(referral => ({
+            id: referral.id,
+            candidateId: referral.candidate_id,
+            resumeId: referral.resume_id,
+            note: referral.note || '',
+            createdAt: referral.created_at,
+            candidate: referral.candidates ? {
+                id: referral.candidates.id,
+                name: referral.candidates.name || 'Unknown',
+                email: referral.candidates.email || '',
+                phoneNumber: referral.candidates.phone_number || '',
+                major: referral.candidates.major || 'Undeclared',
+                gpa: referral.candidates.gpa || '',
+                year: referral.candidates.year || '',
+                pronouns: referral.candidates.pronouns || '',
+                linkedin: referral.candidates.linkedin || '',
+                gm: referral.candidates.gm || '',
+                newbieTraining: referral.candidates.newbie_training || '',
+                extenuatingCircumstances: referral.candidates.extenuating_circumstances || '',
+            } : null,
+            resume: referral.resumes ? {
+                id: referral.resumes.id,
+                name: referral.resumes.name || '',
+                fileUrl: referral.resumes.file_url || '',
+            } : null,
+            referredBy: referral.users ? {
+                id: referral.users.user_id,
+                name: getUserName(referral.users),
+                email: referral.users.email || '',
+            } : null,
+        }));
+
+        return res.json({
+            stats: {
+                referrals: referrals.length,
+                candidates: new Set(referrals.map(referral => referral.candidateId).filter(Boolean)).size,
+            },
+            referrals,
+        });
+    } catch (err) {
+        return respondWithServerError(res, err, 'getCandidateReferrals');
     }
 };
 
