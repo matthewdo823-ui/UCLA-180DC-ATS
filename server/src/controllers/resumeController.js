@@ -74,6 +74,10 @@ const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
     : 30;
+const configuredFrqReviewGoal = Number(process.env.FRQ_REVIEW_GOAL);
+const FRQ_REVIEW_GOAL = Number.isFinite(configuredFrqReviewGoal) && configuredFrqReviewGoal > 0
+    ? configuredFrqReviewGoal
+    : GRADER_REVIEW_GOAL;
 const VALID_REVIEW_DECISIONS = new Set(["pass", "flag", "reject"]);
 
 function getReviewScore(scores = {}, metrics = null) {
@@ -2990,5 +2994,150 @@ exports.getGraderScoreboard = async (req, res) => {
         });
     } catch (err) {
         return respondWithServerError(res, err, 'getGraderScoreboard');
+    }
+};
+
+// Gets admin-only FRQ grader scoreboard data (FRQ grading is admin-only)
+exports.getFrqGraderScoreboard = async (req, res) => {
+    try {
+        const activeCycle = await getActiveCycleRow();
+        const activeCycleId = activeCycle?.id || null;
+
+        const { data: users, error: userError } = await supabase
+            .from('users')
+            .select('user_id, email, role, first_name, last_name, created_at, last_login')
+            .eq('role', 'admin')
+            .order('first_name', { ascending: true });
+
+        if (userError) throw userError;
+
+        let reviewQuery = supabase
+            .from('frq_reviews')
+            .select(`
+                id,
+                graded_by,
+                score,
+                notes,
+                submitted_at,
+                resumes (
+                    id,
+                    name
+                )
+            `)
+            .not('graded_by', 'is', null);
+
+        if (activeCycleId) {
+            reviewQuery = reviewQuery.eq('cycle_id', activeCycleId);
+        }
+
+        const { data: reviews, error: reviewError } = await reviewQuery;
+
+        if (reviewError) throw reviewError;
+
+        const metrics = [FRQ_METRIC];
+        const maxPerCategory = FRQ_MAX_SCORE;
+
+        const graderMap = {};
+        (users || []).forEach(user => {
+            const name = [user.first_name, user.last_name].filter(Boolean).join(' ');
+            graderMap[user.user_id] = {
+                id: user.user_id,
+                name: name || user.email,
+                email: user.email,
+                role: user.role,
+                createdAt: user.created_at,
+                lastLogin: user.last_login,
+                reviewCount: 0,
+                totalScore: 0,
+                totalNormalized: 0,
+                categoryTotals: {},
+                categoryCounts: {},
+                reviews: [],
+            };
+        });
+
+        (reviews || []).forEach(review => {
+            const grader = graderMap[review.graded_by];
+            if (!grader) return;
+
+            const reviewScore = Number(review.score) || 0;
+            const reviewNormalized = Number(((reviewScore / FRQ_MAX_SCORE) * 100).toFixed(2));
+
+            grader.reviewCount++;
+            grader.totalScore += reviewScore;
+            grader.totalNormalized += reviewNormalized;
+            grader.categoryTotals[FRQ_METRIC] = (grader.categoryTotals[FRQ_METRIC] || 0) + reviewScore;
+            grader.categoryCounts[FRQ_METRIC] = (grader.categoryCounts[FRQ_METRIC] || 0) + 1;
+
+            grader.reviews.push({
+                id: review.id,
+                resumeId: review.resumes?.id || null,
+                resumeName: review.resumes?.name || 'Unknown resume',
+                scores: { [FRQ_METRIC]: reviewScore },
+                score: reviewScore,
+                normalizedScore: reviewNormalized,
+                maxScore: FRQ_MAX_SCORE,
+                notes: review.notes || '',
+                submittedAt: review.submitted_at,
+            });
+        });
+
+        const graders = Object.values(graderMap).map(grader => {
+            const averageScore = grader.reviewCount > 0 ? grader.totalScore / grader.reviewCount : null;
+            const averageNormalizedScore = grader.reviewCount > 0
+                ? grader.totalNormalized / grader.reviewCount
+                : null;
+            const categoryScores = buildCategoryScores(grader.categoryTotals, grader.categoryCounts);
+
+            const sortedReviews = grader.reviews.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+
+            return {
+                id: grader.id,
+                name: grader.name,
+                email: grader.email,
+                role: grader.role,
+                createdAt: grader.createdAt,
+                lastLogin: grader.lastLogin,
+                reviewCount: grader.reviewCount,
+                expectedReviews: FRQ_REVIEW_GOAL,
+                progressScore: Math.min(100, Math.round((grader.reviewCount / FRQ_REVIEW_GOAL) * 100)),
+                averageScore: averageScore === null ? null : Number(averageScore.toFixed(1)),
+                averageNormalizedScore: averageNormalizedScore === null
+                    ? null
+                    : Number(averageNormalizedScore.toFixed(1)),
+                maxScore: 100,
+                categoryScores,
+                latestReviewAt: sortedReviews[0]?.submittedAt || null,
+                reviews: sortedReviews,
+            };
+        });
+
+        graders.sort((a, b) => {
+            if (b.reviewCount !== a.reviewCount) return b.reviewCount - a.reviewCount;
+            return a.name.localeCompare(b.name);
+        });
+        graders.forEach((grader, index) => grader.rank = index + 1);
+
+        const totalReviews = graders.reduce((total, grader) => total + grader.reviewCount, 0);
+        const activeGraders = graders.filter(grader => grader.reviewCount > 0).length;
+
+        res.json({
+            context: {
+                cycle: activeCycle ? { id: activeCycle.id, name: activeCycle.name } : null,
+                round: null,
+            },
+            metrics,
+            maxPerCategory,
+            stats: {
+                graders: graders.length,
+                activeGraders,
+                totalReviews,
+                avgReviews: graders.length ? Number((totalReviews / graders.length).toFixed(1)) : 0,
+                expectedReviews: FRQ_REVIEW_GOAL,
+            },
+            graders,
+        });
+    } catch (err) {
+        return respondWithServerError(res, err, 'getFrqGraderScoreboard');
     }
 };

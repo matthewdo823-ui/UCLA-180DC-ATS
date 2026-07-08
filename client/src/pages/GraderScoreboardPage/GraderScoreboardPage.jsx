@@ -24,6 +24,33 @@ const GRADER_STATUS_FILTERS = [
   { id: "not_started", label: "Not started" },
 ];
 
+const SCOREBOARD_MODES = [
+  {
+    id: "resume",
+    label: "Resume grading",
+    endpoint: "grader-scoreboard",
+    eyebrow: "Grader roster",
+    heading: "Grader ",
+    headingAccent: "scoreboard",
+    description: "Round 1 grading progress — search by name or email, or use the status chips to focus on who is done, in progress, or not started yet.",
+    columnLabel: "RESUMES GRADED",
+    badge: "ROUND 1 · GRADER",
+    emptyLabel: "No graders yet.",
+  },
+  {
+    id: "frq",
+    label: "FRQ grading",
+    endpoint: "frq-grader-scoreboard",
+    eyebrow: "FRQ grader roster",
+    heading: "FRQ ",
+    headingAccent: "scoreboard",
+    description: "FRQ grading progress — search by name or email, or use the status chips to focus on who is done, in progress, or not started yet.",
+    columnLabel: "FRQ GRADED",
+    badge: "FRQ · GRADER",
+    emptyLabel: "No FRQ graders yet.",
+  },
+];
+
 function graderMatchesStatusFilter(grader, filterId) {
   const n = grader.reviewCount ?? 0;
   const expected = Number(grader.expectedReviews) || 0;
@@ -94,7 +121,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4 }) {
   );
 }
 
-function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4 }) {
+function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge = "ROUND 1 · GRADER" }) {
   useEffect(() => {
     function onKeyDown(event) {
       if (event.key === "Escape") onClose();
@@ -158,7 +185,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4 }) {
           <div style={{ background: cardGreen, padding: "18px 18px 16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
               <span style={{ background: "#04342C", color: "#9FE1CB", fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 20, letterSpacing: "0.04em" }}>
-                ROUND 1 · GRADER
+                {badge}
               </span>
               <span style={{ background: "rgba(255,255,255,0.1)", color: cardLime, fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 20, border: `1px solid ${cardMint}`, textTransform: "uppercase" }}>
                 {grader.role}
@@ -233,36 +260,58 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4 }) {
 
 export default function GraderScoreboardPage() {
   const authedFetch = useAuthedFetch();
+  const [mode, setMode] = useState(SCOREBOARD_MODES[0].id);
   const [data, setData] = useState({ stats: null, graders: [], metrics: [], maxPerCategory: 4, context: null });
   const [loading, setLoading] = useState(true);
   const [selectedGrader, setSelectedGrader] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const activeMode = useMemo(
+    () => SCOREBOARD_MODES.find(m => m.id === mode) ?? SCOREBOARD_MODES[0],
+    [mode]
+  );
+
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchGraders() {
+      setLoading(true);
       try {
-        const res = await authedFetch(`${API}/grader-scoreboard`);
+        const res = await authedFetch(`${API}/${activeMode.endpoint}`);
         if (res.ok) {
           const json = await res.json();
-          setData(json);
+          if (!cancelled) setData(json);
         }
       } catch (err) {
         console.error("Failed to load grader scoreboard:", err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     fetchGraders();
-  }, [authedFetch]);
+    return () => {
+      cancelled = true;
+    };
+  }, [authedFetch, activeMode.endpoint]);
+
+  function handleModeChange(nextMode) {
+    if (nextMode === mode) return;
+    setMode(nextMode);
+    setSelectedGrader(null);
+    setStatusFilter("all");
+    setSearchQuery("");
+  }
 
   const graders = useMemo(() => data.graders ?? [], [data.graders]);
   const metrics = useMemo(() => data.metrics ?? [], [data.metrics]);
   const maxPerCategory = data.maxPerCategory ?? 4;
   const scoreboardLabel = data.context?.cycle && data.context?.round
     ? `${data.context.cycle.name} · ${data.context.round.name}`
-    : "Grader scoreboard";
+    : data.context?.cycle
+      ? `${data.context.cycle.name} · ${activeMode.label}`
+      : `${activeMode.label} scoreboard`;
 
   const filteredGraders = useMemo(
     () => filterGraders(graders, statusFilter, searchQuery),
@@ -283,20 +332,49 @@ export default function GraderScoreboardPage() {
       <Topbar phaseLabel={scoreboardLabel} activeLabel="Leaderboard" rightSlot={<></>} />
 
       <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", gap: 8 }}>
+        {SCOREBOARD_MODES.map(m => {
+          const active = m.id === mode;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => handleModeChange(m.id)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                cursor: "pointer",
+                padding: "9px 18px",
+                borderRadius: 8,
+                background: active ? css.greenDark : css.cardWhite,
+                color: active ? "#FFF" : css.textDark,
+                border: `1px solid ${active ? css.greenDark : css.borderLight}`,
+                fontSize: 13,
+                fontWeight: 700,
+                fontFamily: "'DM Sans', sans-serif",
+                boxShadow: active ? "0 2px 12px rgba(40, 98, 65, 0.1)" : "0 1px 2px rgba(0,0,0,0.04)",
+                transition: "border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease",
+              }}
+            >
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
         <div style={{ maxWidth: 640, flex: "1 1 260px", minWidth: 0 }}>
           <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>
-            Spring 2025 · Grader roster
+            Spring 2025 · {activeMode.eyebrow}
           </p>
           <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
             <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${css.greenDark} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
-                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: css.textDark }}>Grader </span>
-                <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>scoreboard</span>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: css.textDark }}>{activeMode.heading}</span>
+                <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>{activeMode.headingAccent}</span>
               </h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
-                Round 1 grading progress — search by name or email, or use the status chips to focus on who is done, in progress, or not started yet.
+                {activeMode.description}
                 {hasActiveNarrowing && (
                   <span style={{ display: "block", marginTop: 8, fontSize: 13, color: css.greenDark, fontWeight: 600 }}>
                     Showing {filteredGraders.length} of {graders.length} graders
@@ -417,14 +495,14 @@ export default function GraderScoreboardPage() {
         <div style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "16px 20px", borderBottom: `2px solid ${css.borderLight}`, color: css.textGray, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
           <div>#</div>
           <div>GRADER</div>
-          <div>RESUMES GRADED</div>
+          <div>{activeMode.columnLabel}</div>
           <div style={{ textAlign: "right" }}>ACTIONS</div>
         </div>
 
         {loading && <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading graders...</div>}
 
         {!loading && graders.length === 0 && (
-          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No graders yet.</div>
+          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>{activeMode.emptyLabel}</div>
         )}
 
         {!loading && graders.length > 0 && filteredGraders.length === 0 && (
@@ -503,6 +581,7 @@ export default function GraderScoreboardPage() {
           grader={selectedGrader}
           metrics={metrics}
           maxPerCategory={maxPerCategory}
+          badge={activeMode.badge}
           onClose={() => setSelectedGrader(null)}
         />
       )}
