@@ -142,7 +142,7 @@ function computeNormalizedScore(scores, snapshot) {
   if (!Number.isFinite(maxScore) || maxScore <= 0) return null;
   const metrics = snapshot?.metrics || Object.keys(scores || {});
   const raw = computeRawScore(scores, metrics);
-  return Number(((raw / maxScore) * 100).toFixed(2));
+  return Number(Math.min(100, (raw / maxScore) * 100).toFixed(2));
 }
 
 function getMetricsFromRubricConfig(rubricConfig) {
@@ -156,7 +156,7 @@ function getMetricsFromRubricConfig(rubricConfig) {
 
 function getLegacyNormalizedScore(scores) {
   const raw = computeRawScore(scores);
-  return Number(((raw / 24) * 100).toFixed(2));
+  return Number(Math.min(100, (raw / 24) * 100).toFixed(2));
 }
 
 /** Cosmetic % derived from raw rubric scores — never treat as source of truth. */
@@ -164,7 +164,7 @@ function computeNormalizedFromAggregate(aggregateScore, maxScore) {
   const raw = Number(aggregateScore);
   const max = Number(maxScore);
   if (!Number.isFinite(raw) || !Number.isFinite(max) || max <= 0) return null;
-  return Number(((raw / max) * 100).toFixed(1));
+  return Number(Math.min(100, (raw / max) * 100).toFixed(1));
 }
 
 function computeReviewNormalizedFromScores(review, options = {}) {
