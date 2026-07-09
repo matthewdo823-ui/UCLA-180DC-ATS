@@ -38,7 +38,11 @@ async function streamViaDriveApi(fileId, res, fallbackContentType) {
     return true;
   } catch (err) {
     const status = err?.code ?? err?.response?.status;
-    if (status === 404 || status === 403) return false;
+    // 401/unauthorized_client means the service account isn't authorized for
+    // domain-wide delegation of the requested scopes — fall back to the
+    // public URL rather than failing the whole request, since most of these
+    // Drive files are link-shareable anyway.
+    if (status === 404 || status === 403 || status === 401) return false;
     throw err;
   }
 }
