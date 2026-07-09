@@ -212,8 +212,16 @@ async function getDriveClient() {
 
   const impersonate = getDriveImpersonateUser();
   if (impersonate) {
+    // Pass email/key explicitly (instead of keyFile) so the JWT's `iss` claim
+    // is populated at construction time. google-auth-library's JWT client sets
+    // `iss` from `email` in its constructor, but only loads `email` from
+    // `keyFile` lazily on first token request — with keyFile-only options,
+    // `iss` is permanently locked to `undefined`, and Google rejects the
+    // resulting token with "invalid_grant: Invalid issuer: null".
+    const { client_email: email, private_key: key } = JSON.parse(fs.readFileSync(keyFile, "utf8"));
     const auth = new JWT({
-      keyFile,
+      email,
+      key,
       scopes: SCOPES_READ,
       subject: impersonate,
     });
