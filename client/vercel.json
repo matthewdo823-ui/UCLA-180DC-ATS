@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/forms-sync",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
