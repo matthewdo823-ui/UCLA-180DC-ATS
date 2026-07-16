@@ -17,8 +17,9 @@ google-credentials.json
 **/google-service-account*.json
 server/gcp/my-service-account.json
 
-# Local editor settings (may contain DB creds, personal paths, etc.)
-.vscode/settings.json
+# Editor config (may contain local DB credentials)
+.vscode/
+
 # Hayden Stuff
 .claude/
 AUDIT.md
