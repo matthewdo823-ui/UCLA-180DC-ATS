@@ -19,3 +19,6 @@ server/gcp/my-service-account.json
 
 # Local editor settings (may contain DB creds, personal paths, etc.)
 .vscode/settings.json
+# Hayden Stuff
+.claude/
+AUDIT.md
