@@ -5,6 +5,7 @@ import DashboardPage from "./pages/DashboardPage/DashboardPage";
 import FlaggedCandidatesPage from "./pages/FlaggedCandidatesPage/FlaggedCandidatesPage";
 import CycleManagementPage from "./pages/CycleManagementPage/CycleManagementPage";
 import UserManagementPage from "./pages/UserManagementPage/UserManagementPage";
+import AssignmentsPage from "./pages/AssignmentsPage/AssignmentsPage";
 import GraderScoreboardPage from "./pages/GraderScoreboardPage/GraderScoreboardPage";
 import LoginPage from "./pages/LoginPage/LoginPage";
 import NoAccessPage from "./pages/NoAccessPage/NoAccessPage";
@@ -111,6 +112,14 @@ function AppShell() {
             element={(
               <ProtectedRoute allowedRoles={["admin"]}>
                 <CycleManagementPage />
+              </ProtectedRoute>
+            )}
+          />
+          <Route
+            path="/assignments"
+            element={(
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AssignmentsPage />
               </ProtectedRoute>
             )}
           />
