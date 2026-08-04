@@ -65,6 +65,13 @@ const usersIcon = (
   </svg>
 );
 
+const assignmentsIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 11l3 3L22 4"></path>
+    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+  </svg>
+);
+
 const baseMenuLinks = [
   { path: "/", label: "Home", icon: homeIcon },
   { path: "/grading", label: "Grading", icon: gradingIcon },
@@ -74,6 +81,7 @@ const baseMenuLinks = [
 
 const adminLinks = [
   { path: "/grader-scoreboard", label: "Graders", icon: gradersIcon },
+  { path: "/assignments", label: "Assignments", icon: assignmentsIcon },
   { path: "/cycle-management", label: "Cycles", icon: cyclesIcon },
   { path: "/flagged-candidates", label: "Flag / Refer", icon: flagsIcon },
   { path: "/user-management", label: "Team", icon: usersIcon },
