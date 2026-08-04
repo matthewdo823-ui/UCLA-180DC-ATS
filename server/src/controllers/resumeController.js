@@ -62,6 +62,9 @@ const {
     applyReviewOverridesToCandidates,
 } = require('../services/reviewOverrideService');
 const {
+    fetchPendingAssignedResumeIds,
+} = require('../services/assignmentService');
+const {
     FRQ_METRIC,
     FRQ_MAX_SCORE,
     mapFrqReviewRow,
@@ -330,6 +333,36 @@ async function getGradedByUserLookup(gradedByIds) {
     return lookup;
 }
 
+/**
+ * Resumes an admin pinned to this grader, in assignment order, skipping anything
+ * they already reviewed. Returns [] when nothing is assigned so the caller falls
+ * through to the shared priority queue — graders can't tell the two apart.
+ */
+async function fetchAssignedResumesForGrader({ gradedBy, cycleId, reviewedResumeIdSet }) {
+    if (!gradedBy) return [];
+
+    const pendingIds = await fetchPendingAssignedResumeIds({
+        graderId: gradedBy,
+        cycleId,
+        reviewedResumeIdSet,
+    });
+    if (!pendingIds.length) return [];
+
+    const { data, error } = await supabase
+        .from('resumes')
+        .select(`*,
+            candidates(year)
+        `)
+        .eq('cycle_id', cycleId)
+        .in('id', pendingIds);
+
+    if (error) throw error;
+
+    // Preserve assignment order; the .in() result comes back unordered.
+    const byId = new Map((data || []).map((row) => [row.id, row]));
+    return pendingIds.map((id) => byId.get(id)).filter(Boolean);
+}
+
 // Gets next resume row
 exports.getNextResume = async (req, res) => {
     const gradedBy = req.user?.user_id;
@@ -351,6 +384,30 @@ exports.getNextResume = async (req, res) => {
         reviewedResumeIds = [...new Set((reviewedRows || []).map((row) => row.resume_id).filter(Boolean))];
     }
     const reviewedResumeIdSet = new Set(reviewedResumeIds);
+
+    let assignedRows = [];
+    try {
+        assignedRows = await fetchAssignedResumesForGrader({
+            gradedBy,
+            cycleId: screening.cycle.id,
+            reviewedResumeIdSet,
+        });
+    } catch (assignmentError) {
+        return respondWithServerError(res, assignmentError, 'getNextResume assignments');
+    }
+
+    for (const row of assignedRows) {
+        if (!isGoogleDriveFileUrl(row.file_url)) {
+            console.warn(`[getNextResume] Skipping assigned resume ${row.id}: not a valid Google Drive URL`);
+            continue;
+        }
+
+        const fileID = extractDriveFileID(row.file_url);
+        return res.json({
+            ...row,
+            file_url: toDownloadURL(fileID),
+        });
+    }
 
     let query = supabase
         .from('resumes')
