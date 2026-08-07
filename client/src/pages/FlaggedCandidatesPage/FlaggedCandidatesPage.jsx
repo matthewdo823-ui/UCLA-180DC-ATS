@@ -3,7 +3,7 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import { API } from "../../constants/config";
-import { sansFont } from "../../theme/typography";
+import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatDate, getInitials } from "../../utils/format";
 const cardMint = "#1D9E75";
 
@@ -310,10 +310,7 @@ export default function FlaggedCandidatesPage() {
           <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
             <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${css.greenDark} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ margin: 0, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
-                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: css.textDark }}>{activeMode.heading}</span>
-                <span style={{ fontFamily: sansFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>{activeMode.headingAccent}</span>
-              </h1>
+              <h1 style={pageTitleStyle}>{activeMode.heading}{activeMode.headingAccent}</h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
                 {activeMode.description}
               </p>
