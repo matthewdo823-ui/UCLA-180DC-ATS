@@ -23,9 +23,21 @@ const {
 async function fetchCyclesWithFormConfig(client = supabase) {
   const { data, error } = await client
     .from("cycles")
-    .select("id, google_form_id, form_field_map, form_resume_question_id, form_headshot_question_id, status")
+    .select("id, google_form_id, form_field_map, form_resume_question_id, form_headshot_question_id, status, last_form_sync_at")
     .in("status", ["active", "draft"])
     .not("google_form_id", "is", null);
+
+  if (error) throw error;
+  return data || [];
+}
+
+/** All resume rows in a cycle with no candidate attached yet (manual/CSV imports awaiting a match). */
+async function fetchOrphanResumes(client, cycleId) {
+  const { data, error } = await client
+    .from("resumes")
+    .select("id, name")
+    .eq("cycle_id", cycleId)
+    .is("candidate_id", null);
 
   if (error) throw error;
   return data || [];
@@ -146,15 +158,119 @@ async function upsertCandidateAndResume(client, mapped, cycleId) {
 }
 
 /**
- * @param {{ cycleId: string, config: import('../utils/dataMapper').FormSyncConfig }} target
+ * Batched fast path for a page of already-mapped responses: one upsert for all
+ * candidates (relies on the full unique index on candidates(cycle_id, google_form_response_id),
+ * see sql/add_cycle_form_config.sql), then per-page batched reads for resumes so only the
+ * handful of rows that actually need a write hit the database individually.
+ *
+ * @param {import('@supabase/supabase-js').SupabaseClient} client
+ * @param {Array<{ candidateRow: object, resumeDerived: object }>} mappedRows
+ * @param {string} cycleId
+ * @param {Array<{ id: string, name: string }>} orphanResumes — mutated as orphans get claimed
+ */
+async function upsertCandidatesAndResumesBatch(client, mappedRows, cycleId, orphanResumes) {
+  const candidateRows = mappedRows.map((m) => ({ ...m.candidateRow, cycle_id: cycleId }));
+
+  const { data: upserted, error: upsertError } = await client
+    .from("candidates")
+    .upsert(candidateRows, { onConflict: "cycle_id,google_form_response_id" })
+    .select("id, google_form_response_id");
+  if (upsertError) throw upsertError;
+
+  const candidateIdByResponseId = new Map(
+    (upserted || []).map((row) => [row.google_form_response_id, row.id])
+  );
+
+  const resumeItems = [];
+  for (const { candidateRow, resumeDerived } of mappedRows) {
+    const candidateId = candidateIdByResponseId.get(candidateRow.google_form_response_id);
+    if (!candidateId) continue;
+
+    if (!resumeDerived.file_url) {
+      console.warn(
+        `[formsSync] No resume file URL for response ${candidateRow.google_form_response_id}; skipping resumes row.`
+      );
+      continue;
+    }
+    if (!isGoogleDriveFileUrl(resumeDerived.file_url)) {
+      console.warn(
+        `[formsSync] Resume URL is not a Google Drive link for response ${candidateRow.google_form_response_id}; skipping resumes row.`
+      );
+      continue;
+    }
+    resumeItems.push({ candidateId, resumeDerived });
+  }
+
+  if (!resumeItems.length) return;
+
+  const { data: existingResumes, error: existingError } = await client
+    .from("resumes")
+    .select("id, candidate_id")
+    .eq("cycle_id", cycleId)
+    .in("candidate_id", resumeItems.map((r) => r.candidateId));
+  if (existingError) throw existingError;
+
+  const existingResumeIdByCandidateId = new Map(
+    (existingResumes || []).map((row) => [row.candidate_id, row.id])
+  );
+
+  const toInsert = [];
+  const updates = [];
+
+  for (const { candidateId, resumeDerived } of resumeItems) {
+    const resumePayload = { name: resumeDerived.name, file_url: resumeDerived.file_url, cycle_id: cycleId };
+
+    const existingId = existingResumeIdByCandidateId.get(candidateId);
+    if (existingId) {
+      updates.push(
+        client.from("resumes").update({ ...resumePayload, candidate_id: candidateId }).eq("id", existingId)
+      );
+      continue;
+    }
+
+    const orphanIdx = orphanResumes.findIndex(
+      (o) => (o.name || "").toLowerCase() === (resumeDerived.name || "").toLowerCase()
+    );
+    if (orphanIdx !== -1) {
+      const [orphan] = orphanResumes.splice(orphanIdx, 1);
+      updates.push(
+        client.from("resumes").update({ ...resumePayload, candidate_id: candidateId }).eq("id", orphan.id)
+      );
+      continue;
+    }
+
+    toInsert.push({ candidate_id: candidateId, ...resumePayload });
+  }
+
+  if (toInsert.length) {
+    const { error: insertError } = await client.from("resumes").insert(toInsert);
+    if (insertError) throw insertError;
+  }
+
+  if (updates.length) {
+    const results = await Promise.all(updates);
+    const failed = results.find((r) => r.error);
+    if (failed) throw failed.error;
+  }
+}
+
+/**
+ * @param {{ cycleId: string, config: import('../utils/dataMapper').FormSyncConfig, lastSyncAt?: string|null }} target
  * @returns {Promise<{ processed: number, errors: number }>}
  */
 async function syncFormResponsesForCycle(target) {
-  const { cycleId, config } = target;
+  const { cycleId, config, lastSyncAt } = target;
   if (!cycleId) throw new Error("cycleId is required for form sync");
   if (!config?.formId) throw new Error("formId is required for form sync");
 
   const forms = await getFormsClient();
+
+  // Watermark taken before the fetch loop starts, so responses submitted while this run is
+  // in flight are simply picked up (idempotently) on the next tick instead of being skipped.
+  const syncStartedAt = new Date().toISOString();
+  const filter = lastSyncAt ? `timestamp >= ${new Date(lastSyncAt).toISOString()}` : undefined;
+
+  const orphanResumes = await fetchOrphanResumes(supabase, cycleId);
 
   let processed = 0;
   let errors = 0;
@@ -163,6 +279,7 @@ async function syncFormResponsesForCycle(target) {
   do {
     const res = await forms.forms.responses.list({
       formId: config.formId,
+      filter,
       pageToken: pageToken || undefined,
       pageSize: 500,
     });
@@ -170,25 +287,38 @@ async function syncFormResponsesForCycle(target) {
     const responses = res.data.responses || [];
     pageToken = res.data.nextPageToken;
 
+    const mappedRows = [];
     for (const response of responses) {
-      try {
-        const mapped = mapFormResponseToCandidate(response, config);
-        if (!mapped) {
-          console.warn("[formsSync] Skipping response without responseId");
-          continue;
+      const mapped = mapFormResponseToCandidate(response, config);
+      if (!mapped) {
+        console.warn("[formsSync] Skipping response without responseId");
+        continue;
+      }
+      mappedRows.push(mapped);
+    }
+
+    if (!mappedRows.length) continue;
+
+    try {
+      await upsertCandidatesAndResumesBatch(supabase, mappedRows, cycleId, orphanResumes);
+      processed += mappedRows.length;
+    } catch (e) {
+      console.error(`[formsSync] Batch upsert failed (cycle ${cycleId}), falling back to per-row:`, e.message || e);
+      for (const mapped of mappedRows) {
+        try {
+          await upsertCandidateAndResume(supabase, mapped, cycleId);
+          processed += 1;
+        } catch (rowError) {
+          errors += 1;
+          console.error(`[formsSync] Row error (cycle ${cycleId}):`, rowError.message || rowError);
         }
-        await upsertCandidateAndResume(supabase, mapped, cycleId);
-        processed += 1;
-      } catch (e) {
-        errors += 1;
-        console.error(`[formsSync] Row error (cycle ${cycleId}):`, e.message || e);
       }
     }
   } while (pageToken);
 
   await supabase
     .from("cycles")
-    .update({ last_form_sync_at: new Date().toISOString() })
+    .update({ last_form_sync_at: syncStartedAt })
     .eq("id", cycleId);
 
   return { processed, errors, cycleId };
@@ -202,7 +332,7 @@ async function syncFormResponsesToDatabase(cycleId) {
   if (cycleId) {
     const { data: cycle, error } = await supabase
       .from("cycles")
-      .select("id, google_form_id, form_field_map, form_resume_question_id, form_headshot_question_id")
+      .select("id, google_form_id, form_field_map, form_resume_question_id, form_headshot_question_id, last_form_sync_at")
       .eq("id", cycleId)
       .maybeSingle();
 
@@ -212,7 +342,7 @@ async function syncFormResponsesToDatabase(cycleId) {
     const config = cycleRowToFormConfig(cycle);
     if (!config) throw new Error("This cycle has no Google Form configured");
 
-    const result = await syncFormResponsesForCycle({ cycleId: cycle.id, config });
+    const result = await syncFormResponsesForCycle({ cycleId: cycle.id, config, lastSyncAt: cycle.last_form_sync_at });
     return {
       processed: result.processed,
       errors: result.errors,
@@ -229,7 +359,7 @@ async function syncFormResponsesToDatabase(cycleId) {
     for (const cycle of configuredCycles) {
       const config = cycleRowToFormConfig(cycle);
       if (!config) continue;
-      const result = await syncFormResponsesForCycle({ cycleId: cycle.id, config });
+      const result = await syncFormResponsesForCycle({ cycleId: cycle.id, config, lastSyncAt: cycle.last_form_sync_at });
       totalProcessed += result.processed;
       totalErrors += result.errors;
       cycleResults.push({
@@ -252,7 +382,18 @@ async function syncFormResponsesToDatabase(cycleId) {
     throw new Error("No active cycle — activate a cycle before syncing legacy form config");
   }
 
-  const result = await syncFormResponsesForCycle({ cycleId: activeCycleId, config: legacyConfig });
+  const { data: activeCycle, error: activeCycleError } = await supabase
+    .from("cycles")
+    .select("last_form_sync_at")
+    .eq("id", activeCycleId)
+    .maybeSingle();
+  if (activeCycleError) throw activeCycleError;
+
+  const result = await syncFormResponsesForCycle({
+    cycleId: activeCycleId,
+    config: legacyConfig,
+    lastSyncAt: activeCycle?.last_form_sync_at,
+  });
   return {
     processed: result.processed,
     errors: result.errors,

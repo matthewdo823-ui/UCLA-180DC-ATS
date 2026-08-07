@@ -1,8 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import { css } from "../../theme/colors";
+import { fetchDriveBlob } from "../../utils/driveFileCache";
 
-const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+// Code-split: pdfjs-dist is only pulled into a chunk when a PdfViewer actually mounts.
+let pdfjsLibPromise = null;
+function loadPdfjs() {
+  if (!pdfjsLibPromise) {
+    pdfjsLibPromise = import("pdfjs-dist").then((pdfjsLib) => {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/build/pdf.worker.min.mjs",
+        import.meta.url
+      ).toString();
+      return pdfjsLib;
+    });
+  }
+  return pdfjsLibPromise;
+}
 
 function PageCanvas({ page, viewport }) {
   const canvasRef = useRef(null);
@@ -28,15 +41,6 @@ export default function PdfViewer({ url, authToken }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load PDF.js script once
-  useEffect(() => {
-    if (window.pdfjsLib) return;
-    const script = document.createElement("script");
-    script.src = PDFJS_URL;
-    script.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER; };
-    document.head.appendChild(script);
-  }, []);
-
   useEffect(() => {
     if (!url) return;
     let cancelled = false;
@@ -46,19 +50,28 @@ export default function PdfViewer({ url, authToken }) {
       setError(null);
       setPages([]);
 
-      // Wait for PDF.js to load
-      let tries = 0;
-      while (!window.pdfjsLib && tries < 40) {
-        await new Promise(r => setTimeout(r, 100));
-        tries++;
+      let pdfjsLib;
+      try {
+        pdfjsLib = await loadPdfjs();
+      } catch {
+        if (!cancelled) { setError("PDF.js failed to load"); setLoading(false); }
+        return;
       }
-      if (!window.pdfjsLib) { setError("PDF.js failed to load"); setLoading(false); return; }
+      if (cancelled) return;
 
       try {
-        const source = authToken
-          ? { url, httpHeaders: { Authorization: `Bearer ${authToken}` } }
-          : url;
-        const pdf = await window.pdfjsLib.getDocument(source).promise;
+        // Fetch the bytes ourselves with the auth header rather than relying on
+        // PDF.js's httpHeaders — PDF.js doesn't reliably attach them to the
+        // request its worker/range logic issues, so the proxy rejects it with
+        // "Missing bearer token". This mirrors AuthedDriveImage's blob approach.
+        const blob = await fetchDriveBlob(url, authToken);
+        if (cancelled) return;
+        // A fresh ArrayBuffer per render: getDocument detaches the one it's given,
+        // which would corrupt the cached copy for every later viewing.
+        const data = await blob.arrayBuffer();
+        if (cancelled) return;
+
+        const pdf = await pdfjsLib.getDocument({ data }).promise;
         if (cancelled) return;
 
         const pageDataArr = [];

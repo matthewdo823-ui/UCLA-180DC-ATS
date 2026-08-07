@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { API } from "../../constants/config";
+import { fetchDriveBlob } from "../../utils/driveFileCache";
 
 export function isDriveUrl(url) {
   return typeof url === "string" && url.trim().length > 0 && /drive\.google\.com|docs\.google\.com/i.test(url);
@@ -9,12 +10,13 @@ export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback }) 
   const [src, setSrc] = useState(null);
   const [failed, setFailed] = useState(false);
 
+  // Derived rather than pushed into state from the effect: "this isn't a Drive
+  // URL" is knowable during render, so there's no reason to trigger a second
+  // render pass to discover it.
+  const canLoad = isDriveUrl(fileUrl) && Boolean(authToken);
+
   useEffect(() => {
-    if (!isDriveUrl(fileUrl) || !authToken) {
-      setFailed(true);
-      setSrc(null);
-      return undefined;
-    }
+    if (!canLoad) return undefined;
 
     let objectUrl;
     let cancelled = false;
@@ -22,11 +24,9 @@ export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback }) 
 
     (async () => {
       try {
-        const res = await fetch(proxyUrl, {
-          headers: { Authorization: `Bearer ${authToken}` },
-        });
-        if (!res.ok) throw new Error("Failed to load image");
-        const blob = await res.blob();
+        // The Blob itself lives in the shared cache; the object URL is per-mount
+        // so the existing revoke-on-unmount stays correct.
+        const blob = await fetchDriveBlob(proxyUrl, authToken);
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
         setSrc(objectUrl);
@@ -43,9 +43,9 @@ export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback }) 
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [authToken, fileUrl]);
+  }, [authToken, canLoad, fileUrl]);
 
-  if (src && !failed) {
+  if (canLoad && src && !failed) {
     return (
       <img
         src={src}

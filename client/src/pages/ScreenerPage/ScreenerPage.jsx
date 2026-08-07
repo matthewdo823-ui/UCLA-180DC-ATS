@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { isAdminRole } from "../../utils/auth";
 import { css } from "../../theme/colors";
 import { API } from "../../constants/config";
+import { invalidateAfterReview } from "../../lib/queryKeys";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { FRQ_MAX_SCORE } from "../../constants/frq";
 
@@ -68,6 +70,7 @@ function GradingModeToggle({ mode, onChange }) {
 export default function ScreenerPage() {
   const { token, user } = useAuth();
   const authedFetch = useAuthedFetch();
+  const queryClient = useQueryClient();
   const isAdmin = isAdminRole(user?.role);
   const { activeRound, loading: cycleLoading, error: cycleError, getYearRubric, phaseLabel, isResumeRound } = useActiveCycle();
 
@@ -329,6 +332,10 @@ export default function ScreenerPage() {
       }
       setEditingReviewId(null);
       await fetchMyReviews({ showLoading: false });
+      // This review changes the scoreboard, the dashboard counts and this
+      // grader's coverage — expire them so those pages don't serve a cached
+      // number that's now one review out of date.
+      invalidateAfterReview(queryClient);
     } catch (e) {
       console.warn("Could not save review:", e);
       return;
@@ -373,6 +380,7 @@ export default function ScreenerPage() {
       }
       setEditingReviewId(null);
       await fetchMyFrqReviews({ showLoading: false });
+      invalidateAfterReview(queryClient);
     } catch (e) {
       console.warn("Could not save FRQ grade:", e);
       return;

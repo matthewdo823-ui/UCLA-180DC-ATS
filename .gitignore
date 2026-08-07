@@ -11,14 +11,17 @@ client/node_modules/
 
 # Google Forms sync (secrets / local config)
 server/form-config.json
+# GCP service account keys — match anywhere in the tree, not just one folder
+**/*service-account*.json
 *-sa.json
 *.sa.json
 google-credentials.json
 **/google-service-account*.json
 server/gcp/my-service-account.json
 
-# Local editor settings (may contain DB creds, personal paths, etc.)
-.vscode/settings.json
+# Editor config (may contain local DB credentials)
+.vscode/
+
 # Hayden Stuff
 .claude/
 AUDIT.md

@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuthedFetch } from "../auth/AuthContext";
 import { API } from "../constants/config";
 import { isInterviewRoundType, isResumeScreenType } from "../constants/rounds";
+import { readJsonOrThrow, STALE } from "../lib/queryClient";
+import { qk } from "../lib/queryKeys";
 import { getRubricForYear } from "../utils/rubric";
 
 export function getGradingPath(activeRound) {
@@ -11,38 +14,23 @@ export function getGradingPath(activeRound) {
 
 export function useActiveCycle() {
   const authedFetch = useAuthedFetch();
-  const [cycle, setCycle] = useState(null);
-  const [rounds, setRounds] = useState([]);
-  const [activeRound, setActiveRound] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
+  const { data, isPending, error, refetch } = useQuery({
+    queryKey: qk.activeCycle(),
+    queryFn: async () => {
       const res = await authedFetch(`${API}/cycles/active`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Could not load active cycle");
-      }
-      const data = await res.json();
-      setCycle(data.cycle || null);
-      setRounds(Array.isArray(data.rounds) ? data.rounds : []);
-      setActiveRound(data.activeRound || null);
-    } catch (e) {
-      setCycle(null);
-      setRounds([]);
-      setActiveRound(null);
-      setError(e.message || "Could not load active cycle");
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch]);
+      return readJsonOrThrow(res, "Could not load active cycle");
+    },
+    staleTime: STALE.cycle,
+  });
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // On failure the previous shape returned empty values alongside the error, and
+  // callers destructure these unconditionally — so keep the same nulls rather
+  // than surfacing whatever partial data a failed refetch left behind.
+  const cycle = error ? null : data?.cycle || null;
+  const rounds = error ? [] : (Array.isArray(data?.rounds) ? data.rounds : []);
+  const activeRound = error ? null : data?.activeRound || null;
+  const loading = isPending;
 
   const getYearRubric = useCallback((yearRaw) => {
     const rubricConfig = activeRound?.rubricConfig || null;
@@ -63,8 +51,8 @@ export function useActiveCycle() {
     rounds,
     activeRound,
     loading,
-    error,
-    reload: load,
+    error: error ? error.message || "Could not load active cycle" : "",
+    reload: refetch,
     getYearRubric,
     phaseLabel,
     rubricConfig: activeRound?.rubricConfig || null,

@@ -27,6 +27,11 @@ app.use(cors({
     },
   }));
 
+// Liveness probe — intentionally cheap: no auth, no DB. Mounted synchronously
+// (not inside app.listen's callback) so an external keep-alive pinger can hit it
+// the instant the process boots. Used to stop Render's free tier from spinning down.
+app.get('/health', (_req, res) => res.status(200).json({ ok: true, ts: Date.now() }));
+
 // Gmail OAuth setup redirect (no auth — used only during npm run gmail-oauth-setup)
 app.get('/oauth2callback', (req, res) => {
   const code = String(req.query?.code || '').trim();
