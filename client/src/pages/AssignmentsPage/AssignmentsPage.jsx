@@ -3,7 +3,7 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-import { serifFont } from "../../theme/typography";
+import { sansFont } from "../../theme/typography";
 
 const CANDIDATE_FILTERS = [
   { value: "all", label: "All" },
@@ -170,7 +170,7 @@ export default function AssignmentsPage() {
 
       <div style={{ padding: "28px 32px 40px", maxWidth: 1320, margin: "0 auto" }}>
         <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontFamily: serifFont, fontSize: 28, fontWeight: 500, color: "#111", margin: "0 0 8px" }}>
+          <h1 style={{ fontFamily: sansFont, fontSize: 28, fontWeight: 500, color: "#111", margin: "0 0 8px" }}>
             Grading assignments
           </h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5, maxWidth: 720 }}>

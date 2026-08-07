@@ -3,7 +3,7 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-import { serifFont } from "../../theme/typography";
+import { sansFont } from "../../theme/typography";
 import { formatDate, formatNumber, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
@@ -177,7 +177,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
           ×
         </button>
 
-        <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", color: "#FFF", textAlign: "center", margin: "0 0 10px", flexShrink: 0 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "#FFF", textAlign: "center", margin: "0 0 10px", flexShrink: 0 }}>
           GRADER SUMMARY
         </p>
 
@@ -197,7 +197,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
                 {getInitials(grader.name)}
               </div>
               <div style={{ minWidth: 0 }}>
-                <p style={{ color: cardPale, fontSize: 18, fontFamily: serifFont, fontWeight: 600, margin: "0 0 3px", lineHeight: 1.15 }}>{grader.name}</p>
+                <p style={{ color: cardPale, fontSize: 18, fontFamily: sansFont, fontWeight: 600, margin: "0 0 3px", lineHeight: 1.15 }}>{grader.name}</p>
                 <p style={{ color: "#9FE1CB", fontSize: 12, margin: "0 0 2px" }}>{grader.email}</p>
                 <p style={{ color: "#5DCAA5", fontSize: 11, margin: 0 }}>
                   Last login: {formatDate(grader.lastLogin, { fallback: "Not yet" })}
@@ -208,13 +208,13 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
 
           <div style={{ background: cardPale, padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #DCE7D2" }}>
             <div>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 800, letterSpacing: "0.05em" }}>REVIEWS GRADED</p>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>REVIEWS GRADED</p>
               <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
                 {grader.reviewCount} <span style={{ fontSize: 14, color: "#3B6D11" }}>/ {grader.expectedReviews}</span>
               </p>
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 800, letterSpacing: "0.05em" }}>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>
                 {grader.progressScore}% COMPLETE
               </p>
               <ProgressTiles count={grader.reviewCount} expected={grader.expectedReviews} />
@@ -222,21 +222,21 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
           </div>
 
           <div style={{ padding: "14px 18px 4px" }}>
-            <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 800 }}>AVERAGE SCORES GIVEN</p>
+            <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 700 }}>AVERAGE SCORES GIVEN</p>
             {metrics.map(metric => (
               <CategoryRow key={metric} metric={metric} maxPerCategory={maxPerCategory} value={grader.categoryScores?.[metric]} />
             ))}
           </div>
 
           <div style={{ margin: "6px 18px 0", padding: "10px 12px", background: "#F8FAF6", border: "1px solid #E3E8DD", borderRadius: 8 }}>
-            <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.05em", margin: "0 0 5px", fontWeight: 800 }}>SUMMARY</p>
+            <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.05em", margin: "0 0 5px", fontWeight: 700 }}>SUMMARY</p>
             <p style={{ fontSize: 12, lineHeight: 1.45, color: css.textDark, margin: 0 }}>
               Average normalized score given: {formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%. Raw avg: {formatNumber(grader.averageScore)} pts. Latest grading activity: {formatDate(grader.latestReviewAt, { fallback: "Not yet" })}.
             </p>
           </div>
 
           <div style={{ padding: "12px 18px 18px", borderTop: "1px solid #EAEAEA", marginTop: 12 }}>
-            <p style={{ fontSize: 11, color: css.textGray, fontWeight: 800, letterSpacing: "0.05em", margin: "0 0 8px" }}>
+            <p style={{ fontSize: 11, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em", margin: "0 0 8px" }}>
               RECENT REVIEWS ({grader.reviews?.length ?? 0})
             </p>
             {(grader.reviews ?? []).slice(0, 5).map(review => (
@@ -245,7 +245,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
                   <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{review.resumeName}</p>
                   <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>{formatDate(review.submittedAt, { fallback: "Not yet" })}</p>
                 </div>
-                <div style={{ fontSize: 12, color: cardGreen, fontWeight: 800 }}>{formatNumber(review.normalizedScore ?? review.score)}%</div>
+                <div style={{ fontSize: 12, color: cardGreen, fontWeight: 700 }}>{formatNumber(review.normalizedScore ?? review.score)}%</div>
               </div>
             ))}
             {grader.reviews?.length === 0 && (
@@ -371,7 +371,7 @@ export default function GraderScoreboardPage() {
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
                 <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: css.textDark }}>{activeMode.heading}</span>
-                <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>{activeMode.headingAccent}</span>
+                <span style={{ fontFamily: sansFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>{activeMode.headingAccent}</span>
               </h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
                 {activeMode.description}
@@ -536,7 +536,7 @@ export default function GraderScoreboardPage() {
                 {getInitials(grader.name)}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                <span style={{ fontSize: 16, fontWeight: 500, fontFamily: serifFont, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{grader.name}</span>
+                <span style={{ fontSize: 16, fontWeight: 500, fontFamily: sansFont, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{grader.name}</span>
                 <span style={{ fontSize: 13, color: "#888", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textTransform: "capitalize" }}>
                   {[grader.role, grader.email].filter(Boolean).join(" · ")}
                 </span>
@@ -544,7 +544,7 @@ export default function GraderScoreboardPage() {
             </div>
 
             <div>
-              <div style={{ color: progressColor(grader.progressScore), fontSize: 18, fontFamily: serifFont, fontWeight: 600 }}>
+              <div style={{ color: progressColor(grader.progressScore), fontSize: 18, fontFamily: sansFont, fontWeight: 600 }}>
                 {grader.reviewCount} / {grader.expectedReviews}
               </div>
               <div style={{ fontSize: 11, color: css.textGray }}>

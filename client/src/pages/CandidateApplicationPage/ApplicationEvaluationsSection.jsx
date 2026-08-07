@@ -20,7 +20,7 @@ export default function ApplicationEvaluationsSection({ scoring }) {
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
                 <div>
-                  <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
+                  <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
                     Normalized score
                   </p>
                   <p style={{ margin: 0, fontSize: 26, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>

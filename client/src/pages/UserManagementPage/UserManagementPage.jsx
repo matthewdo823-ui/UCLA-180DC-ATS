@@ -3,7 +3,7 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-import { serifFont } from "../../theme/typography";
+import { sansFont } from "../../theme/typography";
 import { displayName, formatDate } from "../../utils/format";
 const ASSIGNABLE_ROLES = [
   { value: "member", label: "Member" },
@@ -27,7 +27,7 @@ function RoleBadge({ role }) {
       ...roleBadgeStyle(role),
       borderRadius: 999,
       fontSize: 11,
-      fontWeight: 800,
+      fontWeight: 700,
       padding: "4px 10px",
       letterSpacing: "0.04em",
       textTransform: "uppercase",
@@ -112,7 +112,7 @@ export default function UserManagementPage() {
 
       <div style={{ padding: "28px 32px 40px", maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: serifFont, fontSize: 28, fontWeight: 500, color: "#111", margin: "0 0 8px" }}>
+          <h1 style={{ fontFamily: sansFont, fontSize: 28, fontWeight: 500, color: "#111", margin: "0 0 8px" }}>
             Team roles
           </h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
@@ -265,7 +265,7 @@ const thStyle = {
   textAlign: "left",
   padding: "14px 18px",
   fontSize: 11,
-  fontWeight: 800,
+  fontWeight: 700,
   color: css.textGray,
   letterSpacing: "0.05em",
   textTransform: "uppercase",

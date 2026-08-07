@@ -12,7 +12,7 @@ export default function DetailField({ label, value, href }) {
 
   return (
     <div style={{ minWidth: 0 }}>
-      <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: css.textGray }}>
+      <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: css.textGray }}>
         {label}
       </p>
       <p style={{ margin: 0, fontSize: 14, lineHeight: 1.45 }}>{content}</p>

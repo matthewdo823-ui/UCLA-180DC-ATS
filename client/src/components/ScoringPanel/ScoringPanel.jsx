@@ -43,7 +43,7 @@ export default function ScoringPanel({
             boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
           }}
         >
-          <div style={{ fontSize: 11, fontWeight: 800, color: css.greenDark, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: css.greenDark, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 8 }}>
             {rubric.label} rubric
           </div>
           <img
@@ -56,7 +56,7 @@ export default function ScoringPanel({
 
       <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: "20px 24px", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: css.greenDark, letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: css.greenDark, letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 14 }}>⚖️</span>
             SCORING RUBRIC
           </div>
@@ -88,7 +88,7 @@ export default function ScoringPanel({
 
       <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: "20px 24px", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: css.greenDark, letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: css.greenDark, letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 14 }}>📝</span>
             NOTES
           </div>
