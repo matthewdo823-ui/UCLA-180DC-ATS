@@ -4,6 +4,23 @@ const { getDriveClient } = require('./googleForm');
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+// A Drive file's contents at a given file ID are effectively immutable for us —
+// applicants upload a resume once and a re-upload lands under a new file ID (and
+// therefore a new proxy URL). Letting the browser cache the bytes turns repeat
+// views — reopening the resume modal, navigating back to a candidate, React
+// StrictMode's double mount in dev — into zero network calls, which matters a lot
+// because every miss is a round trip through us to Google.
+// `private` keeps these out of shared caches: the response was authorized for one
+// staff member's token and must not be served to anyone else by a proxy.
+const FILE_CACHE_CONTROL = 'private, max-age=86400';
+
+// Only ever called once we have real file bytes to send — never on an error path,
+// so a 404/502 can't get baked into the browser cache for a day.
+function setFileHeaders(res, contentType) {
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Cache-Control', FILE_CACHE_CONTROL);
+}
+
 function isHtmlContentType(contentType) {
   return String(contentType || '').toLowerCase().includes('text/html');
 }
@@ -20,7 +37,15 @@ function driveAccessError(message, code = 'DRIVE_INACCESSIBLE') {
 }
 
 async function streamViaDriveApi(fileId, res, fallbackContentType) {
-  const drive = await getDriveClient();
+  let drive;
+  try {
+    drive = await getDriveClient();
+  } catch (err) {
+    // Auth/key-file/delegation failure — don't 502 the whole request; fall back
+    // to the unauthenticated public-URL path, which works for link-shared files.
+    console.warn('[driveStream] getDriveClient failed, falling back to public URL:', err.message);
+    return false;
+  }
   if (!drive) return false;
 
   try {
@@ -33,7 +58,7 @@ async function streamViaDriveApi(fileId, res, fallbackContentType) {
       { fileId, alt: 'media', supportsAllDrives: true },
       { responseType: 'stream' }
     );
-    res.setHeader('Content-Type', meta?.mimeType || fallbackContentType);
+    setFileHeaders(res, meta?.mimeType || fallbackContentType);
     stream.pipe(res);
     return true;
   } catch (err) {
@@ -100,7 +125,7 @@ function pipeStreamWithHtmlGuard(readable, res, contentType) {
           reject(driveAccessError('Drive file is not publicly accessible'));
           return;
         }
-        res.setHeader('Content-Type', contentType);
+        setFileHeaders(res, contentType);
       }
       res.write(chunk);
     });

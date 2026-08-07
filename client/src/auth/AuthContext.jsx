@@ -1,8 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { API } from "../constants/config";
 import { isStaffRole } from "../utils/auth";
+import { queryClient } from "../lib/queryClient";
+import { clearDriveFileCache } from "../utils/driveFileCache";
 
 const TOKEN_STORAGE_KEY = "resume_screener_jwt";
+const USER_STORAGE_KEY = "resume_screener_user";
 
 const AuthContext = createContext(null);
 
@@ -18,6 +21,23 @@ function storeToken(token) {
   }
 }
 
+function getStoredUser() {
+  try {
+    const raw = localStorage.getItem(USER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeUser(user) {
+  if (user) {
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(USER_STORAGE_KEY);
+  }
+}
+
 function formatAuthError(err) {
   if (err instanceof TypeError && err.message === "Failed to fetch") {
     return new Error("Cannot reach the API server. Make sure the backend is running (cd server && npm start).");
@@ -27,14 +47,23 @@ function formatAuthError(err) {
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(getStoredToken);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(Boolean(token));
+  const [user, setUser] = useState(getStoredUser);
+  // Optimistic auth: if we have a cached identity, render immediately and verify
+  // /auth/me in the background. Only show the blocking loader when we hold a token
+  // but have no cached user to render with (e.g. first load after a fresh login on
+  // another device, or cleared user cache).
+  const [loading, setLoading] = useState(() => Boolean(getStoredToken()) && !getStoredUser());
 
   const logout = useCallback(() => {
     storeToken(null);
+    storeUser(null);
     setToken(null);
     setUser(null);
     setLoading(false);
+    // Cached responses were authorized for the session that just ended — drop
+    // them so the next sign-in on this browser starts from the server.
+    queryClient.clear();
+    clearDriveFileCache();
   }, []);
 
   useEffect(() => {
@@ -47,7 +76,9 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      setLoading(true);
+      // Note: we don't force loading=true here. The initial state already blocks
+      // when there's nothing cached; when a user is cached this runs as a silent
+      // background revalidation so the app stays interactive on cold-server loads.
       try {
         const res = await fetch(`${API}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -58,7 +89,10 @@ export function AuthProvider({ children }) {
         }
 
         const data = await res.json();
-        if (!cancelled) setUser(data.user);
+        if (!cancelled) {
+          setUser(data.user);
+          storeUser(data.user);
+        }
       } catch (err) {
         console.warn("Could not load current user:", err);
         if (!cancelled) logout();
@@ -91,6 +125,7 @@ export function AuthProvider({ children }) {
     }
 
     storeToken(data.token);
+    storeUser(data.user);
     setToken(data.token);
     setUser(data.user);
 
@@ -115,6 +150,7 @@ export function AuthProvider({ children }) {
     }
 
     storeToken(data.token);
+    storeUser(data.user);
     setToken(data.token);
     setUser(data.user);
 

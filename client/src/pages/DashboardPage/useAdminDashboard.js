@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { isInterviewRoundType } from "../../constants/rounds";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
+import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
 
 function mapScoreboardToPipeline(scoreboardData, interviewData) {
   const activeRound = scoreboardData?.context?.activeRound;
@@ -69,97 +73,122 @@ function mapGraderScoreboard(graderData) {
 
 export default function useAdminDashboard(enabled = true) {
   const authedFetch = useAuthedFetch();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
-    if (!enabled) return;
-    setLoading(true);
-    setError("");
+  // Four independent cache entries rather than one composite blob. Each is keyed
+  // and revalidated on its own, and two of them (/scoreboard, /grader-scoreboard)
+  // are the same entries the scoreboard and grader pages read — so navigating
+  // between those pages and the dashboard serves from cache instead of refetching.
+  const scoreboardQuery = useQuery({
+    ...scoreboardQueryOptions(authedFetch),
+    enabled,
+  });
 
-    try {
-      const scoreboardRes = await authedFetch(`${API}/scoreboard`);
-      if (!scoreboardRes.ok) {
-        const body = await scoreboardRes.json().catch(() => ({}));
-        throw new Error(body.error || "Could not load scoreboard data");
+  const adminQuery = useQuery({
+    queryKey: qk.adminDashboard(),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/dashboard/admin`);
+      return readJsonOrThrow(res, "Could not load admin dashboard");
+    },
+    enabled,
+    staleTime: STALE.dashboard,
+  });
+
+  const graderQuery = useQuery({
+    queryKey: qk.graderScoreboard(),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/grader-scoreboard`);
+      return readJsonOrThrow(res, "Could not load grader coverage");
+    },
+    enabled,
+    staleTime: STALE.dashboard,
+  });
+
+  const isInterview = isInterviewRoundType(
+    scoreboardQuery.data?.context?.activeRound?.type
+  );
+
+  // Dependent query: we can't know whether interview stats are relevant until the
+  // scoreboard tells us the round type, so this stays a second hop — but only
+  // ever runs for interview rounds.
+  const interviewQuery = useQuery({
+    queryKey: qk.interviewCandidates(),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/interviews/candidates`);
+      return readJsonOrThrow(res, "Interview stats unavailable");
+    },
+    enabled: enabled && isInterview,
+    staleTime: STALE.dashboard,
+  });
+
+  // The scoreboard is the only hard dependency — the dashboard cannot render
+  // without it. The other three degrade to defaults exactly as before.
+  const error = scoreboardQuery.error
+    ? scoreboardQuery.error.message || "Could not load admin dashboard"
+    : "";
+
+  const loading =
+    enabled &&
+    (scoreboardQuery.isPending ||
+      adminQuery.isPending ||
+      graderQuery.isPending ||
+      (isInterview && interviewQuery.isPending));
+
+  const scoreboardData = scoreboardQuery.data;
+  const rawAdminData = adminQuery.data;
+  const graderData = graderQuery.data ?? null;
+  const interviewData = interviewQuery.data ?? null;
+
+  const data = useMemo(() => {
+    if (error || !scoreboardData) return null;
+
+    // Defaulted inside the memo so a fresh `{}` on each render doesn't defeat it.
+    const adminData = rawAdminData ?? {};
+
+    const pipeline = mapScoreboardToPipeline(scoreboardData, interviewData);
+    const graderSummary = graderData ? mapGraderScoreboard(graderData) : null;
+
+    const actionItems = (adminData.actionItems || []).map((item) => {
+      if (item.id === "awaiting-reviews" && pipeline.awaitingReviews != null) {
+        return { ...item, count: pipeline.awaitingReviews };
       }
-      const scoreboardData = await scoreboardRes.json();
-
-      const isInterview = isInterviewRoundType(scoreboardData?.context?.activeRound?.type);
-
-      const [adminRes, graderRes, interviewRes] = await Promise.all([
-        authedFetch(`${API}/dashboard/admin`),
-        authedFetch(`${API}/grader-scoreboard`),
-        isInterview ? authedFetch(`${API}/interviews/candidates`) : Promise.resolve(null),
-      ]);
-
-      let adminData = {};
-      if (adminRes.ok) {
-        adminData = await adminRes.json();
+      if (item.id === "undecided" && pipeline.undecidedCount != null) {
+        return { ...item, count: pipeline.undecidedCount };
       }
-
-      let graderData = null;
-      if (graderRes.ok) {
-        graderData = await graderRes.json();
+      if (item.id === "advance-emails" && pipeline.advanced != null) {
+        return { ...item, count: pipeline.advanced };
       }
+      return item;
+    });
 
-      let interviewData = null;
-      if (interviewRes?.ok) {
-        interviewData = await interviewRes.json();
-      } else if (isInterview && interviewRes && !interviewRes.ok) {
-        const body = await interviewRes.json().catch(() => ({}));
-        console.warn("Interview stats unavailable:", body.error || interviewRes.status);
-      }
+    return {
+      ...adminData,
+      actionItems,
+      context: {
+        ...adminData.context,
+        phaseLabel: scoreboardData?.context?.cycle && scoreboardData?.context?.activeRound
+          ? `${scoreboardData.context.cycle.name} · ${scoreboardData.context.activeRound.name}`
+          : scoreboardData?.context?.cycle
+            ? `${scoreboardData.context.cycle.name} · Between rounds`
+            : adminData.context?.phaseLabel || "Admin Dashboard",
+        activeRound: scoreboardData?.context?.activeRound || adminData.context?.activeRound || null,
+        nextRound: scoreboardData?.context?.nextRound || adminData.context?.nextRound || null,
+        allRounds: scoreboardData?.context?.allRounds || adminData.context?.allRounds || [],
+        cycle: scoreboardData?.context?.cycle || adminData.context?.cycle || null,
+        isInterviewRound: isInterview,
+        isResumeRound: !isInterview,
+      },
+      pipeline,
+      graderSummary,
+      graderLoadError: graderData ? null : "Could not load grader coverage",
+    };
+  }, [rawAdminData, error, graderData, interviewData, isInterview, scoreboardData]);
 
-      const pipeline = mapScoreboardToPipeline(scoreboardData, interviewData);
-      const graderSummary = graderData ? mapGraderScoreboard(graderData) : null;
+  const reload = useCallback(() => {
+    scoreboardQuery.refetch();
+    adminQuery.refetch();
+    graderQuery.refetch();
+    if (isInterview) interviewQuery.refetch();
+  }, [adminQuery, graderQuery, interviewQuery, isInterview, scoreboardQuery]);
 
-      const actionItems = (adminData.actionItems || []).map((item) => {
-        if (item.id === "awaiting-reviews" && pipeline.awaitingReviews != null) {
-          return { ...item, count: pipeline.awaitingReviews };
-        }
-        if (item.id === "undecided" && pipeline.undecidedCount != null) {
-          return { ...item, count: pipeline.undecidedCount };
-        }
-        if (item.id === "advance-emails" && pipeline.advanced != null) {
-          return { ...item, count: pipeline.advanced };
-        }
-        return item;
-      });
-
-      setData({
-        ...adminData,
-        actionItems,
-        context: {
-          ...adminData.context,
-          phaseLabel: scoreboardData?.context?.cycle && scoreboardData?.context?.activeRound
-            ? `${scoreboardData.context.cycle.name} · ${scoreboardData.context.activeRound.name}`
-            : scoreboardData?.context?.cycle
-              ? `${scoreboardData.context.cycle.name} · Between rounds`
-              : adminData.context?.phaseLabel || "Admin Dashboard",
-          activeRound: scoreboardData?.context?.activeRound || adminData.context?.activeRound || null,
-          nextRound: scoreboardData?.context?.nextRound || adminData.context?.nextRound || null,
-          allRounds: scoreboardData?.context?.allRounds || adminData.context?.allRounds || [],
-          cycle: scoreboardData?.context?.cycle || adminData.context?.cycle || null,
-          isInterviewRound: isInterview,
-          isResumeRound: !isInterview,
-        },
-        pipeline,
-        graderSummary,
-        graderLoadError: graderData ? null : "Could not load grader coverage",
-      });
-    } catch (err) {
-      setData(null);
-      setError(err?.message || "Could not load admin dashboard");
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch, enabled]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  return { data, loading, error, reload: load };
+  return { data, loading, error, reload };
 }

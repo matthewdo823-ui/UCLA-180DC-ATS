@@ -1549,6 +1549,18 @@ function sendDriveProxyError(res, err, label) {
         console.error(`Proxy error (${label}):`, err.message);
     }
 
+    // The failure can land mid-stream (we set headers and started piping before
+    // Drive cut us off), in which case there is no status left to send — just drop
+    // the connection so the client sees a truncated body rather than us throwing
+    // ERR_HTTP_HEADERS_SENT and taking down the request handler.
+    if (res.headersSent) {
+        return res.destroy();
+    }
+
+    // Never let a browser cache a failure: success responses carry a day-long
+    // Cache-Control, and without this an error could inherit heuristic caching.
+    res.setHeader('Cache-Control', 'no-store');
+
     if (err.code === 'INVALID_URL' || err.code === 'DRIVE_INACCESSIBLE') {
         return res.status(404).send(err.message);
     }
@@ -1559,7 +1571,12 @@ function sendDriveProxyError(res, err, label) {
     if (upstreamStatus === 403) {
         return res.status(404).send('Drive file is not publicly accessible');
     }
-    return res.status(502).send(`Error fetching ${label} from Drive`);
+    return res.status(502).json({
+        error: `Error fetching ${label} from Drive`,
+        detail: err.message,
+        code: err.code,
+        upstreamStatus,
+    });
 }
 
 // Reverse proxy for image streaming (streams drive image to frontend)
