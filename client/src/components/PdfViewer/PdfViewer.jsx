@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { css } from "../../theme/colors";
+import { fetchDriveBlob } from "../../utils/driveFileCache";
 
 // Code-split: pdfjs-dist is only pulled into a chunk when a PdfViewer actually mounts.
 let pdfjsLibPromise = null;
@@ -59,10 +60,18 @@ export default function PdfViewer({ url, authToken }) {
       if (cancelled) return;
 
       try {
-        const source = authToken
-          ? { url, httpHeaders: { Authorization: `Bearer ${authToken}` } }
-          : url;
-        const pdf = await pdfjsLib.getDocument(source).promise;
+        // Fetch the bytes ourselves with the auth header rather than relying on
+        // PDF.js's httpHeaders — PDF.js doesn't reliably attach them to the
+        // request its worker/range logic issues, so the proxy rejects it with
+        // "Missing bearer token". This mirrors AuthedDriveImage's blob approach.
+        const blob = await fetchDriveBlob(url, authToken);
+        if (cancelled) return;
+        // A fresh ArrayBuffer per render: getDocument detaches the one it's given,
+        // which would corrupt the cached copy for every later viewing.
+        const data = await blob.arrayBuffer();
+        if (cancelled) return;
+
+        const pdf = await pdfjsLib.getDocument({ data }).promise;
         if (cancelled) return;
 
         const pageDataArr = [];

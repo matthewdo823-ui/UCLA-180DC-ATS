@@ -1,0 +1,34 @@
+// Central registry of query keys.
+//
+// Keys live here rather than inline at each call site so that invalidation stays
+// honest: when grading submits a review, the scoreboard and dashboard counts are
+// immediately wrong, and the only way to reliably expire them is for the reader
+// and the invalidator to agree on the exact key. Hard-coded arrays scattered
+// across 15 files drift; this doesn't.
+//
+// Keys are hierarchical — invalidating ["scoreboard"] expires every round's
+// scoreboard, while ["scoreboard", roundId] expires just the one.
+
+export const qk = {
+  activeCycle: () => ["cycles", "active"],
+
+  scoreboard: (roundId = null) => ["scoreboard", roundId ?? "active"],
+  scoreboardRoot: () => ["scoreboard"],
+
+  adminDashboard: () => ["dashboard", "admin"],
+  graderDashboard: () => ["dashboard", "grader"],
+  dashboardRoot: () => ["dashboard"],
+
+  graderScoreboard: () => ["grader-scoreboard"],
+  interviewCandidates: () => ["interviews", "candidates"],
+};
+
+/**
+ * Everything that goes stale the moment a grader submits or edits a review.
+ * Call after any review mutation: `invalidateAfterReview(queryClient)`.
+ */
+export function invalidateAfterReview(queryClient) {
+  queryClient.invalidateQueries({ queryKey: qk.scoreboardRoot() });
+  queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() });
+  queryClient.invalidateQueries({ queryKey: qk.graderScoreboard() });
+}

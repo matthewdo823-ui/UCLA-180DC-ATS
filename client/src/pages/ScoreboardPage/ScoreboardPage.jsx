@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
+import { qk } from "../../lib/queryKeys";
+import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
 import { css } from "../../theme/colors";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
@@ -965,13 +968,16 @@ function rowIconBtnStyle(theme, primary) {
   };
 }
 
+// Stable identity matters: it's the fallback for `data` before the first fetch
+// resolves, and the memos below key off `data.candidates`.
+const EMPTY_SCOREBOARD = { stats: null, candidates: [], metrics: [], maxPerCategory: 4, context: null };
+
 export default function ScoreboardPage() {
   const navigate = useNavigate();
   const { user, isStaff } = useAuth();
   const authedFetch = useAuthedFetch();
+  const queryClient = useQueryClient();
   const isAdmin = isAdminRole(user?.role);
-  const [data, setData] = useState({ stats: null, candidates: [], metrics: [], maxPerCategory: 4, context: null });
-  const [loading, setLoading] = useState(true);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState(() => ({ ...defaultFilters }));
@@ -992,63 +998,64 @@ export default function ScoreboardPage() {
   const adminMenuRef = useRef(null);
   const rowRefs = useRef({});
   const pendingDecisionIdsRef = useRef(new Set());
+
+  const scoreboardKey = useMemo(() => qk.scoreboard(viewingRoundId), [viewingRoundId]);
+
+  // A background refresh can land while a decision is still saving. Without this,
+  // the server's not-yet-updated row would overwrite the optimistic one and the
+  // button would visibly snap back. Anything still in flight keeps its local value.
+  const mergeWithCached = useCallback((json) => {
+    if (pendingDecisionIdsRef.current.size === 0) return json;
+    const prev = queryClient.getQueryData(scoreboardKey);
+    const mergedCandidates = (json.candidates || []).map(c => {
+      if (!pendingDecisionIdsRef.current.has(c.id)) return c;
+      const local = (prev?.candidates || []).find(row => row.id === c.id);
+      return local ? { ...c, decision: local.decision } : c;
+    });
+    const counts = recomputeDecisionStats(mergedCandidates);
+    return {
+      ...json,
+      candidates: mergedCandidates,
+      stats: {
+        ...json.stats,
+        advanced: counts.advance,
+        hold: counts.hold,
+        rejected: counts.reject,
+        pending: counts.pending,
+      },
+    };
+  }, [queryClient, scoreboardKey]);
+
+  const scoreboardQuery = useQuery({
+    ...scoreboardQueryOptions(authedFetch, { roundId: viewingRoundId, mergeWithCached }),
+    // Deliberation is a live, multi-admin activity — everyone needs to see
+    // decisions as they land. Outside that mode the normal staleTime applies.
+    // A closed historical round can't change, so there's nothing to poll for.
+    refetchInterval: (query) => {
+      if (!deliberationMode || !isStaff) return false;
+      if (query.state.data?.context?.viewingHistorical === true) return false;
+      return 5000;
+    },
+  });
+
+  const data = scoreboardQuery.data ?? EMPTY_SCOREBOARD;
+  // Only a first load blocks the table; background revalidation keeps the
+  // existing rows on screen instead of flashing "Loading candidates…".
+  const loading = scoreboardQuery.isPending;
   const viewingHistorical = data.context?.viewingHistorical === true;
 
-  const fetchScoreboard = useCallback(async (opts = {}) => {
-    const silent = opts.silent === true;
-    const roundId = opts.roundId !== undefined ? opts.roundId : viewingRoundId;
-    if (!silent) setLoading(true);
-    try {
-      const query = roundId ? `?roundId=${encodeURIComponent(roundId)}` : "";
-      const res = await authedFetch(`${API}/scoreboard${query}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        if (!silent) {
-          setDecisionError(body.error || "Could not load scoreboard — is the API server running?");
-        }
-        return;
-      }
+  // Shim so the existing optimistic-update call sites keep their `setData(prev => …)`
+  // shape — the cache is now the source of truth instead of component state.
+  const setData = useCallback((updater) => {
+    queryClient.setQueryData(scoreboardKey, (prev) => (
+      typeof updater === "function" ? updater(prev ?? EMPTY_SCOREBOARD) : updater
+    ));
+  }, [queryClient, scoreboardKey]);
 
-      const json = await res.json();
-      const hasDecisionSupport = (json.candidates || []).length === 0
-        || Object.prototype.hasOwnProperty.call(json.candidates[0], "decision");
-      if (!hasDecisionSupport) {
-        setDecisionError(
-          "Deliberation API is missing on the server — restart it with the latest code (cd server && node index.js) or redeploy Render."
-        );
-      } else if (!silent) {
-        setDecisionError("");
-      }
-
-      setData(prev => {
-        if (!silent || pendingDecisionIdsRef.current.size === 0) return json;
-        const mergedCandidates = (json.candidates || []).map(c => {
-          if (!pendingDecisionIdsRef.current.has(c.id)) return c;
-          const local = (prev.candidates || []).find(row => row.id === c.id);
-          return local ? { ...c, decision: local.decision } : c;
-        });
-        const counts = recomputeDecisionStats(mergedCandidates);
-        return {
-          ...json,
-          candidates: mergedCandidates,
-          stats: {
-            ...json.stats,
-            advanced: counts.advance,
-            hold: counts.hold,
-            rejected: counts.reject,
-            pending: counts.pending,
-          },
-        };
-      });
-    } catch (err) {
-      console.error("Failed to load scoreboard:", err);
-      if (!silent) {
-        setDecisionError("Could not reach the API — check that the server is running on port 3000.");
-      }
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, [authedFetch, viewingRoundId]);
+  const fetchScoreboard = useCallback((opts = {}) => {
+    if (opts.silent !== true) setDecisionError("");
+    return queryClient.invalidateQueries({ queryKey: scoreboardKey });
+  }, [queryClient, scoreboardKey]);
 
   useEffect(() => {
     const timer = setTimeout(() => setSearchQuery(searchInput), 300);
@@ -1056,14 +1063,25 @@ export default function ScoreboardPage() {
   }, [searchInput]);
 
   useEffect(() => {
-    fetchScoreboard();
-  }, [fetchScoreboard]);
+    if (scoreboardQuery.error) {
+      setDecisionError(
+        scoreboardQuery.error.message
+        || "Could not reach the API — check that the server is running on port 3000."
+      );
+    }
+  }, [scoreboardQuery.error]);
 
   useEffect(() => {
-    if (!deliberationMode || viewingHistorical || !isStaff) return undefined;
-    const interval = setInterval(() => fetchScoreboard({ silent: true }), 5000);
-    return () => clearInterval(interval);
-  }, [deliberationMode, fetchScoreboard, isStaff, viewingHistorical]);
+    const candidates = scoreboardQuery.data?.candidates;
+    if (!candidates) return;
+    const hasDecisionSupport = candidates.length === 0
+      || Object.prototype.hasOwnProperty.call(candidates[0], "decision");
+    if (!hasDecisionSupport) {
+      setDecisionError(
+        "Deliberation API is missing on the server — restart it with the latest code (cd server && node index.js) or redeploy Render."
+      );
+    }
+  }, [scoreboardQuery.data]);
 
   useEffect(() => {
     if (!filtersOpen) return;
@@ -1198,7 +1216,7 @@ export default function ScoreboardPage() {
       pendingDecisionIdsRef.current.delete(candidate.id);
       setSavingDecisionId(null);
     }
-  }, [authedFetch, canEditDeliberations, deliberationMode]);
+  }, [authedFetch, canEditDeliberations, deliberationMode, setData]);
 
   const handleSignalUpdated = useCallback((update) => {
     setData(prev => ({
@@ -1231,7 +1249,7 @@ export default function ScoreboardPage() {
         referredByMe: true,
       };
     });
-  }, []);
+  }, [setData]);
 
   const handleAdvanceRound = useCallback(async () => {
     if (!isAdmin || !activeRound?.id || !canDeliberate) return;
@@ -1261,13 +1279,16 @@ export default function ScoreboardPage() {
       }
       setViewingRoundId(null);
       setDeliberationMode(false);
-      await fetchScoreboard({ roundId: null });
+      // Advancing a round moves every candidate — every round's scoreboard and
+      // the dashboard counts are now wrong, so expire the whole family.
+      await queryClient.invalidateQueries({ queryKey: qk.scoreboardRoot() });
+      queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() });
     } catch (err) {
       setDecisionError(err.message || "Could not advance to next round");
     } finally {
       setAdvanceRoundBusy(false);
     }
-  }, [activeRound?.id, activeRound?.name, authedFetch, canCloseRound, canDeliberate, fetchScoreboard, isAdmin, nextRound?.name, undecidedCount]);
+  }, [activeRound?.id, activeRound?.name, authedFetch, canCloseRound, canDeliberate, isAdmin, nextRound?.name, queryClient, undecidedCount]);
 
   const handleExport = useCallback((decision) => {
     setExportBusy(true);
@@ -1432,6 +1453,9 @@ export default function ScoreboardPage() {
     });
   }
 
+  // No explicit refetch on either of these: the round id is part of the query
+  // key, so changing it swaps to that round's cache entry automatically — and a
+  // round already viewed this session comes back instantly instead of refetching.
   const handleViewPastRound = useCallback((roundId) => {
     if (!roundId) return;
     setViewingRoundId(roundId);
@@ -1439,8 +1463,7 @@ export default function ScoreboardPage() {
     setFilters(f => ({ ...f, decision: "all" }));
     setFocusedCandidateId(null);
     setDecisionError("");
-    fetchScoreboard({ roundId });
-  }, [fetchScoreboard]);
+  }, []);
 
   const handleReturnToCurrentRound = useCallback(() => {
     setViewingRoundId(null);
@@ -1448,8 +1471,7 @@ export default function ScoreboardPage() {
     setFilters(f => ({ ...f, decision: "all" }));
     setFocusedCandidateId(null);
     setDecisionError("");
-    fetchScoreboard({ roundId: null });
-  }, [fetchScoreboard]);
+  }, []);
 
   useEffect(() => {
     if (viewingHistorical && !deliberationMode) {
