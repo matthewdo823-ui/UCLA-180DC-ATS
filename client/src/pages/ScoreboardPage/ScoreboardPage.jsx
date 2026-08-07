@@ -8,7 +8,7 @@ import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
 import { css } from "../../theme/colors";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
-import { sansFont } from "../../theme/typography";
+import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
 import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
@@ -1536,10 +1536,7 @@ export default function ScoreboardPage() {
           <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
             <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${t.accent} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ margin: 0, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
-                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: t.text }}>Candidate </span>
-                <span style={{ fontFamily: sansFont, fontSize: 32, fontWeight: 600, color: t.titleAccent }}>scoreboard</span>
-              </h1>
+              <h1 style={pageTitleStyle}>Candidate scoreboard</h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: t.textMuted, lineHeight: 1.5, maxWidth: 520 }}>
                 {deliberationMode ? (
                   viewingHistorical

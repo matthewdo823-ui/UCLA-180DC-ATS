@@ -10,7 +10,7 @@ import {
   validateRubricDraft,
 } from "../../utils/rubric";
 import { formatDate } from "../../utils/format";
-import { sansFont } from "../../theme/typography";
+import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatRoundTypeLabel, isResumeScreenType } from "../../constants/rounds";
 
 const CYCLE_STATUS_STYLE = {
@@ -775,7 +775,7 @@ export default function CycleManagementPage() {
 
       <div style={{ maxWidth: 960, margin: "0 auto", width: "100%", padding: "24px 24px 40px" }}>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: sansFont, fontSize: 30, margin: "0 0 8px", color: css.textDark }}>Cycle management</h1>
+          <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>Cycle management</h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
             Create recruiting cycles (e.g. Winter 26), link a Google Form per cycle, and manage rounds within each cycle.
             Only one cycle is active at a time. Close a round before activating the next. Archived cycles can be reactivated here.

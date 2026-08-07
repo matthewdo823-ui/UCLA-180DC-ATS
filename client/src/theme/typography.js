@@ -15,15 +15,14 @@ export const fontWeights = {
   bold: 700,
 };
 
-// Page-level heading (h1).
+// Page-level heading (h1). Typography only — callers set their own margins.
 export const pageTitleStyle = {
   fontFamily: sansFont,
   fontSize: 28,
-  fontWeight: 700,
+  fontWeight: 600,
   letterSpacing: "-0.02em",
   lineHeight: 1.2,
   color: css.textDark,
-  margin: 0,
 };
 
 // Small uppercase panel / section label.
