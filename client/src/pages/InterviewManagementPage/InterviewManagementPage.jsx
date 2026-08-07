@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
@@ -157,33 +160,27 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
 
 export default function InterviewManagementPage() {
   const authedFetch = useAuthedFetch();
+  const queryClient = useQueryClient();
   const { phaseLabel, activeRound, isInterviewRound, loading: cycleLoading, error: cycleError } = useActiveCycle();
-  const [data, setData] = useState({ candidates: [], stats: null, context: null });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
 
-  const loadCandidates = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await authedFetch(`${API}/interviews/candidates`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Could not load interview candidates");
-      }
-      setData(await res.json());
-    } catch (e) {
-      setError(e.message || "Could not load candidates");
-      setData({ candidates: [], stats: null, context: null });
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch]);
+  const enabled = !cycleLoading && isInterviewRound;
 
-  useEffect(() => {
-    if (!cycleLoading && isInterviewRound) loadCandidates();
-  }, [cycleLoading, isInterviewRound, loadCandidates]);
+  // Shares qk.interviewCandidates() with the admin dashboard, so navigating
+  // between the dashboard and this page reads from cache instead of refetching.
+  const query = useQuery({
+    queryKey: qk.interviewCandidates(),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/interviews/candidates`);
+      return readJsonOrThrow(res, "Could not load interview candidates");
+    },
+    enabled,
+    staleTime: STALE.dashboard,
+  });
+
+  const data = query.data ?? { candidates: [], stats: null, context: null };
+  const loading = enabled && query.isPending;
+  const error = query.error ? (query.error.message || "Could not load candidates") : "";
 
   const saveEvaluation = useCallback(async (payload) => {
     const res = await authedFetch(`${API}/interviews/evaluations`, {
@@ -195,8 +192,10 @@ export default function InterviewManagementPage() {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error || "Could not save evaluation");
     }
-    await loadCandidates();
-  }, [authedFetch, loadCandidates]);
+    // A decision changes this page's list and the dashboard pipeline stats.
+    queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() });
+    queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() });
+  }, [authedFetch, queryClient]);
 
   const filtered = useMemo(() => {
     const list = data.candidates || [];
