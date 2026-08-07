@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const resumeController = require('../controllers/resumeController');
 const demographicsController = require('../controllers/demographicsController');
+const assignmentController = require('../controllers/assignmentController');
 const { authenticateToken, requireRoles } = require('../middleware/authMiddleware');
 
 router.use(authenticateToken, requireRoles('admin', 'member'));
@@ -11,6 +12,10 @@ router.get('/frq-reviews', requireRoles('admin'), resumeController.listMyFrqRevi
 router.get('/frq-reviews/:reviewId/candidate', requireRoles('admin'), resumeController.getFrqReviewCandidate);
 router.post('/frq-reviews', requireRoles('admin'), resumeController.saveFrqReview);
 router.patch('/frq-reviews/:reviewId', requireRoles('admin'), resumeController.patchMyFrqReview);
+router.get('/assignments', requireRoles('admin'), assignmentController.getAssignmentBoard);
+router.post('/assignments', requireRoles('admin'), assignmentController.createAssignments);
+router.delete('/assignments', requireRoles('admin'), assignmentController.deleteAssignments);
+router.delete('/assignments/:assignmentId', requireRoles('admin'), assignmentController.deleteAssignmentById);
 router.get('/next-resume', resumeController.getNextResume);
 router.get('/resume/:id', resumeController.getResumeById);
 router.get('/reviews', resumeController.listMyReviews);
