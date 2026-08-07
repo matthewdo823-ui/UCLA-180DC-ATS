@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { css } from "../../theme/colors";
 import { formatRoundKind } from "../../constants/rounds";
 
@@ -18,7 +19,7 @@ export const sectionTitleStyle = {
   margin: "0 0 14px",
 };
 
-export function StatCard({ label, value, sub, accent, hero }) {
+export function StatCard({ label, value, sub, accent, hero, textValue }) {
   return (
     <div style={{
       background: css.cardWhite,
@@ -35,10 +36,13 @@ export function StatCard({ label, value, sub, accent, hero }) {
       </div>
       <div style={{
         marginTop: 8,
-        fontSize: hero ? 32 : 28,
+        // Text values (e.g. a round name) get a smaller size so they sit on one
+        // or two tidy lines instead of the oversized numeric treatment.
+        fontSize: textValue ? 20 : (hero ? 32 : 28),
         fontWeight: 700,
         color: accent || css.greenDark,
-        lineHeight: 1,
+        lineHeight: textValue ? 1.25 : 1,
+        wordBreak: "break-word",
       }}
       >
         {value}
@@ -46,95 +50,6 @@ export function StatCard({ label, value, sub, accent, hero }) {
       {sub ? (
         <div style={{ marginTop: 6, fontSize: 12, color: css.textGray }}>{sub}</div>
       ) : null}
-    </div>
-  );
-}
-
-export function StatusBanner({ context, pipeline, graderSummary, actionItems }) {
-  const chips = [];
-
-  if (context?.activeRound) {
-    chips.push({
-      label: `${context.activeRound.name} active`,
-      tone: "good",
-    });
-  } else if (context?.allRounds?.length) {
-    chips.push({ label: "Between rounds", tone: "warn" });
-  } else {
-    chips.push({ label: "No rounds configured", tone: "neutral" });
-  }
-
-  const criticalCount = actionItems?.filter((item) => item.severity === "critical").length || 0;
-  const warningCount = actionItems?.filter((item) => item.severity === "warning").length || 0;
-
-  if (criticalCount > 0) {
-    chips.push({ label: `${criticalCount} critical`, tone: "bad" });
-  }
-  if (warningCount > 0) {
-    chips.push({ label: `${warningCount} warning${warningCount === 1 ? "" : "s"}`, tone: "warn" });
-  }
-  if (pipeline?.awaitingReviews > 0) {
-    chips.push({ label: `${pipeline.awaitingReviews} awaiting review`, tone: "warn" });
-  }
-  if (pipeline?.undecidedCount > 0) {
-    chips.push({ label: `${pipeline.undecidedCount} undecided`, tone: "warn" });
-  }
-  if (graderSummary?.behindCount > 0) {
-    chips.push({
-      label: `${graderSummary.behindCount} grader${graderSummary.behindCount === 1 ? "" : "s"} behind`,
-      tone: "warn",
-    });
-  }
-
-  const allClear = chips.length === 1 && chips[0].tone === "good";
-  if (allClear) {
-    chips.push({ label: "All clear", tone: "good" });
-  }
-
-  const CHIP_STYLE = {
-    good: { bg: "rgba(29,158,117,0.10)", color: css.green, bd: "rgba(29,158,117,0.28)" },
-    warn: { bg: "rgba(239,159,39,0.10)", color: css.amber, bd: "rgba(239,159,39,0.28)" },
-    bad: { bg: "rgba(226,75,74,0.08)", color: css.red, bd: "rgba(226,75,74,0.22)" },
-    neutral: { bg: "rgba(107,114,128,0.08)", color: css.textGray, bd: "rgba(107,114,128,0.22)" },
-  };
-
-  return (
-    <div style={{
-      display: "flex",
-      flexWrap: "wrap",
-      gap: 8,
-      marginBottom: 24,
-      padding: "14px 18px",
-      background: css.cardWhite,
-      border: `1px solid ${css.borderLight}`,
-      borderRadius: 12,
-      boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-    }}
-    >
-      {chips.map((chip) => {
-        const style = CHIP_STYLE[chip.tone] || CHIP_STYLE.neutral;
-        return (
-          <span
-            key={chip.label}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              background: style.bg,
-              color: style.color,
-              border: `1px solid ${style.bd}`,
-              borderRadius: 999,
-              fontSize: 12,
-              fontWeight: 700,
-              padding: "5px 12px",
-              letterSpacing: "0.01em",
-            }}
-          >
-            <span style={{ fontSize: 8, lineHeight: 1 }}>●</span>
-            {chip.label}
-          </span>
-        );
-      })}
     </div>
   );
 }
@@ -255,90 +170,6 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
   );
 }
 
-const QUICK_LINK_ICONS = {
-  scoreboard: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-      <line x1="3" y1="9" x2="21" y2="9"></line>
-      <line x1="9" y1="21" x2="9" y2="9"></line>
-    </svg>
-  ),
-  graders: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-      <circle cx="9" cy="7" r="4"></circle>
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-    </svg>
-  ),
-  flags: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
-      <line x1="4" y1="22" x2="4" y2="15"></line>
-    </svg>
-  ),
-  cycles: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"></circle>
-      <polyline points="12 6 12 12 16 14"></polyline>
-    </svg>
-  ),
-  team: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-      <circle cx="12" cy="7" r="4"></circle>
-    </svg>
-  ),
-  demographics: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
-      <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
-    </svg>
-  ),
-};
-
-export function CompactQuickLinks({ actions, onNavigate }) {
-  return (
-    <div style={{
-      display: "flex",
-      flexWrap: "wrap",
-      gap: 8,
-      padding: "12px 14px",
-      background: css.cardWhite,
-      border: `1px solid ${css.borderLight}`,
-      borderRadius: 12,
-    }}
-    >
-      {actions.map((action) => (
-        <button
-          key={action.path}
-          type="button"
-          onClick={() => onNavigate(action.path)}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            background: "#F8FAFB",
-            border: `1px solid ${css.borderLight}`,
-            borderRadius: 999,
-            padding: "8px 14px",
-            cursor: "pointer",
-            fontFamily: "'DM Sans', sans-serif",
-            fontSize: 13,
-            fontWeight: 600,
-            color: css.textDark,
-          }}
-        >
-          <span style={{ color: css.greenDark, display: "flex" }}>
-            {QUICK_LINK_ICONS[action.iconKey]}
-          </span>
-          {action.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export const twoColumnGridStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
@@ -424,7 +255,7 @@ export function ActionItemList({ items, onNavigate }) {
                 border: `1px solid ${style.bd}`,
                 borderRadius: 999,
                 fontSize: 13,
-                fontWeight: 800,
+                fontWeight: 700,
                 padding: "4px 12px",
                 flexShrink: 0,
               }}
@@ -538,9 +369,9 @@ function getRoundPhaseMessage({ rounds, activeRound, nextRound }) {
 
 export function RoundTimeline({ rounds, activeRound, nextRound }) {
   const sorted = [...(rounds || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  const phase = getRoundPhaseMessage({ rounds: sorted, activeRound, nextRound });
 
   if (!sorted.length) {
+    const phase = getRoundPhaseMessage({ rounds: sorted, activeRound, nextRound });
     return (
       <div style={{ fontSize: 13, color: css.textGray }}>{phase.detail}</div>
     );
@@ -555,49 +386,36 @@ export function RoundTimeline({ rounds, activeRound, nextRound }) {
       boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
     }}
     >
-      <div style={{
-        background: phase.bg || "rgba(29,158,117,0.08)",
-        border: `1px solid ${phase.bd || css.borderLight}`,
-        borderRadius: 10,
-        padding: "14px 16px",
-        marginBottom: 18,
-      }}
-      >
-        <div style={{ fontSize: 15, fontWeight: 700, color: phase.accent || css.greenDark }}>
-          {phase.title}
-        </div>
-        <div style={{ fontSize: 13, color: css.textGray, marginTop: 6, lineHeight: 1.5 }}>
-          {phase.detail}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+      <div style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
         {sorted.map((round, index) => {
           const status = round.status || "draft";
           const style = ROUND_STATUS_STYLE[status] || ROUND_STATUS_STYLE.draft;
           const isCurrent = activeRound?.id === round.id;
 
           return (
-            <div key={round.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Fragment key={round.id}>
+              {/* flex:1 gives every round box an equal share of the row so the
+                  three sit evenly spaced across the full width. */}
               <div style={{
+                flex: 1,
+                minWidth: 0,
                 background: isCurrent ? style.bg : css.cardWhite,
                 border: `2px solid ${isCurrent ? style.color : style.bd}`,
                 borderRadius: 10,
                 padding: "10px 14px",
-                minWidth: 0,
                 boxShadow: isCurrent ? `0 0 0 3px ${style.bg}` : "none",
               }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ color: style.color, fontSize: 11, fontWeight: 800 }}>{style.icon}</span>
-                  <div>
+                  <span style={{ color: style.color, fontSize: 11, fontWeight: 700 }}>{style.icon}</span>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: isCurrent ? 700 : 600, color: css.textDark }}>
                       {round.name || formatRoundKind(round.type)}
                       {isCurrent ? (
                         <span style={{
                           marginLeft: 8,
                           fontSize: 10,
-                          fontWeight: 800,
+                          fontWeight: 700,
                           textTransform: "uppercase",
                           letterSpacing: "0.05em",
                           color: style.color,
@@ -615,46 +433,20 @@ export function RoundTimeline({ rounds, activeRound, nextRound }) {
               </div>
               {index < sorted.length - 1 ? (
                 <span style={{
+                  alignSelf: "center",
+                  flexShrink: 0,
                   color: sorted[index + 1]?.status === "draft" && status === "closed" ? css.amber : css.textGray,
                   fontSize: 16,
                   fontWeight: 700,
-                  padding: "0 2px",
                 }}
                 >
                   →
                 </span>
               ) : null}
-            </div>
+            </Fragment>
           );
         })}
       </div>
-    </div>
-  );
-}
-
-export function QuickActionGrid({ actions, onNavigate }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
-      {actions.map((action) => (
-        <button
-          key={action.path}
-          type="button"
-          onClick={() => onNavigate(action.path)}
-          style={{
-            background: css.cardWhite,
-            border: `1px solid ${css.borderLight}`,
-            borderRadius: 10,
-            padding: "14px 16px",
-            cursor: "pointer",
-            textAlign: "left",
-            fontFamily: "'DM Sans', sans-serif",
-            transition: "border-color 0.15s",
-          }}
-        >
-          <div style={{ fontSize: 18, marginBottom: 6 }}>{action.icon}</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: css.textDark }}>{action.label}</div>
-        </button>
-      ))}
     </div>
   );
 }

@@ -172,7 +172,7 @@ export default function ReviewOverrideSection({
   return (
     <div style={shellStyle}>
       {!embedded ? (
-        <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 800 }}>
+        <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 700 }}>
           ADMIN · OVERRIDE GRADE
         </p>
       ) : null}
@@ -185,7 +185,7 @@ export default function ReviewOverrideSection({
               display: "block",
               margin: "0 0 6px",
               fontSize: 10,
-              fontWeight: 800,
+              fontWeight: 700,
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               color: css.textGray,
@@ -229,7 +229,7 @@ export default function ReviewOverrideSection({
               display: "block",
               margin: "0 0 8px",
               fontSize: 10,
-              fontWeight: 800,
+              fontWeight: 700,
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               color: css.textGray,
@@ -278,7 +278,7 @@ export default function ReviewOverrideSection({
               display: "block",
               margin: "0 0 6px",
               fontSize: 10,
-              fontWeight: 800,
+              fontWeight: 700,
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               color: css.textGray,

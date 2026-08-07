@@ -8,7 +8,7 @@ import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
 import { css } from "../../theme/colors";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
-import { serifFont } from "../../theme/typography";
+import { sansFont } from "../../theme/typography";
 import { formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
 import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
@@ -720,7 +720,7 @@ function ScorecardModal({
           ×
         </button>
 
-        <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", color: "#FFF", textAlign: "center", margin: "0 0 10px", flexShrink: 0 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "#FFF", textAlign: "center", margin: "0 0 10px", flexShrink: 0 }}>
           {roundBanner}
         </p>
 
@@ -746,7 +746,7 @@ function ScorecardModal({
                 fontSize={17}
               />
               <div style={{ minWidth: 0 }}>
-                <p style={{ color: cardPale, fontSize: 18, fontFamily: serifFont, fontWeight: 600, margin: "0 0 3px", lineHeight: 1.15 }}>{candidate.name}</p>
+                <p style={{ color: cardPale, fontSize: 18, fontFamily: sansFont, fontWeight: 600, margin: "0 0 3px", lineHeight: 1.15 }}>{candidate.name}</p>
                 <p style={{ color: "#9FE1CB", fontSize: 12, margin: "0 0 2px" }}>{candidate.major || "Undeclared"}</p>
                 <p style={{ color: "#5DCAA5", fontSize: 11, margin: 0 }}>
                   {[candidate.email, candidate.phoneNumber].filter(Boolean).join(" · ") || "Contact not recorded"}
@@ -763,7 +763,7 @@ function ScorecardModal({
 
           <div style={{ background: cardPale, padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #DCE7D2" }}>
             <div>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 800, letterSpacing: "0.05em" }}>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>
                 {equalized ? "EQUALIZED" : "NORMALIZED"} SCORE
               </p>
               <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
@@ -781,13 +781,13 @@ function ScorecardModal({
               ) : null}
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 800, letterSpacing: "0.05em" }}>{metrics.length} CATEGORIES</p>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>{metrics.length} CATEGORIES</p>
               <ScoreTiles score={headlineScore} maxScore={100} />
             </div>
           </div>
 
           <div style={{ padding: "14px 18px 4px" }}>
-            <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 800 }}>CATEGORY BREAKDOWN</p>
+            <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 700 }}>CATEGORY BREAKDOWN</p>
             {metrics.map(metric => (
               <CategoryRow
                 key={metric}
@@ -801,7 +801,7 @@ function ScorecardModal({
 
           {latestNote && (
             <div style={{ margin: "6px 18px 0", padding: "10px 12px", background: "#F8FAF6", border: "1px solid #E3E8DD", borderRadius: 8 }}>
-              <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.05em", margin: "0 0 5px", fontWeight: 800 }}>LATEST NOTE</p>
+              <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.05em", margin: "0 0 5px", fontWeight: 700 }}>LATEST NOTE</p>
               <p style={{ fontSize: 12, lineHeight: 1.45, color: css.textDark, margin: 0 }}>{latestNote}</p>
             </div>
           )}
@@ -812,7 +812,7 @@ function ScorecardModal({
               aria-expanded={reviewersOpen}
               style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: 0 }}
             >
-              <span style={{ fontSize: 11, color: css.textGray, fontWeight: 800, letterSpacing: "0.05em" }}>
+              <span style={{ fontSize: 11, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em" }}>
                 REVIEWS ({totalReviewCount})
               </span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -831,7 +831,7 @@ function ScorecardModal({
 
                   return (
                   <div key={review.id ?? index} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
-                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#E8F1FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#24529A", flexShrink: 0 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#E8F1FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#24529A", flexShrink: 0 }}>
                       {getReviewerInitials(review, index)}
                     </div>
                     <div style={{ minWidth: 0, flex: 1 }}>
@@ -841,7 +841,7 @@ function ScorecardModal({
                         {reviewOverridden ? " · overridden" : " · Resume"}
                       </p>
                     </div>
-                    <div style={{ fontSize: 12, color: reviewOverridden ? "#E24B4A" : cardGreen, fontWeight: 800 }}>
+                    <div style={{ fontSize: 12, color: reviewOverridden ? "#E24B4A" : cardGreen, fontWeight: 700 }}>
                       {displayScore}
                     </div>
                   </div>
@@ -854,7 +854,7 @@ function ScorecardModal({
 
                   return (
                     <div key={review.id ?? `frq-${index}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
-                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#F3E8FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#6B21A8", flexShrink: 0 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#F3E8FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#6B21A8", flexShrink: 0 }}>
                         {getReviewerInitials(review, index)}
                       </div>
                       <div style={{ minWidth: 0, flex: 1 }}>
@@ -871,7 +871,7 @@ function ScorecardModal({
                           </p>
                         ) : null}
                       </div>
-                      <div style={{ fontSize: 12, color: cardGreen, fontWeight: 800 }}>
+                      <div style={{ fontSize: 12, color: cardGreen, fontWeight: 700 }}>
                         {displayScore}
                       </div>
                     </div>
@@ -1538,7 +1538,7 @@ export default function ScoreboardPage() {
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
                 <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: t.text }}>Candidate </span>
-                <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: t.titleAccent }}>scoreboard</span>
+                <span style={{ fontFamily: sansFont, fontSize: 32, fontWeight: 600, color: t.titleAccent }}>scoreboard</span>
               </h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: t.textMuted, lineHeight: 1.5, maxWidth: 520 }}>
                 {deliberationMode ? (
@@ -2161,7 +2161,7 @@ export default function ScoreboardPage() {
                     textAlign: "left",
                     fontSize: 15,
                     fontWeight: 500,
-                    fontFamily: serifFont,
+                    fontFamily: sansFont,
                     color: t.text,
                     cursor: "pointer",
                     whiteSpace: "nowrap",
@@ -2185,7 +2185,7 @@ export default function ScoreboardPage() {
             </div>
 
             <div>
-              <div style={{ color: scoreColor(headlineScore), fontSize: 17, fontFamily: serifFont, fontWeight: 600, lineHeight: 1.2 }}>
+              <div style={{ color: scoreColor(headlineScore), fontSize: 17, fontFamily: sansFont, fontWeight: 600, lineHeight: 1.2 }}>
                 {hasNumericScore(headlineScore) ? `${formatScore(headlineScore)}%` : "—"}
               </div>
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, lineHeight: 1.35 }}>

@@ -1,6 +1,6 @@
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import { css } from "../../theme/colors";
-import { serifFont } from "../../theme/typography";
+import { sansFont } from "../../theme/typography";
 import { formatScore, hasNumericScore } from "../../utils/format";
 import { hasText } from "./applicationUtils";
 import { cardGreen, cardMint, cardPale, ROUND_1_LABEL, UPCOMING_EVALUATION_ROUNDS } from "./constants";
@@ -21,7 +21,7 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring }
               fontSize={34}
             />
           </div>
-          <h1 style={{ margin: 0, fontFamily: serifFont, fontSize: 24, fontWeight: 600, color: cardPale, lineHeight: 1.15 }}>
+          <h1 style={{ margin: 0, fontFamily: sansFont, fontSize: 24, fontWeight: 600, color: cardPale, lineHeight: 1.15 }}>
             {candidate.name || resume?.name || "Unknown"}
           </h1>
           {hasText(candidate.pronouns) && (
@@ -40,7 +40,7 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring }
           ))}
           <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${css.borderLight}`, display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
-              <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
+              <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
                 {ROUND_1_LABEL}
               </p>
               {hasNumericScore(scoring?.normalizedScore) ? (
@@ -53,7 +53,7 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring }
                       <span
                         style={{
                           fontSize: 9,
-                          fontWeight: 800,
+                          fontWeight: 700,
                           letterSpacing: "0.05em",
                           textTransform: "uppercase",
                           padding: "3px 8px",
@@ -80,7 +80,7 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring }
             </div>
             {UPCOMING_EVALUATION_ROUNDS.map(round => (
               <div key={round.id}>
-                <p style={{ margin: "0 0 2px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
+                <p style={{ margin: "0 0 2px", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
                   {round.label}
                 </p>
                 <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>—</p>

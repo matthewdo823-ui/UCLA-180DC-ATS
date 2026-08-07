@@ -9,7 +9,7 @@ import {
 } from "../../components/DemographicsChart/DemographicsChart";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
-import { serifFont } from "../../theme/typography";
+import { sansFont } from "../../theme/typography";
 
 function StageSummaryCard({ stage }) {
   return (
@@ -42,7 +42,7 @@ function DimensionPanel({ dimension, stages }) {
       boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
     }}
     >
-      <h2 style={{ margin: 0, fontFamily: serifFont, fontSize: 20, fontWeight: 500, color: css.textDark }}>
+      <h2 style={{ margin: 0, fontFamily: sansFont, fontSize: 20, fontWeight: 500, color: css.textDark }}>
         {dimension.label}
       </h2>
       <p style={{ margin: "8px 0 0", fontSize: 13, color: css.textGray, lineHeight: 1.5 }}>
@@ -118,7 +118,7 @@ export default function DemographicsPage() {
           <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>
             {cycleName}
           </p>
-          <h1 style={{ margin: 0, fontFamily: serifFont, fontSize: 28, fontWeight: 500, color: css.textDark }}>
+          <h1 style={{ margin: 0, fontFamily: sansFont, fontSize: 28, fontWeight: 500, color: css.textDark }}>
             Demographics by pipeline stage
           </h1>
           <p style={{ margin: "10px 0 0", maxWidth: 760, fontSize: 14, lineHeight: 1.55, color: css.textGray }}>

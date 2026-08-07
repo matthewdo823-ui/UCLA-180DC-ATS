@@ -3,7 +3,7 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import { API } from "../../constants/config";
-import { serifFont } from "../../theme/typography";
+import { sansFont } from "../../theme/typography";
 import { formatDate, getInitials } from "../../utils/format";
 const cardMint = "#1D9E75";
 
@@ -48,7 +48,7 @@ function FlagCard({ flag, onResolve, resolving }) {
             {getInitials(candidate.name)}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontFamily: serifFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500 }}>
+            <p style={{ fontFamily: sansFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500 }}>
               {candidate.name || "Unknown candidate"}
             </p>
             <p style={{ fontSize: 13, color: css.textGray, margin: 0 }}>
@@ -57,13 +57,13 @@ function FlagCard({ flag, onResolve, resolving }) {
           </div>
         </div>
 
-        <span style={{ background: "rgba(239,159,39,0.12)", color: css.amber, border: "1px solid rgba(239,159,39,0.28)", borderRadius: 999, fontSize: 11, fontWeight: 800, padding: "5px 10px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+        <span style={{ background: "rgba(239,159,39,0.12)", color: css.amber, border: "1px solid rgba(239,159,39,0.28)", borderRadius: 999, fontSize: 11, fontWeight: 700, padding: "5px 10px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
           Open Flag
         </span>
       </div>
 
       <div style={{ marginTop: 18, padding: "14px 16px", background: "#FFFBF3", border: "1px solid rgba(239,159,39,0.24)", borderRadius: 10 }}>
-        <p style={{ margin: "0 0 6px", fontSize: 10, color: css.amber, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+        <p style={{ margin: "0 0 6px", fontSize: 10, color: css.amber, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
           Flag Reason
         </p>
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: css.textDark }}>
@@ -133,7 +133,7 @@ function ReferralCard({ referral }) {
             {getInitials(candidate.name)}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontFamily: serifFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500 }}>
+            <p style={{ fontFamily: sansFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500 }}>
               {candidate.name || "Unknown candidate"}
             </p>
             <p style={{ fontSize: 13, color: css.textGray, margin: 0 }}>
@@ -142,13 +142,13 @@ function ReferralCard({ referral }) {
           </div>
         </div>
 
-        <span style={{ background: "rgba(40,98,65,0.1)", color: css.greenDark, border: "1px solid rgba(40,98,65,0.24)", borderRadius: 999, fontSize: 11, fontWeight: 800, padding: "5px 10px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+        <span style={{ background: "rgba(40,98,65,0.1)", color: css.greenDark, border: "1px solid rgba(40,98,65,0.24)", borderRadius: 999, fontSize: 11, fontWeight: 700, padding: "5px 10px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
           Referral
         </span>
       </div>
 
       <div style={{ marginTop: 18, padding: "14px 16px", background: "#F8FBF6", border: "1px solid rgba(40,98,65,0.18)", borderRadius: 10 }}>
-        <p style={{ margin: "0 0 6px", fontSize: 10, color: css.greenDark, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+        <p style={{ margin: "0 0 6px", fontSize: 10, color: css.greenDark, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
           Referral Note
         </p>
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: css.textDark }}>
@@ -312,7 +312,7 @@ export default function FlaggedCandidatesPage() {
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
                 <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: css.textDark }}>{activeMode.heading}</span>
-                <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>{activeMode.headingAccent}</span>
+                <span style={{ fontFamily: sansFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>{activeMode.headingAccent}</span>
               </h1>
               <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
                 {activeMode.description}
@@ -380,7 +380,7 @@ export default function FlaggedCandidatesPage() {
 
         {!loading && !error && items.length === 0 && (
           <div style={{ padding: 48, textAlign: "center", background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, color: css.textGray, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
-            <div style={{ width: 44, height: 44, background: "rgba(40, 98, 65, 0.1)", color: css.greenDark, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontWeight: 800, fontSize: 18 }}>
+            <div style={{ width: 44, height: 44, background: "rgba(40, 98, 65, 0.1)", color: css.greenDark, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontWeight: 700, fontSize: 18 }}>
               ✓
             </div>
             {activeMode.emptyLabel}
@@ -417,7 +417,7 @@ const detailLabelStyle = {
   display: "block",
   fontSize: 10,
   color: css.textGray,
-  fontWeight: 800,
+  fontWeight: 700,
   letterSpacing: "0.05em",
   textTransform: "uppercase",
   marginBottom: 4,

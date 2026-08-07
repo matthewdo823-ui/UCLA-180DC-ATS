@@ -10,7 +10,7 @@ import {
   validateRubricDraft,
 } from "../../utils/rubric";
 import { formatDate } from "../../utils/format";
-import { serifFont } from "../../theme/typography";
+import { sansFont } from "../../theme/typography";
 import { formatRoundTypeLabel, isResumeScreenType } from "../../constants/rounds";
 
 const CYCLE_STATUS_STYLE = {
@@ -34,7 +34,7 @@ function StatusBadge({ status, styles }) {
       border: `1px solid ${style.bd}`,
       borderRadius: 999,
       fontSize: 10,
-      fontWeight: 800,
+      fontWeight: 700,
       padding: "4px 10px",
       letterSpacing: "0.05em",
       textTransform: "uppercase",
@@ -224,7 +224,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: css.textDark }}>Google Form sync</h4>
               {cycle.hasFormConfig ? (
-                <span style={{ fontSize: 10, fontWeight: 800, color: "#1D9E75", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#1D9E75", letterSpacing: "0.05em", textTransform: "uppercase" }}>
                   Configured
                 </span>
               ) : null}
@@ -647,10 +647,10 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start" }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
-              <h3 style={{ fontFamily: serifFont, fontSize: 20, margin: 0, color: css.textDark }}>{cycle.name}</h3>
+              <h3 style={{ fontFamily: sansFont, fontSize: 20, margin: 0, color: css.textDark }}>{cycle.name}</h3>
               <StatusBadge status={cycle.status} styles={CYCLE_STATUS_STYLE} />
               {cycle.isActive ? (
-                <span style={{ fontSize: 10, fontWeight: 800, color: "#1D9E75", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#1D9E75", letterSpacing: "0.06em", textTransform: "uppercase" }}>
                   Site-wide active
                 </span>
               ) : null}
@@ -775,7 +775,7 @@ export default function CycleManagementPage() {
 
       <div style={{ maxWidth: 960, margin: "0 auto", width: "100%", padding: "24px 24px 40px" }}>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: serifFont, fontSize: 30, margin: "0 0 8px", color: css.textDark }}>Cycle management</h1>
+          <h1 style={{ fontFamily: sansFont, fontSize: 30, margin: "0 0 8px", color: css.textDark }}>Cycle management</h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
             Create recruiting cycles (e.g. Winter 26), link a Google Form per cycle, and manage rounds within each cycle.
             Only one cycle is active at a time. Close a round before activating the next. Archived cycles can be reactivated here.

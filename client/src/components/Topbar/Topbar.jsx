@@ -32,28 +32,23 @@ export const topbarStatCircleStyle = {
 };
 
 export default function Topbar({
-  phaseLabel = "Round 1 · Resume Screen",
-  activeLabel = "Active",
-  showActivePill = true,
   rightSlot,
   reviewed,
   onHistory,
   historyCount,
 }) {
+  // The default "Past Reviews" + "done" controls belong to the grading/screener
+  // flow. Only render them when their data/handler is actually supplied, so
+  // pages like the admin dashboard (which pass none) don't show empty, no-op
+  // versions. Pages that want a blank right side pass rightSlot={<></>}.
+  const hasReviewControls = onHistory != null || reviewed != null || historyCount != null;
+
   return (
     <div style={{ height: 60, background: "transparent", borderBottom: `1px solid ${css.borderLight}`, display: "flex", alignItems: "center", padding: "0 24px", gap: 12, flexShrink: 0 }}>
       <span style={{ fontSize: 16, fontWeight: 700, color: css.greenDark, fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em" }}>180° Resume Screener</span>
-      <div style={{ width: 1, height: 20, background: css.borderLight, margin: "0 4px" }} />
-      <span style={{ fontSize: 11, fontWeight: 600, padding: "5px 12px", borderRadius: 20, border: "1px solid rgba(29,158,117,0.15)", background: "rgba(29,158,117,0.08)", color: "#1D9E75" }}>{phaseLabel}</span>
-      {showActivePill ? (
-        <span style={{ fontSize: 11, fontWeight: 600, padding: "5px 12px", borderRadius: 20, border: "1px solid rgba(29,158,117,0.15)", background: "rgba(29,158,117,0.08)", color: "#1D9E75", display: "flex", alignItems: "center", gap: 6 }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#1D9E75" }} />
-          {activeLabel}
-        </span>
-      ) : null}
       <div style={{ flex: 1 }} />
 
-      {rightSlot ?? (
+      {rightSlot ?? (hasReviewControls ? (
         <>
           <button type="button" onClick={onHistory} style={topbarGhostButtonStyle}>
             📋 Past Reviews
@@ -65,7 +60,7 @@ export default function Topbar({
             <span style={{ fontSize: 7, fontWeight: 700, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.02em", marginTop: 1 }}>done</span>
           </div>
         </>
-      )}
+      ) : null)}
     </div>
   );
 }

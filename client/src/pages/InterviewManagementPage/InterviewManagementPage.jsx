@@ -4,7 +4,7 @@ import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-import { serifFont } from "../../theme/typography";
+import { sansFont } from "../../theme/typography";
 import { getInitials } from "../../utils/format";
 
 const DECISION_STYLE = {
@@ -62,7 +62,7 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
             {getInitials(candidate.name)}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontFamily: serifFont, fontSize: 17, margin: "0 0 4px", color: css.textDark }}>{candidate.name}</p>
+            <p style={{ fontFamily: sansFont, fontSize: 17, margin: "0 0 4px", color: css.textDark }}>{candidate.name}</p>
             <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>
               {[candidate.major, candidate.year, candidate.gpa ? `GPA ${candidate.gpa}` : ""].filter(Boolean).join(" · ") || candidate.email}
             </p>
@@ -73,7 +73,7 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
             ) : null}
           </div>
         </div>
-        <span style={{ background: style.bg, color: style.color, border: `1px solid ${style.bd}`, borderRadius: 999, fontSize: 10, fontWeight: 800, padding: "4px 10px", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+        <span style={{ background: style.bg, color: style.color, border: `1px solid ${style.bd}`, borderRadius: 999, fontSize: 10, fontWeight: 700, padding: "4px 10px", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
           {decision}
         </span>
       </div>
@@ -214,7 +214,7 @@ export default function InterviewManagementPage() {
 
       <div style={{ maxWidth: 960, margin: "0 auto", width: "100%", padding: "24px 24px 40px" }}>
         <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontFamily: serifFont, fontSize: 28, margin: "0 0 8px" }}>{roundLabel}</h1>
+          <h1 style={{ fontFamily: sansFont, fontSize: 28, margin: "0 0 8px" }}>{roundLabel}</h1>
           <p style={{ margin: 0, color: css.textGray, lineHeight: 1.5 }}>
             Schedule interviews and record pass / fail / hold decisions. Candidates appear here after advancing from the previous round.
           </p>

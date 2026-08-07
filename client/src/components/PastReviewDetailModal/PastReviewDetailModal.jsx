@@ -286,7 +286,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
 
         <div style={{ borderRadius: 20, overflow: "hidden", border: `1px solid ${cardGreen}`, background: "#FFF" }}>
           <div style={{ background: `linear-gradient(165deg, ${cardGreen} 0%, #0a3d32 100%)`, padding: "20px 20px 18px" }}>
-            <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", color: "rgba(255,255,255,0.55)", margin: "0 0 12px", textTransform: "uppercase" }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.55)", margin: "0 0 12px", textTransform: "uppercase" }}>
               Your review
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: 14, paddingRight: 36 }}>
@@ -358,26 +358,26 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
 
           <div style={{ background: cardPale, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, borderBottom: "1px solid #D4DECC" }}>
             <div>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 4px", fontWeight: 800, letterSpacing: "0.06em" }}>TOTAL</p>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 4px", fontWeight: 700, letterSpacing: "0.06em" }}>TOTAL</p>
               <p style={{ fontSize: 28, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1, fontFamily: "'DM Mono', monospace" }}>
                 {formatScore(total, { fallback: "—" })} <span style={{ fontSize: 14, color: "#3B6D11", fontWeight: 600 }}>/ {maxScore}</span>
               </p>
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 800, letterSpacing: "0.06em" }}>{metrics.length} categories</p>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.06em" }}>{metrics.length} categories</p>
               <ScoreTiles score={total} maxScore={maxScore} />
             </div>
           </div>
 
           <div style={{ padding: "18px 20px 8px" }}>
-            <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.08em", margin: "0 0 14px", fontWeight: 800 }}>SCORES</p>
+            <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.08em", margin: "0 0 14px", fontWeight: 700 }}>SCORES</p>
             {metrics.map((metric) => (
               <CategoryRowEdit key={metric} metric={metric} value={scores[metric]} maxPerCategory={maxPerCategory} onScore={(m, v) => setScores((s) => ({ ...s, [m]: v }))} />
             ))}
           </div>
 
           <div style={{ margin: "0 20px 16px", padding: "14px 14px", background: "#FAFBF9", border: `1px solid ${css.borderLight}`, borderRadius: 12 }}>
-            <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.08em", margin: "0 0 8px", fontWeight: 800 }}>NOTES</p>
+            <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.08em", margin: "0 0 8px", fontWeight: 700 }}>NOTES</p>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value.slice(0, 300))}
