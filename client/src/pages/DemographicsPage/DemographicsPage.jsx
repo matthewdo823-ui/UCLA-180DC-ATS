@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
+import { STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
 import Topbar from "../../components/Topbar/Topbar";
 import {
   DemographicsLegend,
@@ -9,7 +11,7 @@ import {
 } from "../../components/DemographicsChart/DemographicsChart";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
-import { sansFont } from "../../theme/typography";
+import { pageTitleStyle, sansFont } from "../../theme/typography";
 
 function StageSummaryCard({ stage }) {
   return (
@@ -67,14 +69,13 @@ function DimensionPanel({ dimension, stages }) {
 export default function DemographicsPage() {
   const authedFetch = useAuthedFetch();
   const { phaseLabel, cycle } = useActiveCycle();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  const loadDemographics = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
+  // Cached under qk.demographics so revisiting the page (or bouncing back to it)
+  // renders instantly from cache and refreshes in the background instead of
+  // showing a spinner and refetching from scratch every mount.
+  const { data, isPending: loading, error: queryError } = useQuery({
+    queryKey: qk.demographics(),
+    queryFn: async () => {
       const res = await authedFetch(`${API}/demographics`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -83,18 +84,11 @@ export default function DemographicsPage() {
         }
         throw new Error(body.error || `Could not load demographics (${res.status})`);
       }
-      setData(await res.json());
-    } catch (err) {
-      setData(null);
-      setError(err.message || "Could not load demographics");
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch]);
-
-  useEffect(() => {
-    loadDemographics();
-  }, [loadDemographics]);
+      return res.json();
+    },
+    staleTime: STALE.dashboard,
+  });
+  const error = queryError ? (queryError.message || "Could not load demographics") : "";
 
   const stages = data?.stages || [];
   const dimensions = data?.dimensions || [];
@@ -118,7 +112,7 @@ export default function DemographicsPage() {
           <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>
             {cycleName}
           </p>
-          <h1 style={{ margin: 0, fontFamily: sansFont, fontSize: 28, fontWeight: 500, color: css.textDark }}>
+          <h1 style={pageTitleStyle}>
             Demographics by pipeline stage
           </h1>
           <p style={{ margin: "10px 0 0", maxWidth: 760, fontSize: 14, lineHeight: 1.55, color: css.textGray }}>
