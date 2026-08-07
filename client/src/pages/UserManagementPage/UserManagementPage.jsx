@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
@@ -40,34 +43,25 @@ function RoleBadge({ role }) {
 
 export default function UserManagementPage() {
   const authedFetch = useAuthedFetch();
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
   const [savingId, setSavingId] = useState(null);
   const [pendingRoles, setPendingRoles] = useState({});
+  // Separate from the load error so a failed save doesn't clobber (or get
+  // clobbered by) the query's own error state.
+  const [saveError, setSaveError] = useState("");
 
-  const loadUsers = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
+  const usersQuery = useQuery({
+    queryKey: qk.users(),
+    queryFn: async () => {
       const res = await authedFetch(`${API}/users`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to load users");
-      }
-      const data = await res.json();
-      setUsers(data.users || []);
-      setPendingRoles({});
-    } catch (err) {
-      setError(err.message || "Failed to load users");
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch]);
+      return readJsonOrThrow(res, "Failed to load users");
+    },
+    staleTime: STALE.dashboard,
+  });
 
-  useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
+  const users = usersQuery.data?.users ?? [];
+  const loading = usersQuery.isPending;
+  const error = saveError || (usersQuery.error ? (usersQuery.error.message || "Failed to load users") : "");
 
   const staffCount = useMemo(
     () => users.filter((u) => u.role === "admin" || u.role === "member").length,
@@ -80,7 +74,7 @@ export default function UserManagementPage() {
 
     try {
       setSavingId(user.user_id);
-      setError("");
+      setSaveError("");
       const res = await authedFetch(`${API}/users/${user.user_id}/role`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -93,14 +87,17 @@ export default function UserManagementPage() {
       }
 
       const data = await res.json();
-      setUsers((prev) => prev.map((u) => (u.user_id === data.user.user_id ? data.user : u)));
+      // Patch the cached list in place — snappy, no refetch, same as before.
+      queryClient.setQueryData(qk.users(), (old) =>
+        old ? { ...old, users: old.users.map((u) => (u.user_id === data.user.user_id ? data.user : u)) } : old
+      );
       setPendingRoles((prev) => {
         const next = { ...prev };
         delete next[user.user_id];
         return next;
       });
     } catch (err) {
-      setError(err.message || "Failed to update role");
+      setSaveError(err.message || "Failed to update role");
     } finally {
       setSavingId(null);
     }
@@ -161,7 +158,7 @@ export default function UserManagementPage() {
               <p style={{ margin: "0 0 12px" }}>Could not load the user list.</p>
               <button
                 type="button"
-                onClick={loadUsers}
+                onClick={() => usersQuery.refetch()}
                 style={{
                   border: `1px solid ${css.borderLight}`,
                   borderRadius: 8,
