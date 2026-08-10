@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import { API } from "../../constants/config";
@@ -200,10 +203,11 @@ function ReferralCard({ referral }) {
 
 export default function FlaggedCandidatesPage() {
   const authedFetch = useAuthedFetch();
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState(SIGNAL_MODES[0].id);
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  // Kept apart from the query's own error so a failed resolve doesn't clobber the
+  // loaded list (or get wiped by a background refetch).
+  const [resolveError, setResolveError] = useState("");
   const [resolvingId, setResolvingId] = useState(null);
 
   const activeMode = useMemo(
@@ -211,35 +215,28 @@ export default function FlaggedCandidatesPage() {
     [mode]
   );
 
-  const loadItems = useCallback(async (targetMode) => {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await authedFetch(`${API}/${targetMode.endpoint}`);
-      const json = await res.json().catch(() => ({}));
+  // Each mode keys its own cache entry, so toggling flags/referrals is instant
+  // after the first load instead of refetching every time.
+  const signalsQuery = useQuery({
+    queryKey: qk.candidateSignals(activeMode.endpoint),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/${activeMode.endpoint}`);
+      const json = await readJsonOrThrow(res, `Failed to load ${activeMode.label.toLowerCase()}`);
+      return json[activeMode.dataKey] || [];
+    },
+    staleTime: STALE.dashboard,
+  });
 
-      if (!res.ok) {
-        throw new Error(json.error || `Failed to load ${targetMode.label.toLowerCase()}`);
-      }
-
-      setItems(json[targetMode.dataKey] || []);
-    } catch (err) {
-      console.error(`Failed to load ${targetMode.label.toLowerCase()}:`, err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch]);
-
-  useEffect(() => {
-    loadItems(activeMode);
-  }, [loadItems, activeMode]);
+  const items = useMemo(() => signalsQuery.data ?? [], [signalsQuery.data]);
+  const loading = signalsQuery.isPending;
+  const refreshing = signalsQuery.isFetching;
+  const error = resolveError
+    || (signalsQuery.error ? (signalsQuery.error.message || `Failed to load ${activeMode.label.toLowerCase()}`) : "");
 
   function handleModeChange(nextMode) {
     if (nextMode === mode) return;
     setMode(nextMode);
-    setItems([]);
-    setError("");
+    setResolveError("");
   }
 
   const uniqueCandidateCount = useMemo(
@@ -250,6 +247,7 @@ export default function FlaggedCandidatesPage() {
   async function resolveFlag(flagId) {
     try {
       setResolvingId(flagId);
+      setResolveError("");
       const res = await authedFetch(`${API}/candidate-flags/${flagId}/resolve`, {
         method: "PATCH",
       });
@@ -259,10 +257,14 @@ export default function FlaggedCandidatesPage() {
         throw new Error(json.error || "Failed to resolve flag");
       }
 
-      setItems(current => current.filter(item => item.id !== flagId));
+      // Drop the resolved flag from the cached flags list — snappy, no refetch.
+      queryClient.setQueryData(
+        qk.candidateSignals("candidate-flags"),
+        (current) => (current ? current.filter(item => item.id !== flagId) : current)
+      );
     } catch (err) {
       console.error("Failed to resolve candidate flag:", err);
-      setError(err.message);
+      setResolveError(err.message);
     } finally {
       setResolvingId(null);
     }
@@ -321,14 +323,14 @@ export default function FlaggedCandidatesPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", flexShrink: 0, marginLeft: "auto" }}>
           <button
             type="button"
-            onClick={() => loadItems(activeMode)}
-            disabled={loading}
+            onClick={() => signalsQuery.refetch()}
+            disabled={refreshing}
             aria-label={`Refresh ${activeMode.label.toLowerCase()} list`}
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              cursor: loading ? "wait" : "pointer",
+              cursor: refreshing ? "wait" : "pointer",
               padding: "10px 16px",
               borderRadius: 8,
               background: css.cardWhite,
@@ -338,7 +340,7 @@ export default function FlaggedCandidatesPage() {
               fontWeight: 600,
               fontFamily: "'DM Sans', sans-serif",
               boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-              opacity: loading ? 0.75 : 1,
+              opacity: refreshing ? 0.75 : 1,
             }}
           >
             <span style={{ display: "inline-flex", color: css.greenDark }} aria-hidden>

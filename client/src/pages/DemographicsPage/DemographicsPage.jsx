@@ -12,6 +12,7 @@ import {
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
+import { isInterviewRoundType } from "../../constants/rounds";
 
 function StageSummaryCard({ stage }) {
   return (

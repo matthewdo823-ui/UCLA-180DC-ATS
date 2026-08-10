@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import {
@@ -701,36 +704,36 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
 
 export default function CycleManagementPage() {
   const authedFetch = useAuthedFetch();
-  const [cycles, setCycles] = useState([]);
-  const [activeCycleId, setActiveCycleId] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  // Action errors live here; the query owns load errors — merged into `error` below.
+  const [actionError, setActionError] = useState("");
   const [newCycleName, setNewCycleName] = useState("");
 
-  const loadCycles = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
+  const cyclesQuery = useQuery({
+    queryKey: qk.cycles(),
+    queryFn: async () => {
       const res = await authedFetch(`${API}/cycles`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Could not load cycles");
-      }
-      const data = await res.json();
-      setCycles(Array.isArray(data.cycles) ? data.cycles : []);
-      setActiveCycleId(data.activeCycleId || null);
-    } catch (e) {
-      setError(e.message || "Could not load cycles");
-      setCycles([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch]);
+      return readJsonOrThrow(res, "Could not load cycles");
+    },
+    staleTime: STALE.dashboard,
+  });
 
-  useEffect(() => {
-    loadCycles();
-  }, [loadCycles]);
+  const cycles = useMemo(
+    () => (Array.isArray(cyclesQuery.data?.cycles) ? cyclesQuery.data.cycles : []),
+    [cyclesQuery.data]
+  );
+  const activeCycleId = cyclesQuery.data?.activeCycleId || null;
+  const loading = cyclesQuery.isPending;
+  const error = actionError
+    || (cyclesQuery.error ? (cyclesQuery.error.message || "Could not load cycles") : "");
+
+  // Expiring ["cycles"] also expires ["cycles","active"] (hierarchical key), so
+  // activating a cycle or round here refreshes the active-cycle entry every page reads.
+  const reloadCycles = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: qk.cycles() }),
+    [queryClient]
+  );
 
   const activeCycle = useMemo(
     () => cycles.find((c) => c.id === activeCycleId) || cycles.find((c) => c.isActive) || null,
@@ -739,12 +742,12 @@ export default function CycleManagementPage() {
 
   async function runAction(action) {
     setBusy(true);
-    setError("");
+    setActionError("");
     try {
       await action();
-      await loadCycles();
+      await reloadCycles();
     } catch (e) {
-      setError(e.message || "Action failed");
+      setActionError(e.message || "Action failed");
     } finally {
       setBusy(false);
     }
@@ -861,7 +864,7 @@ export default function CycleManagementPage() {
                 cycle={cycle}
                 busy={busy}
                 authedFetch={authedFetch}
-                onReload={loadCycles}
+                onReload={reloadCycles}
                 onActivate={(id) => runAction(async () => {
                   const res = await authedFetch(`${API}/cycles/${id}/activate`, { method: "POST" });
                   if (!res.ok) {
