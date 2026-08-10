@@ -130,7 +130,16 @@ function pipeStreamWithHtmlGuard(readable, res, contentType) {
       res.write(chunk);
     });
 
-    readable.on('end', resolve);
+    readable.on('end', () => {
+      // Close the response ourselves — unlike stream.pipe(res), manual res.write()
+      // never ends the response, so without this the browser receives every byte
+      // but the request hangs "pending" forever (res.blob() never resolves). This
+      // path is the public-URL fallback, taken whenever the Drive API is
+      // unavailable (e.g. the service account lacks domain-wide delegation locally).
+      if (!headerChecked) setFileHeaders(res, contentType);
+      res.end();
+      resolve();
+    });
     readable.on('error', reject);
   });
 }
