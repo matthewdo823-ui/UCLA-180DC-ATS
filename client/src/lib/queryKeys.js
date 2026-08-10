@@ -20,9 +20,20 @@ export const qk = {
   dashboardRoot: () => ["dashboard"],
 
   graderScoreboard: () => ["grader-scoreboard"],
+  frqGraderScoreboard: () => ["frq-grader-scoreboard"],
   interviewCandidates: () => ["interviews", "candidates"],
   demographics: () => ["demographics"],
   users: () => ["users"],
+
+  assignments: () => ["assignments"],
+  // ["cycles"] is the parent of ["cycles", "active"] (see activeCycle above), so
+  // invalidating this after a cycle/round mutation also expires the active-cycle
+  // entry every page reads — exactly what should happen when the active cycle or
+  // round changes.
+  cycles: () => ["cycles"],
+  // Flags and referrals share a page but hit different endpoints; keying by the
+  // endpoint gives each mode its own cache entry that survives toggling between them.
+  candidateSignals: (endpoint) => [endpoint],
 };
 
 /**
