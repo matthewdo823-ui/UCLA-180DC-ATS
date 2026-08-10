@@ -6,6 +6,7 @@ import { qk } from "../../lib/queryKeys";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
+import PageLoader from "../../components/PageLoader";
 import { pageTitleStyle } from "../../theme/typography";
 import { displayName, formatDate } from "../../utils/format";
 const ASSIGNABLE_ROLES = [
@@ -150,9 +151,7 @@ export default function UserManagementPage() {
           boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
         }}>
           {loading ? (
-            <div style={{ padding: 40, textAlign: "center", color: css.textGray, fontSize: 14 }}>
-              Loading users...
-            </div>
+            <PageLoader />
           ) : error ? (
             <div style={{ padding: 40, textAlign: "center", color: css.textGray, fontSize: 14 }}>
               <p style={{ margin: "0 0 12px" }}>Could not load the user list.</p>

@@ -7,6 +7,7 @@ import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
+import PageLoader from "../../components/PageLoader";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { getInitials } from "../../utils/format";
 
@@ -270,7 +271,7 @@ export default function InterviewManagementPage() {
             ) : null}
 
             {loading || cycleLoading ? (
-              <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading candidates…</div>
+              <PageLoader />
             ) : filtered.length === 0 ? (
               <div style={{ padding: 40, textAlign: "center", color: css.textGray, lineHeight: 1.6 }}>
                 {data.deliberationStarted

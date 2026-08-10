@@ -8,6 +8,7 @@ import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
 import { css } from "../../theme/colors";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
+import PageLoader from "../../components/PageLoader";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
@@ -2094,7 +2095,7 @@ export default function ScoreboardPage() {
         </div>
 
         <div>
-        {loading && <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading candidates…</div>}
+        {loading && <PageLoader color={t.textMuted} track={t.border} head={t.accent} />}
 
         {!loading && candidates.length > 0 && filteredCandidates.length === 0 && (
           <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>

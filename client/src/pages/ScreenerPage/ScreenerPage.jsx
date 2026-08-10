@@ -17,6 +17,7 @@ import FrqScoringPanel from "../../components/FrqScoringPanel/FrqScoringPanel";
 import Drawer from "../../components/Drawer/Drawer";
 import FrqDrawer from "../../components/FrqScoringPanel/FrqDrawer";
 import PastReviewDetailModal from "../../components/PastReviewDetailModal/PastReviewDetailModal";
+import PageLoader from "../../components/PageLoader";
 
 const GRADING_MODES = {
   RESUME: "resume",
@@ -470,10 +471,7 @@ export default function ScreenerPage() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1.35fr", gap: 14, flex: 1, minHeight: 0, overflow: "hidden" }}>
             <div ref={panelRef} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
               {loading || cycleLoading ? (
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, color: css.textGray, fontSize: 13 }}>
-                  <div style={{ width: 36, height: 36, border: `3px solid ${css.borderLight}`, borderTopColor: css.greenDark, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                  Loading…
-                </div>
+                <PageLoader />
               ) : isFrqMode ? (
                 resume ? (
                   <FrqResponsesPanel candidate={resume} />
@@ -518,7 +516,7 @@ export default function ScreenerPage() {
                   )}
                 </div>
               ) : (
-                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.text3, fontSize: 13 }}>Loading…</div>
+                <PageLoader />
               )}
             </div>
           </div>
