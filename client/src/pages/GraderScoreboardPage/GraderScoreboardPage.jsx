@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
@@ -258,11 +261,11 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
   );
 }
 
+const DEFAULT_SCOREBOARD_DATA = { stats: null, graders: [], metrics: [], maxPerCategory: 4, context: null };
+
 export default function GraderScoreboardPage() {
   const authedFetch = useAuthedFetch();
   const [mode, setMode] = useState(SCOREBOARD_MODES[0].id);
-  const [data, setData] = useState({ stats: null, graders: [], metrics: [], maxPerCategory: 4, context: null });
-  const [loading, setLoading] = useState(true);
   const [selectedGrader, setSelectedGrader] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -272,29 +275,20 @@ export default function GraderScoreboardPage() {
     [mode]
   );
 
-  useEffect(() => {
-    let cancelled = false;
+  // Resume mode reads /grader-scoreboard — the same cache entry the admin
+  // dashboard's grader-coverage query fills — so bouncing between the dashboard
+  // and this page serves from cache. FRQ mode is a separate endpoint and key.
+  const graderQuery = useQuery({
+    queryKey: activeMode.id === "frq" ? qk.frqGraderScoreboard() : qk.graderScoreboard(),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/${activeMode.endpoint}`);
+      return readJsonOrThrow(res, `Could not load ${activeMode.label.toLowerCase()}`);
+    },
+    staleTime: STALE.dashboard,
+  });
 
-    async function fetchGraders() {
-      setLoading(true);
-      try {
-        const res = await authedFetch(`${API}/${activeMode.endpoint}`);
-        if (res.ok) {
-          const json = await res.json();
-          if (!cancelled) setData(json);
-        }
-      } catch (err) {
-        console.error("Failed to load grader scoreboard:", err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    fetchGraders();
-    return () => {
-      cancelled = true;
-    };
-  }, [authedFetch, activeMode.endpoint]);
+  const data = graderQuery.data ?? DEFAULT_SCOREBOARD_DATA;
+  const loading = graderQuery.isPending;
 
   function handleModeChange(nextMode) {
     if (nextMode === mode) return;

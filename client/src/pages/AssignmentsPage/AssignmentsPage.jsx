@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import { pageTitleStyle } from "../../theme/typography";
@@ -55,9 +58,9 @@ function useSelection() {
 
 export default function AssignmentsPage() {
   const authedFetch = useAuthedFetch();
-  const [board, setBoard] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
+  // Separate from the query's load error so a failed assign doesn't wipe the board.
+  const [mutationError, setMutationError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
@@ -66,27 +69,25 @@ export default function AssignmentsPage() {
   const candidateSelection = useSelection();
   const graderSelection = useSelection();
 
-  const loadBoard = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
+  const boardQuery = useQuery({
+    queryKey: qk.assignments(),
+    queryFn: async () => {
       const res = await authedFetch(`${API}/assignments`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to load assignments");
-      }
-      setBoard(await res.json());
-    } catch (err) {
-      setBoard(null);
-      setError(err.message || "Failed to load assignments");
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch]);
+      return readJsonOrThrow(res, "Failed to load assignments");
+    },
+    staleTime: STALE.dashboard,
+  });
 
-  useEffect(() => {
-    loadBoard();
-  }, [loadBoard]);
+  const board = boardQuery.data ?? null;
+  const loading = boardQuery.isPending;
+  const error = mutationError
+    || (boardQuery.error ? (boardQuery.error.message || "Failed to load assignments") : "");
+
+  // Mutations refetch by expiring the cache entry rather than hand-rolling a reload.
+  const reloadBoard = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: qk.assignments() }),
+    [queryClient]
+  );
 
   const candidates = board?.candidates || [];
   const graders = board?.graders || [];
@@ -114,7 +115,7 @@ export default function AssignmentsPage() {
 
     try {
       setSaving(true);
-      setError("");
+      setMutationError("");
       setNotice("");
 
       const res = await authedFetch(`${API}/assignments`, {
@@ -135,9 +136,9 @@ export default function AssignmentsPage() {
 
       candidateSelection.clear();
       graderSelection.clear();
-      await loadBoard();
+      await reloadBoard();
     } catch (err) {
-      setError(err.message || "Failed to update assignments");
+      setMutationError(err.message || "Failed to update assignments");
     } finally {
       setSaving(false);
     }
@@ -145,7 +146,7 @@ export default function AssignmentsPage() {
 
   async function removeAssignment(assignmentId) {
     try {
-      setError("");
+      setMutationError("");
       setNotice("");
       const res = await authedFetch(`${API}/assignments/${encodeURIComponent(assignmentId)}`, {
         method: "DELETE",
@@ -154,9 +155,9 @@ export default function AssignmentsPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to remove assignment");
       }
-      await loadBoard();
+      await reloadBoard();
     } catch (err) {
-      setError(err.message || "Failed to remove assignment");
+      setMutationError(err.message || "Failed to remove assignment");
     }
   }
 
@@ -197,7 +198,7 @@ export default function AssignmentsPage() {
         ) : !board ? (
           <div style={{ ...cardStyle, padding: 40, textAlign: "center", color: css.textGray, fontSize: 14 }}>
             <p style={{ margin: "0 0 12px" }}>Could not load the assignment board.</p>
-            <button type="button" onClick={loadBoard} style={secondaryButtonStyle}>Retry</button>
+            <button type="button" onClick={() => boardQuery.refetch()} style={secondaryButtonStyle}>Retry</button>
           </div>
         ) : (
           <>
