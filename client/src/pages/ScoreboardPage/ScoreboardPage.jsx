@@ -89,15 +89,44 @@ function countActiveFilters(filters) {
   return Object.keys(defaultFilters).filter(key => filters[key] !== defaultFilters[key]).length;
 }
 
-function passesScoreBand(candidate, scoreBand) {
+// Fraction of the scored pool each "top" band keeps.
+const SCORE_PERCENTILES = { top: 0.2, strong: 0.3 };
+
+// Score cutoffs for the percentile bands, computed over the whole scored pool.
+// A candidate is in the "top X%" when its ranking score (the raw aggregate — the
+// same source the score sort uses) is at or above the score held by the
+// candidate sitting on the X-percentile rank boundary. Candidates without a
+// score are excluded from the pool (they fall under "No score").
+function computeScoreCutoffs(list) {
+  const scores = (list || [])
+    .map(getPerformanceSortScore)
+    .filter(hasNumericScore)
+    .map(Number)
+    .sort((a, b) => b - a);
+  const n = scores.length;
+  const cutoffAt = (fraction) => {
+    if (n === 0) return null;
+    const count = Math.max(1, Math.ceil(n * fraction));
+    return scores[count - 1];
+  };
+  return {
+    top: cutoffAt(SCORE_PERCENTILES.top),
+    strong: cutoffAt(SCORE_PERCENTILES.strong),
+  };
+}
+
+function passesScoreBand(candidate, scoreBand, cutoffs) {
   const n = candidate?.numReviews ?? candidate?.reviews?.length ?? 0;
   const displayPct = getHeadlineScore(candidate);
+  const rankScore = getPerformanceSortScore(candidate);
+  const inPercentile = (cutoff) =>
+    cutoff != null && hasNumericScore(rankScore) && Number(rankScore) >= cutoff;
 
   switch (scoreBand) {
     case "top":
-      return displayPct !== null && displayPct >= 80;
+      return inPercentile(cutoffs?.top);
     case "strong":
-      return displayPct !== null && displayPct >= 70;
+      return inPercentile(cutoffs?.strong);
     case "low":
       return displayPct !== null && displayPct < 60 && n > 0;
     case "pending":
@@ -165,13 +194,13 @@ function passesSearchQuery(candidate, query) {
   return false;
 }
 
-function filterCandidates(list, filters, searchQuery = "") {
+function filterCandidates(list, filters, searchQuery = "", scoreCutoffs = null) {
   return list.filter(c => {
     if (!passesSearchQuery(c, searchQuery)) return false;
     if (filters.major !== "all" && (c.major || "Undeclared") !== filters.major) return false;
     if (filters.year !== "all" && String(c.year || "").trim() !== filters.year) return false;
     if (!passesReviewFilter(c, filters.reviews)) return false;
-    if (!passesScoreBand(c, filters.scoreBand)) return false;
+    if (!passesScoreBand(c, filters.scoreBand, scoreCutoffs)) return false;
     if (!passesDecisionFilter(c, filters.decision)) return false;
     if (!passesSignalFilter(c, filters.signals)) return false;
     return true;
@@ -298,29 +327,23 @@ function DecisionButtons({ status, disabled, saving, onSelect, dark }) {
   );
 }
 
-const ROSTER_QUICK_FILTERS = [
-  { id: "all", label: "All" },
-  { id: "top", label: "Top ≥80%", patch: { scoreBand: "top" } },
-  { id: "strong", label: "Strong ≥70%", patch: { scoreBand: "strong" } },
-  { id: "pending", label: "No score", patch: { scoreBand: "pending" } },
-  { id: "referred", label: "Referred", patch: { signals: "referred" } },
-  { id: "flagged", label: "Flagged", patch: { signals: "flagged" } },
-];
-
-const DELIB_QUICK_FILTERS = [
-  { id: "all", label: "All", patch: { decision: "all" } },
-  { id: "undecided", label: "Undecided", patch: { decision: "undecided" } },
-  { id: "advance", label: "Advanced", patch: { decision: "advance" } },
-  { id: "hold", label: "Hold", patch: { decision: "hold" } },
-  { id: "reject", label: "Rejected", patch: { decision: "reject" } },
-];
-
-function isQuickFilterActive(chip, filters, deliberationMode) {
-  if (chip.id === "all") {
-    if (deliberationMode) return filters.decision === "all";
-    return filters.scoreBand === "all" && filters.signals === "all";
-  }
-  return Object.entries(chip.patch).every(([key, value]) => filters[key] === value);
+function FilterField({ label, theme, children }) {
+  return (
+    <label style={{
+      display: "flex",
+      flexDirection: "column",
+      gap: 4,
+      fontSize: 11,
+      fontWeight: 700,
+      letterSpacing: "0.04em",
+      textTransform: "uppercase",
+      color: theme.textMuted,
+    }}
+    >
+      {label}
+      {children}
+    </label>
+  );
 }
 
 function buildActiveFilterPills(filters, deliberationMode) {
@@ -338,7 +361,7 @@ function buildActiveFilterPills(filters, deliberationMode) {
     pills.push({ key: "reviews", label: reviewLabels[effective.reviews] || effective.reviews, clear: { reviews: "all" } });
   }
   if (effective.scoreBand !== "all") {
-    const bandLabels = { top: "Top ≥80%", strong: "Strong ≥70%", low: "Low <60%", pending: "No score" };
+    const bandLabels = { top: "Top 20%", strong: "Top 30%", low: "Low <60%", pending: "No score" };
     pills.push({ key: "scoreBand", label: bandLabels[effective.scoreBand] || effective.scoreBand, clear: { scoreBand: "all" } });
   }
   if (effective.signals !== "all") {
@@ -364,32 +387,6 @@ function buildActiveFilterPills(filters, deliberationMode) {
   }
 
   return pills;
-}
-
-function FilterChip({ label, active, onClick, theme }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "7px 14px",
-        borderRadius: 999,
-        border: `1px solid ${active ? theme.accent : theme.border}`,
-        background: active ? (theme.chipActiveBg || `${theme.accent}18`) : theme.btnGhostBg,
-        color: active ? theme.accent : theme.btnGhostText,
-        fontSize: 12,
-        fontWeight: 600,
-        fontFamily: "'DM Sans', sans-serif",
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-        transition: "border-color 0.15s ease, background 0.15s ease",
-      }}
-    >
-      {label}
-    </button>
-  );
 }
 
 const SORT_TABS = [
@@ -980,7 +977,6 @@ export default function ScoreboardPage() {
   const queryClient = useQueryClient();
   const isAdmin = isAdminRole(user?.role);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState(() => ({ ...defaultFilters }));
   const [sortBy, setSortBy] = useState("performance_desc");
   const [searchInput, setSearchInput] = useState("");
@@ -995,7 +991,6 @@ export default function ScoreboardPage() {
   const [viewingRoundId, setViewingRoundId] = useState(null);
   const [focusedCandidateId, setFocusedCandidateId] = useState(null);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
-  const filterWrapRef = useRef(null);
   const adminMenuRef = useRef(null);
   const rowRefs = useRef({});
   const pendingDecisionIdsRef = useRef(new Set());
@@ -1085,24 +1080,6 @@ export default function ScoreboardPage() {
   }, [scoreboardQuery.data]);
 
   useEffect(() => {
-    if (!filtersOpen) return;
-    function onPointerDown(event) {
-      if (filterWrapRef.current && !filterWrapRef.current.contains(event.target)) {
-        setFiltersOpen(false);
-      }
-    }
-    function onKeyDown(event) {
-      if (event.key === "Escape") setFiltersOpen(false);
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [filtersOpen]);
-
-  useEffect(() => {
     if (!adminMenuOpen) return;
     function onPointerDown(event) {
       if (adminMenuRef.current && !adminMenuRef.current.contains(event.target)) {
@@ -1167,11 +1144,13 @@ export default function ScoreboardPage() {
     [candidates]
   );
 
+  const scoreCutoffs = useMemo(() => computeScoreCutoffs(candidates), [candidates]);
+
   const filteredCandidates = useMemo(() => {
     const effectiveFilters = deliberationMode ? filters : { ...filters, decision: "all" };
-    const filtered = filterCandidates(candidates, effectiveFilters, searchQuery);
+    const filtered = filterCandidates(candidates, effectiveFilters, searchQuery, scoreCutoffs);
     return [...filtered].sort((a, b) => compareCandidates(a, b, sortBy));
-  }, [candidates, filters, searchQuery, sortBy, deliberationMode]);
+  }, [candidates, filters, searchQuery, sortBy, deliberationMode, scoreCutoffs]);
 
   const saveDecision = useCallback(async (candidate, decision) => {
     if (!canEditDeliberations || !deliberationMode) return;
@@ -1428,18 +1407,6 @@ export default function ScoreboardPage() {
     }
   }
 
-  function applyQuickFilter(chip) {
-    if (chip.id === "all") {
-      if (deliberationMode) {
-        setFilters(f => ({ ...f, decision: "all" }));
-      } else {
-        setFilters(f => ({ ...f, scoreBand: "all", signals: "all" }));
-      }
-      return;
-    }
-    setFilters(f => ({ ...f, ...chip.patch }));
-  }
-
   function toggleDeliberationMode() {
     if (viewingHistorical) return;
     setDeliberationMode(on => {
@@ -1502,14 +1469,26 @@ export default function ScoreboardPage() {
   const totalApplicants = displayStats?.applicants ?? 0;
   const decisionProgress = totalApplicants > 0 ? Math.round((decidedCount / totalApplicants) * 100) : 0;
 
-  const quickFilters = deliberationMode ? DELIB_QUICK_FILTERS : ROSTER_QUICK_FILTERS;
-
-  const filterSelectStyle = {
+  const barSelectStyle = {
     ...selectStyle,
-    marginTop: 4,
+    width: "auto",
+    minWidth: 132,
     background: t.selectBg,
     color: t.selectText,
     border: `1px solid ${t.border}`,
+    fontWeight: 600,
+    textTransform: "none",
+    letterSpacing: "normal",
+  };
+
+  // Major names can be long enough to push the bar onto a second line, so the
+  // closed control is capped to the same width as the others and clips its
+  // label with an ellipsis. The opened dropdown list still shows full names.
+  const majorSelectStyle = {
+    ...barSelectStyle,
+    width: 132,
+    maxWidth: 132,
+    textOverflow: "ellipsis",
   };
 
   return (
@@ -1534,27 +1513,24 @@ export default function ScoreboardPage() {
           <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: t.titleAccent }}>
             {deliberationMode ? "Live deliberation" : scoreboardLabel}
           </p>
-          <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
-            <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${t.accent} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
-            <div style={{ minWidth: 0 }}>
-              <h1 style={pageTitleStyle}>Candidate scoreboard</h1>
-              <p style={{ margin: "10px 0 0", fontSize: 14, color: t.textMuted, lineHeight: 1.5, maxWidth: 520 }}>
-                {deliberationMode ? (
-                  viewingHistorical
-                    ? `Archived decisions for ${activeRound?.name || "this round"}.`
-                    : canEditDeliberations
-                      ? "Click a row to focus, then choose Advance, Hold, or Reject."
-                      : `Viewing ${activeRound?.name || "this round"} — updates every few seconds.`
-                ) : (
-                  "Browse candidates by score, major, and review status."
-                )}
-                {hasActiveNarrowing ? (
-                  <span style={{ display: "block", marginTop: 6, fontSize: 13, color: t.titleAccent, fontWeight: 600 }}>
-                    Showing {filteredCandidates.length} of {candidates.length}
-                  </span>
-                ) : null}
-              </p>
-            </div>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={pageTitleStyle}>Candidate scoreboard</h1>
+            <p style={{ margin: "10px 0 0", fontSize: 14, color: t.textMuted, lineHeight: 1.5, maxWidth: 520 }}>
+              {deliberationMode ? (
+                viewingHistorical
+                  ? `Archived decisions for ${activeRound?.name || "this round"}.`
+                  : canEditDeliberations
+                    ? "Click a row to focus, then choose Advance, Hold, or Reject."
+                    : `Viewing ${activeRound?.name || "this round"} — updates every few seconds.`
+              ) : (
+                "Browse candidates by score, major, and review status."
+              )}
+              {hasActiveNarrowing ? (
+                <span style={{ display: "block", marginTop: 6, fontSize: 13, color: t.titleAccent, fontWeight: 600 }}>
+                  Showing {filteredCandidates.length} of {candidates.length}
+                </span>
+              ) : null}
+            </p>
           </div>
         </div>
 
@@ -1838,139 +1814,87 @@ export default function ScoreboardPage() {
         ) : null}
       </div>
 
-      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-        {quickFilters.map(chip => (
-          <FilterChip
-            key={chip.id}
-            label={chip.label}
-            active={isQuickFilterActive(chip, filters, deliberationMode)}
-            onClick={() => applyQuickFilter(chip)}
-            theme={t}
-          />
-        ))}
-        <div ref={filterWrapRef} style={{ position: "relative", marginLeft: "auto" }}>
+      <div
+        role="group"
+        aria-label="Filter and sort scoreboard"
+        style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}
+      >
+        <FilterField label="Major" theme={t}>
+          <select value={filters.major} onChange={e => setFilters(f => ({ ...f, major: e.target.value }))} style={majorSelectStyle}>
+            <option value="all">All majors</option>
+            {majorOptions.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </FilterField>
+        <FilterField label="Year" theme={t}>
+          <select value={filters.year} onChange={e => setFilters(f => ({ ...f, year: e.target.value }))} style={barSelectStyle}>
+            <option value="all">All years</option>
+            {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </FilterField>
+        <FilterField label="Reviews" theme={t}>
+          <select value={filters.reviews} onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))} style={barSelectStyle}>
+            <option value="all">Any count</option>
+            <option value="0">None yet (0)</option>
+            <option value="1">Exactly 1</option>
+            <option value="1+">Reviewed (1+)</option>
+            <option value="2+">2 or more</option>
+          </select>
+        </FilterField>
+        <FilterField label="Score" theme={t}>
+          <select value={filters.scoreBand} onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))} style={barSelectStyle}>
+            <option value="all">All scores</option>
+            <option value="top">Top 20%</option>
+            <option value="strong">Top 30%</option>
+            <option value="low">Low (&lt; 60%)</option>
+            <option value="pending">No score</option>
+          </select>
+        </FilterField>
+        <FilterField label="Flags / referrals" theme={t}>
+          <select value={filters.signals} onChange={e => setFilters(f => ({ ...f, signals: e.target.value }))} style={barSelectStyle}>
+            <option value="all">All candidates</option>
+            <option value="referred">Referred only</option>
+            <option value="flagged">Flagged only</option>
+          </select>
+        </FilterField>
+        {deliberationMode ? (
+          <FilterField label="Committee decision" theme={t}>
+            <select value={filters.decision} onChange={e => setFilters(f => ({ ...f, decision: e.target.value }))} style={barSelectStyle}>
+              <option value="all">All decisions</option>
+              <option value="undecided">Undecided (pending + hold)</option>
+              <option value="pending">Pending only</option>
+              <option value="advance">Advanced</option>
+              <option value="hold">Hold</option>
+              <option value="reject">Rejected</option>
+            </select>
+          </FilterField>
+        ) : null}
+        <FilterField label="Sort" theme={t}>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={barSelectStyle}>
+            {SORT_TABS.map(tab => (
+              <option key={tab.id} value={tab.id}>{tab.label}</option>
+            ))}
+          </select>
+        </FilterField>
+        {activeFilterCount > 0 ? (
           <button
             type="button"
-            aria-expanded={filtersOpen}
-            aria-haspopup="true"
-            onClick={() => setFiltersOpen(open => !open)}
+            onClick={() => setFilters({ ...defaultFilters })}
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              cursor: "pointer",
-              padding: "7px 14px",
-              borderRadius: 999,
-              background: t.btnGhostBg,
-              color: t.btnGhostText,
-              border: `1px solid ${filtersOpen ? t.accent : t.border}`,
-              fontSize: 12,
+              marginLeft: "auto",
+              alignSelf: "flex-end",
+              background: "none",
+              border: "none",
+              color: t.accent,
+              fontSize: 13,
               fontWeight: 600,
+              cursor: "pointer",
+              padding: "8px 0",
               fontFamily: "'DM Sans', sans-serif",
             }}
           >
-            More filters
-            {activeFilterCount > 0 ? (
-              <span style={{ background: deliberationMode ? "rgba(61,207,154,0.18)" : "rgba(40, 98, 65, 0.1)", color: t.accent, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: "1px 7px" }}>
-                {activeFilterCount}
-              </span>
-            ) : null}
+            Clear all filters
           </button>
-          {filtersOpen ? (
-            <div
-              role="dialog"
-              aria-label="Sort and filter scoreboard"
-              style={{
-                position: "absolute",
-                right: 0,
-                top: "calc(100% + 8px)",
-                width: "min(300px, calc(100vw - 44px))",
-                background: t.cardBg,
-                borderRadius: 10,
-                boxShadow: "0 16px 48px rgba(0,0,0,0.12)",
-                border: `1px solid ${t.border}`,
-                padding: "16px 16px 12px",
-                zIndex: 50,
-                color: t.text,
-                animation: "scoreboardPanelIn 0.22s ease-out",
-              }}
-            >
-              <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: t.textMuted }}>SORT BY</p>
-              <label style={{ display: "block", marginBottom: 14, fontSize: 12, fontWeight: 600 }}>
-                Order
-                <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={filterSelectStyle}>
-                  {SORT_TABS.map(tab => (
-                    <option key={tab.id} value={tab.id}>{tab.label}</option>
-                  ))}
-                </select>
-              </label>
-              <p style={{ margin: "0 0 12px", paddingTop: 4, borderTop: `1px solid ${t.border}`, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", color: t.textMuted }}>FILTER BY</p>
-              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
-                Major
-                <select value={filters.major} onChange={e => setFilters(f => ({ ...f, major: e.target.value }))} style={filterSelectStyle}>
-                  <option value="all">All majors</option>
-                  {majorOptions.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </label>
-              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
-                Year
-                <select value={filters.year} onChange={e => setFilters(f => ({ ...f, year: e.target.value }))} style={filterSelectStyle}>
-                  <option value="all">All years</option>
-                  {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </label>
-              <label style={{ display: "block", marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
-                Reviews
-                <select value={filters.reviews} onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))} style={filterSelectStyle}>
-                  <option value="all">Any count</option>
-                  <option value="0">None yet (0)</option>
-                  <option value="1">Exactly 1</option>
-                  <option value="1+">Reviewed (1+)</option>
-                  <option value="2+">2 or more</option>
-                </select>
-              </label>
-              <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
-                Score
-                <select value={filters.scoreBand} onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))} style={filterSelectStyle}>
-                  <option value="all">All scores</option>
-                  <option value="top">Top (≥ 80%)</option>
-                  <option value="strong">Strong (≥ 70%)</option>
-                  <option value="low">Low (&lt; 60%, reviewed)</option>
-                  <option value="pending">Pending / no score</option>
-                </select>
-              </label>
-              <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
-                Flags / referrals
-                <select value={filters.signals} onChange={e => setFilters(f => ({ ...f, signals: e.target.value }))} style={filterSelectStyle}>
-                  <option value="all">All candidates</option>
-                  <option value="referred">Referred only</option>
-                  <option value="flagged">Flagged only</option>
-                </select>
-              </label>
-              {deliberationMode ? (
-                <label style={{ display: "block", marginBottom: 12, fontSize: 12, fontWeight: 600 }}>
-                  Committee decision
-                  <select value={filters.decision} onChange={e => setFilters(f => ({ ...f, decision: e.target.value }))} style={filterSelectStyle}>
-                    <option value="all">All decisions</option>
-                    <option value="undecided">Undecided (pending + hold)</option>
-                    <option value="pending">Pending only</option>
-                    <option value="advance">Advanced</option>
-                    <option value="hold">Hold</option>
-                    <option value="reject">Rejected</option>
-                  </select>
-                </label>
-              ) : null}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${t.border}`, paddingTop: 10 }}>
-                <button type="button" onClick={() => setFilters({ ...defaultFilters })} style={{ background: "none", border: "none", color: t.accent, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}>
-                  Clear all
-                </button>
-                <button type="button" onClick={() => setFiltersOpen(false)} style={{ background: t.accent, border: "none", color: deliberationMode ? "#0B1628" : "#FFF", padding: "6px 14px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                  Done
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
+        ) : null}
       </div>
 
       {(activeFilterPills.length > 0 || hasActiveSearch) ? (

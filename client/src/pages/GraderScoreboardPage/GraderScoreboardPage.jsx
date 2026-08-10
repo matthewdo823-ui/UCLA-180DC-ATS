@@ -359,22 +359,19 @@ export default function GraderScoreboardPage() {
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
         <div style={{ maxWidth: 640, flex: "1 1 260px", minWidth: 0 }}>
           <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>
-            Spring 2025 · {activeMode.eyebrow}
+            {data.context?.cycle?.name || "Current cycle"} · {activeMode.eyebrow}
           </p>
-          <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
-            <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${css.greenDark} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
-            <div style={{ minWidth: 0 }}>
-              <h1 style={pageTitleStyle}>{activeMode.heading}{activeMode.headingAccent}</h1>
-              <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
-                {activeMode.description}
-                {hasActiveNarrowing && (
-                  <span style={{ display: "block", marginTop: 8, fontSize: 13, color: css.greenDark, fontWeight: 600 }}>
-                    Showing {filteredGraders.length} of {graders.length} graders
-                    {hasActiveSearch ? " matching search" : ""}
-                  </span>
-                )}
-              </p>
-            </div>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={pageTitleStyle}>{activeMode.heading}{activeMode.headingAccent}</h1>
+            <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
+              {activeMode.description}
+              {hasActiveNarrowing && (
+                <span style={{ display: "block", marginTop: 8, fontSize: 13, color: css.greenDark, fontWeight: 600 }}>
+                  Showing {filteredGraders.length} of {graders.length} graders
+                  {hasActiveSearch ? " matching search" : ""}
+                </span>
+              )}
+            </p>
           </div>
         </div>
 
