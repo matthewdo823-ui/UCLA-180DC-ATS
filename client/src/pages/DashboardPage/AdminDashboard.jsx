@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import Topbar from "../../components/Topbar/Topbar";
+import PageLoader from "../../components/PageLoader";
 import { css } from "../../theme/colors";
 import useAdminDashboard from "./useAdminDashboard";
 import {
@@ -82,28 +83,7 @@ export default function AdminDashboard() {
         ) : null}
 
         {loading ? (
-          <div style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 14,
-            minHeight: "60vh",
-            color: css.textGray,
-            fontSize: 14,
-          }}
-          >
-            <div style={{
-              width: 36,
-              height: 36,
-              border: `3px solid ${css.borderLight}`,
-              borderTopColor: css.greenDark,
-              borderRadius: "50%",
-              animation: "spin 0.8s linear infinite",
-            }}
-            />
-            Loading dashboard…
-          </div>
+          <PageLoader minHeight="60vh" />
         ) : (
           <>
              <Panel title="Round timeline">

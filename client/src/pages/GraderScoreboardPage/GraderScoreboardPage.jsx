@@ -6,6 +6,7 @@ import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
+import PageLoader from "../../components/PageLoader";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatDate, formatNumber, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 const cardGreen = "#085041";
@@ -490,7 +491,7 @@ export default function GraderScoreboardPage() {
           <div style={{ textAlign: "right" }}>ACTIONS</div>
         </div>
 
-        {loading && <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading graders...</div>}
+        {loading && <PageLoader />}
 
         {!loading && graders.length === 0 && (
           <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>{activeMode.emptyLabel}</div>

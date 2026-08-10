@@ -6,6 +6,7 @@ import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
+import PageLoader from "../../components/PageLoader";
 import {
   RUBRIC_IMAGE_OPTIONS,
   RUBRIC_YEAR_KEYS,
@@ -853,7 +854,7 @@ export default function CycleManagementPage() {
         ) : null}
 
         {loading ? (
-          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading cycles…</div>
+          <PageLoader />
         ) : cycles.length === 0 ? (
           <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No cycles yet. Create one to get started.</div>
         ) : (

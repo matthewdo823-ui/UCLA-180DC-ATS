@@ -4,6 +4,7 @@ import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import Topbar from "../../components/Topbar/Topbar";
+import PageLoader from "../../components/PageLoader";
 import {
   DemographicsLegend,
   DemographicsStackedBarChart,
@@ -122,11 +123,7 @@ export default function DemographicsPage() {
           </p>
         </div>
 
-        {loading && (
-          <div style={{ maxWidth: 1200, margin: "24px auto 0", width: "100%", color: css.textGray }}>
-            Loading demographics…
-          </div>
-        )}
+        {loading && <PageLoader />}
 
         {!loading && error && (
           <div style={{

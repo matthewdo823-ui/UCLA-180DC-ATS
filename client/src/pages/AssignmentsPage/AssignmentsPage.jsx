@@ -6,6 +6,7 @@ import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
+import PageLoader from "../../components/PageLoader";
 import { pageTitleStyle } from "../../theme/typography";
 
 const CANDIDATE_FILTERS = [
@@ -192,9 +193,7 @@ export default function AssignmentsPage() {
         {notice && <Banner tone="success">{notice}</Banner>}
 
         {loading ? (
-          <div style={{ ...cardStyle, padding: 40, textAlign: "center", color: css.textGray, fontSize: 14 }}>
-            Loading assignment board...
-          </div>
+          <PageLoader />
         ) : !board ? (
           <div style={{ ...cardStyle, padding: 40, textAlign: "center", color: css.textGray, fontSize: 14 }}>
             <p style={{ margin: "0 0 12px" }}>Could not load the assignment board.</p>
