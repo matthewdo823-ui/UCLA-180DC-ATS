@@ -9,10 +9,10 @@ const {
 
 const DEMOGRAPHIC_FIELDS = [
   { id: "year", label: "Class year", type: "categorical" },
+  { id: "urm", label: "URM", type: "grouped" },
+  { id: "pronouns", label: "Pronouns", type: "pronouns" },
   { id: "major", label: "Major", type: "grouped" },
   { id: "gpa", label: "GPA", type: "gpa" },
-  { id: "pronouns", label: "Pronouns", type: "pronouns" },
-  { id: "urm", label: "URM", type: "grouped" },
 ];
 
 const MAX_GROUPED_CATEGORIES = 8;

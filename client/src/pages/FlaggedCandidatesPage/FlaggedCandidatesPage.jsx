@@ -8,7 +8,7 @@ import Topbar from "../../components/Topbar/Topbar";
 import { API } from "../../constants/config";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatDate, getInitials } from "../../utils/format";
-const cardMint = "#1D9E75";
+import { useActiveCycle } from "../../hooks/useActiveCycle";
 
 const SIGNAL_MODES = [
   {
@@ -204,6 +204,7 @@ function ReferralCard({ referral }) {
 export default function FlaggedCandidatesPage() {
   const authedFetch = useAuthedFetch();
   const queryClient = useQueryClient();
+  const { cycle } = useActiveCycle();
   const [mode, setMode] = useState(SIGNAL_MODES[0].id);
   // Kept apart from the query's own error so a failed resolve doesn't clobber the
   // loaded list (or get wiped by a background refetch).
@@ -307,16 +308,13 @@ export default function FlaggedCandidatesPage() {
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
         <div style={{ maxWidth: 640, flex: "1 1 260px", minWidth: 0 }}>
           <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>
-            Spring 2025 · {activeMode.eyebrow}
+            {cycle?.name || "Current cycle"} · {activeMode.eyebrow}
           </p>
-          <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
-            <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${css.greenDark} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
-            <div style={{ minWidth: 0 }}>
-              <h1 style={pageTitleStyle}>{activeMode.heading}{activeMode.headingAccent}</h1>
-              <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
-                {activeMode.description}
-              </p>
-            </div>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={pageTitleStyle}>{activeMode.heading}{activeMode.headingAccent}</h1>
+            <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
+              {activeMode.description}
+            </p>
           </div>
         </div>
 
