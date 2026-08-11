@@ -65,6 +65,10 @@ const {
     fetchPendingAssignedResumeIds,
 } = require('../services/assignmentService');
 const {
+    MINIMUM_REVIEWS_PER_CANDIDATE,
+    rankSharedQueueResumes,
+} = require('../services/sharedQueueRankingService');
+const {
     FRQ_METRIC,
     FRQ_MAX_SCORE,
     mapFrqReviewRow,
@@ -73,6 +77,10 @@ const {
     applyCompositeScoringToCandidates,
     appendFrqMetric,
 } = require('../services/frqScoringService');
+const {
+    buildSharedCandidateCalibration,
+    applySharedCandidateCalibration,
+} = require('../services/sharedCandidateCalibrationService');
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
@@ -426,7 +434,23 @@ exports.getNextResume = async (req, res) => {
 
     if (error) return respondWithServerError(res, error, 'getNextResume');
 
-    for (const row of resumeCandidates || []) {
+    // This is a soft tie-breaker only: the least-reviewed candidates still
+    // come first, while candidates already reviewed by another grader can be
+    // chosen to build the shared-candidate graph used for calibration.
+    const { data: cycleReviewRows, error: cycleReviewError } = await supabase
+        .from('resume_reviews')
+        .select('resume_id, graded_by')
+        .eq('cycle_id', screening.cycle.id)
+        .not('graded_by', 'is', null);
+    if (cycleReviewError) return respondWithServerError(res, cycleReviewError, 'getNextResume overlap');
+
+    const rankedResumeCandidates = rankSharedQueueResumes({
+        resumes: resumeCandidates || [],
+        reviews: cycleReviewRows || [],
+        graderId: gradedBy,
+    });
+
+    for (const row of rankedResumeCandidates) {
         if (reviewedResumeIdSet.has(row.id)) {
             continue;
         }
@@ -2076,6 +2100,11 @@ exports.getScoreboard = async (req, res) => {
             };
         });
 
+        // Learn grader severity from the complete screening population before
+        // deliberation filtering.  A score must not change merely because an
+        // admin switches scoreboard views or advances another candidate.
+        const calibration = buildSharedCandidateCalibration(candidates);
+
         const filteredCandidates = filterCandidatesForDeliberationRound(candidates, {
             deliberationRound,
             priorDecisionRows: priorRoundDecisionRows,
@@ -2104,13 +2133,17 @@ exports.getScoreboard = async (req, res) => {
             frqByResumeId,
             rubricConfig: resumeRound.rubric_config,
         });
+        const candidatesWithCalibration = applySharedCandidateCalibration(
+            candidatesWithComposite,
+            calibration
+        );
         const metricsWithFrq = appendFrqMetric(metrics);
 
         const signalCandidateIds = [
-            ...new Set(candidatesWithComposite.map((c) => c.candidateId).filter(Boolean)),
+            ...new Set(candidatesWithCalibration.map((c) => c.candidateId).filter(Boolean)),
         ];
         const signalLookups = await loadCandidateSignalLookups(signalCandidateIds, req.user?.user_id);
-        const candidatesWithSignals = candidatesWithComposite.map((c) =>
+        const candidatesWithSignals = candidatesWithCalibration.map((c) =>
             applyCandidateSignals(c, signalLookups)
         );
 
@@ -2128,8 +2161,14 @@ exports.getScoreboard = async (req, res) => {
         const avgScore = reviewCount > 0 ? (totalNormalizedSum / reviewCount).toFixed(1) : 0;
         const decisionCounts = countDecisions(candidatesWithSignals);
         const incompleteSummary = summarizeIncompleteDeliberation(candidatesWithSignals);
+        const underReviewedCount = deliberationRound.id === resumeRound.id
+            ? candidatesWithSignals.filter((candidate) => candidate.numReviews < MINIMUM_REVIEWS_PER_CANDIDATE).length
+            : 0;
         const undecidedCount = decisionCounts.pending + decisionCounts.hold;
-        const canCloseRound = canDeliberate && incompleteSummary.incompleteCount === 0 && candidatesWithSignals.length > 0;
+        const canCloseRound = canDeliberate
+            && incompleteSummary.incompleteCount === 0
+            && underReviewedCount === 0
+            && candidatesWithSignals.length > 0;
 
         let notification = null;
         if (req.user?.role === "admin") {
@@ -2161,6 +2200,7 @@ exports.getScoreboard = async (req, res) => {
                 canCloseRound,
                 undecidedCount,
                 incompleteCount: incompleteSummary.incompleteCount,
+                underReviewedCount,
                 notification,
             },
             metrics: metricsWithFrq,
@@ -2174,6 +2214,7 @@ exports.getScoreboard = async (req, res) => {
                 pending: decisionCounts.pending,
                 avgScore: avgScore,
             },
+            calibration,
             candidates: candidatesWithSignals
         });
 

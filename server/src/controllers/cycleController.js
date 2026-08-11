@@ -626,6 +626,21 @@ exports.closeRound = async (req, res) => {
   }
 
   try {
+    const { data: current, error: currentError } = await supabase
+      .from("rounds")
+      .select("id, cycle_id, status")
+      .eq("id", roundId)
+      .maybeSingle();
+    if (currentError) return respondWithServerError(res, currentError, "closeRound current");
+    if (!current) return res.status(404).json({ error: "Round not found" });
+
+    if (current.status === "active") {
+      const deliberationError = await assertDeliberationCompleteForRound(current.cycle_id, roundId);
+      if (deliberationError) {
+        return res.status(deliberationError.status).json(deliberationError);
+      }
+    }
+
     const { data, error } = await supabase
       .from("rounds")
       .update({ status: "closed" })
@@ -669,6 +684,7 @@ exports.advanceToNextRound = async (req, res) => {
         incompleteCount: deliberationError.incompleteCount,
         pendingCount: deliberationError.pendingCount,
         holdCount: deliberationError.holdCount,
+        underReviewedCount: deliberationError.underReviewedCount,
       });
     }
 

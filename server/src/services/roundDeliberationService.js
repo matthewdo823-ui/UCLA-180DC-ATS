@@ -19,6 +19,7 @@ const {
   isResumeScreenType,
   sortRounds,
 } = require("../utils/rounds");
+const { MINIMUM_REVIEWS_PER_CANDIDATE } = require("./sharedQueueRankingService");
 
 function mapScoreboardRoundContext(row) {
   if (!row) return null;
@@ -171,6 +172,16 @@ async function assertDeliberationCompleteForRound(cycleId, roundId) {
   }
 
   const pool = await loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRound, cycleRounds);
+  if (isResumeScreenType(deliberationRound.type)) {
+    const underReviewedCount = pool.filter((candidate) => candidate.numReviews < MINIMUM_REVIEWS_PER_CANDIDATE).length;
+    if (underReviewedCount > 0) {
+      return {
+        error: `Cannot close resume screening: ${underReviewedCount} candidate(s) still need ${MINIMUM_REVIEWS_PER_CANDIDATE} completed reviews.`,
+        status: 400,
+        underReviewedCount,
+      };
+    }
+  }
   const summary = summarizeIncompleteDeliberation(pool);
   if (summary.incompleteCount > 0) {
     const parts = [];

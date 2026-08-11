@@ -1133,6 +1133,7 @@ export default function ScoreboardPage() {
   const canEditDeliberations = isAdmin && canDeliberate && !viewingHistorical;
   const canCloseRound = data.context?.canCloseRound === true;
   const undecidedCount = data.context?.undecidedCount ?? 0;
+  const underReviewedCount = data.context?.underReviewedCount ?? 0;
   const advanceNotification = data.context?.notification;
   const pastRounds = useMemo(
     () => allRounds.filter((round) => round.id !== liveActiveRound?.id),
@@ -1280,7 +1281,9 @@ export default function ScoreboardPage() {
       setDecisionError(
         undecidedCount > 0
           ? `Mark every candidate Advance or Reject before closing the round (${undecidedCount} still undecided).`
-          : "Mark every candidate Advance or Reject before closing the round."
+          : underReviewedCount > 0
+            ? `${underReviewedCount} candidate${underReviewedCount === 1 ? "" : "s"} still need at least 3 completed reviews before resume screening can close.`
+            : "Mark every candidate Advance or Reject before closing the round."
       );
       return;
     }
@@ -1310,7 +1313,7 @@ export default function ScoreboardPage() {
     } finally {
       setAdvanceRoundBusy(false);
     }
-  }, [activeRound?.id, activeRound?.name, authedFetch, canCloseRound, canDeliberate, isAdmin, nextRound?.name, queryClient, undecidedCount]);
+  }, [activeRound?.id, activeRound?.name, authedFetch, canCloseRound, canDeliberate, isAdmin, nextRound?.name, queryClient, undecidedCount, underReviewedCount]);
 
   const handleExport = useCallback((decision) => {
     setExportBusy(true);
@@ -1733,7 +1736,9 @@ export default function ScoreboardPage() {
                       disabled={advanceRoundBusy || !canCloseRound}
                       title={
                         !canCloseRound
-                          ? `Mark all ${undecidedCount || "remaining"} candidates Advance or Reject before closing`
+                          ? underReviewedCount > 0
+                            ? `${underReviewedCount} candidate${underReviewedCount === 1 ? "" : "s"} still need 3 reviews`
+                            : `Mark all ${undecidedCount || "remaining"} candidates Advance or Reject before closing`
                           : nextRound
                             ? `Close ${activeRound.name} and open ${nextRound.name}`
                             : "Close this round"
@@ -1749,7 +1754,9 @@ export default function ScoreboardPage() {
                       {advanceRoundBusy
                         ? "Advancing…"
                         : !canCloseRound
-                          ? `Close round (${undecidedCount} undecided)`
+                          ? underReviewedCount > 0
+                            ? `Close round (${underReviewedCount} under-reviewed)`
+                            : `Close round (${undecidedCount} undecided)`
                           : nextRound
                             ? `Close & open ${nextRound.name}`
                             : "Close round"}
@@ -1983,7 +1990,7 @@ export default function ScoreboardPage() {
 
       {equalizeActive ? (
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.infoBorder}`, background: t.infoBg, fontSize: 13, color: t.text, lineHeight: 1.45 }}>
-          <strong style={{ color: t.accent }}>Equalized scores</strong> — adjusted by grader z-scores per rubric category. Toggle “Raw scores” to compare.
+          <strong style={{ color: t.accent }}>Equalized scores</strong> — adjusted only for consistent grader severity on candidates reviewed by multiple graders. Toggle “Raw scores” to compare.
         </div>
       ) : null}
 
