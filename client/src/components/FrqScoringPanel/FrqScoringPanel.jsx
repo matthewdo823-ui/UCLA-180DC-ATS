@@ -42,7 +42,7 @@ export default function FrqScoringPanel({
           <div
             style={{
               fontSize: 11,
-              fontWeight: 800,
+              fontWeight: 700,
               color: css.greenDark,
               letterSpacing: "0.05em",
               display: "flex",
@@ -141,7 +141,7 @@ export default function FrqScoringPanel({
           <div
             style={{
               fontSize: 11,
-              fontWeight: 800,
+              fontWeight: 700,
               color: css.greenDark,
               letterSpacing: "0.05em",
               display: "flex",

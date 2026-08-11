@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import Topbar from "../../components/Topbar/Topbar";
+import PageLoader from "../../components/PageLoader";
 import { css } from "../../theme/colors";
 import useAdminDashboard from "./useAdminDashboard";
 import {
@@ -7,10 +8,8 @@ import {
   Panel,
   StatCard,
   ActionItemList,
-  CompactQuickLinks,
   GraderProgressRows,
   RoundTimeline,
-  StatusBanner,
   PipelineBreakdown,
   twoColumnGridStyle,
 } from "./dashboardComponents";
@@ -41,14 +40,27 @@ export default function AdminDashboard() {
         { label: "Undecided", value: pipeline?.undecidedCount ?? 0, accent: css.amber },
       ];
 
-  const quickActions = [
-    { label: "Scoreboard", path: "/scoreboard", iconKey: "scoreboard" },
-    { label: "Graders", path: "/grader-scoreboard", iconKey: "graders" },
-    { label: "Flag / Refer", path: "/flagged-candidates", iconKey: "flags" },
-    { label: "Cycles", path: "/cycle-management", iconKey: "cycles" },
-    { label: "Team", path: "/user-management", iconKey: "team" },
-    { label: "Demographics", path: "/demographics", iconKey: "demographics" },
-  ];
+  // The old status banner's alert counts, folded into the At a glance grid as
+  // boxes. They only appear when non-zero, mirroring the banner's old behavior.
+  const criticalCount = actionItems.filter((item) => item.severity === "critical").length;
+  const warningCount = actionItems.filter((item) => item.severity === "warning").length;
+
+  const alertStats = [];
+  if (criticalCount > 0) {
+    alertStats.push({ label: criticalCount === 1 ? "Critical" : "Criticals", value: criticalCount, accent: css.red });
+  }
+  if (warningCount > 0) {
+    alertStats.push({ label: warningCount === 1 ? "Warning" : "Warnings", value: warningCount, accent: css.amber });
+  }
+  if (graderSummary?.behindCount > 0) {
+    alertStats.push({
+      label: graderSummary.behindCount === 1 ? "Grader behind" : "Graders behind",
+      value: graderSummary.behindCount,
+      accent: css.amber,
+    });
+  }
+
+  const glanceStats = [...pipelineStats, ...alertStats];
 
   return (
     <div style={{ ...pageStyle, padding: 0 }}>
@@ -70,107 +82,80 @@ export default function AdminDashboard() {
           </div>
         ) : null}
 
-        {!loading && !error ? (
-          <StatusBanner
-            context={context}
-            pipeline={pipeline}
-            graderSummary={graderSummary}
-            actionItems={actionItems}
-          />
-        ) : null}
-
-        <Panel title="At a glance">
-          {loading ? (
-            <div style={{ fontSize: 14, color: css.textGray }}>Loading pipeline…</div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-              {pipelineStats.map((stat) => (
-                <StatCard key={stat.label} {...stat} hero />
-              ))}
-            </div>
-          )}
-        </Panel>
-
-        <div style={twoColumnGridStyle}>
-          <div>
-            <Panel title="Needs attention">
-              {loading ? (
-                <div style={{ fontSize: 14, color: css.textGray }}>Loading action items…</div>
-              ) : (
-                <ActionItemList items={actionItems} onNavigate={navigate} />
-              )}
+        {loading ? (
+          <PageLoader minHeight="60vh" />
+        ) : (
+          <>
+             <Panel title="Round timeline">
+              <RoundTimeline
+                rounds={context?.allRounds}
+                activeRound={context?.activeRound}
+                nextRound={context?.nextRound}
+              />
             </Panel>
+
+            <Panel title="At a glance">
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+                {glanceStats.map((stat) => (
+                  <StatCard key={stat.label} {...stat} hero />
+                ))}
+              </div>
+            </Panel>
+
+           
+
+            <div style={twoColumnGridStyle}>
+              <Panel title="Needs attention">
+                <ActionItemList items={actionItems} onNavigate={navigate} />
+              </Panel>
+
+              <Panel title="Grading coverage">
+                {data?.graderLoadError ? (
+                  <div style={{ fontSize: 14, color: css.red }}>{data.graderLoadError}</div>
+                ) : !graderSummary ? (
+                  <div style={{ fontSize: 14, color: css.textGray }}>No grader data for this cycle.</div>
+                ) : (
+                  <div style={{
+                    background: css.cardWhite,
+                    border: `1px solid ${css.borderLight}`,
+                    borderRadius: 12,
+                    padding: "18px 20px",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+                  }}
+                  >
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginBottom: 16 }}>
+                      <StatCard label="Active graders" value={graderSummary.activeGraders} sub={`of ${graderSummary.graders} total`} />
+                      <StatCard label="Total reviews" value={graderSummary.totalReviews} sub={`Avg ${graderSummary.avgReviews} per grader`} />
+                      <StatCard label="Goal complete" value={graderSummary.completeCount} sub={`${graderSummary.expectedReviews} reviews each`} />
+                      <StatCard
+                        label="Not started"
+                        value={graderSummary.notStarted}
+                        accent={graderSummary.notStarted > 0 ? css.amber : css.greenDark}
+                      />
+                    </div>
+                    {graderSummary.behindGraders?.length > 0 ? (
+                      <>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          Behind on goal
+                        </div>
+                        <GraderProgressRows
+                          graders={graderSummary.behindGraders}
+                          expectedReviews={graderSummary.expectedReviews}
+                        />
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 13, color: css.textGray }}>All active graders are on track.</div>
+                    )}
+                  </div>
+                )}
+              </Panel>
+            </div>
 
             <Panel title="Pipeline">
-              {loading ? (
-                <div style={{ fontSize: 14, color: css.textGray }}>Loading pipeline…</div>
-              ) : (
-                <PipelineBreakdown pipeline={pipeline} isInterview={isInterview} />
-              )}
+              <PipelineBreakdown pipeline={pipeline} isInterview={isInterview} />
             </Panel>
-          </div>
-
-          <div>
-            <Panel title="Round timeline">
-              {loading ? (
-                <div style={{ fontSize: 14, color: css.textGray }}>Loading round status…</div>
-              ) : (
-                <RoundTimeline
-                  rounds={context?.allRounds}
-                  activeRound={context?.activeRound}
-                  nextRound={context?.nextRound}
-                />
-              )}
-            </Panel>
-
-            <Panel title="Grading coverage">
-              {loading ? (
-                <div style={{ fontSize: 14, color: css.textGray }}>Loading grader coverage…</div>
-              ) : data?.graderLoadError ? (
-                <div style={{ fontSize: 14, color: css.red }}>{data.graderLoadError}</div>
-              ) : !graderSummary ? (
-                <div style={{ fontSize: 14, color: css.textGray }}>No grader data for this cycle.</div>
-              ) : (
-                <div style={{
-                  background: css.cardWhite,
-                  border: `1px solid ${css.borderLight}`,
-                  borderRadius: 12,
-                  padding: "18px 20px",
-                  boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-                }}
-                >
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginBottom: 16 }}>
-                    <StatCard label="Active graders" value={graderSummary.activeGraders} sub={`of ${graderSummary.graders} total`} />
-                    <StatCard label="Total reviews" value={graderSummary.totalReviews} sub={`Avg ${graderSummary.avgReviews} per grader`} />
-                    <StatCard label="Goal complete" value={graderSummary.completeCount} sub={`${graderSummary.expectedReviews} reviews each`} />
-                    <StatCard
-                      label="Not started"
-                      value={graderSummary.notStarted}
-                      accent={graderSummary.notStarted > 0 ? css.amber : css.greenDark}
-                    />
-                  </div>
-                  {graderSummary.behindGraders?.length > 0 ? (
-                    <>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                        Behind on goal
-                      </div>
-                      <GraderProgressRows
-                        graders={graderSummary.behindGraders}
-                        expectedReviews={graderSummary.expectedReviews}
-                      />
-                    </>
-                  ) : (
-                    <div style={{ fontSize: 13, color: css.textGray }}>All active graders are on track.</div>
-                  )}
-                </div>
-              )}
-            </Panel>
-          </div>
-        </div>
-
-        <Panel title="Quick links" style={{ marginBottom: 0 }}>
-          <CompactQuickLinks actions={quickActions} onNavigate={navigate} />
-        </Panel>
+          </>
+        )}
       </div>
     </div>
   );

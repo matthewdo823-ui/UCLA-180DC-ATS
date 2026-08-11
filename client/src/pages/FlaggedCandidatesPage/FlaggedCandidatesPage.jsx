@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import { API } from "../../constants/config";
-import { serifFont } from "../../theme/typography";
+import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatDate, getInitials } from "../../utils/format";
-const cardMint = "#1D9E75";
+import { useActiveCycle } from "../../hooks/useActiveCycle";
 
 const SIGNAL_MODES = [
   {
@@ -48,7 +51,7 @@ function FlagCard({ flag, onResolve, resolving }) {
             {getInitials(candidate.name)}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontFamily: serifFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500 }}>
+            <p style={{ fontFamily: sansFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500 }}>
               {candidate.name || "Unknown candidate"}
             </p>
             <p style={{ fontSize: 13, color: css.textGray, margin: 0 }}>
@@ -57,13 +60,13 @@ function FlagCard({ flag, onResolve, resolving }) {
           </div>
         </div>
 
-        <span style={{ background: "rgba(239,159,39,0.12)", color: css.amber, border: "1px solid rgba(239,159,39,0.28)", borderRadius: 999, fontSize: 11, fontWeight: 800, padding: "5px 10px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+        <span style={{ background: "rgba(239,159,39,0.12)", color: css.amber, border: "1px solid rgba(239,159,39,0.28)", borderRadius: 999, fontSize: 11, fontWeight: 700, padding: "5px 10px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
           Open Flag
         </span>
       </div>
 
       <div style={{ marginTop: 18, padding: "14px 16px", background: "#FFFBF3", border: "1px solid rgba(239,159,39,0.24)", borderRadius: 10 }}>
-        <p style={{ margin: "0 0 6px", fontSize: 10, color: css.amber, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+        <p style={{ margin: "0 0 6px", fontSize: 10, color: css.amber, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
           Flag Reason
         </p>
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: css.textDark }}>
@@ -133,7 +136,7 @@ function ReferralCard({ referral }) {
             {getInitials(candidate.name)}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontFamily: serifFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500 }}>
+            <p style={{ fontFamily: sansFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500 }}>
               {candidate.name || "Unknown candidate"}
             </p>
             <p style={{ fontSize: 13, color: css.textGray, margin: 0 }}>
@@ -142,13 +145,13 @@ function ReferralCard({ referral }) {
           </div>
         </div>
 
-        <span style={{ background: "rgba(40,98,65,0.1)", color: css.greenDark, border: "1px solid rgba(40,98,65,0.24)", borderRadius: 999, fontSize: 11, fontWeight: 800, padding: "5px 10px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+        <span style={{ background: "rgba(40,98,65,0.1)", color: css.greenDark, border: "1px solid rgba(40,98,65,0.24)", borderRadius: 999, fontSize: 11, fontWeight: 700, padding: "5px 10px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
           Referral
         </span>
       </div>
 
       <div style={{ marginTop: 18, padding: "14px 16px", background: "#F8FBF6", border: "1px solid rgba(40,98,65,0.18)", borderRadius: 10 }}>
-        <p style={{ margin: "0 0 6px", fontSize: 10, color: css.greenDark, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+        <p style={{ margin: "0 0 6px", fontSize: 10, color: css.greenDark, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
           Referral Note
         </p>
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: css.textDark }}>
@@ -200,10 +203,12 @@ function ReferralCard({ referral }) {
 
 export default function FlaggedCandidatesPage() {
   const authedFetch = useAuthedFetch();
+  const queryClient = useQueryClient();
+  const { cycle } = useActiveCycle();
   const [mode, setMode] = useState(SIGNAL_MODES[0].id);
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  // Kept apart from the query's own error so a failed resolve doesn't clobber the
+  // loaded list (or get wiped by a background refetch).
+  const [resolveError, setResolveError] = useState("");
   const [resolvingId, setResolvingId] = useState(null);
 
   const activeMode = useMemo(
@@ -211,35 +216,28 @@ export default function FlaggedCandidatesPage() {
     [mode]
   );
 
-  const loadItems = useCallback(async (targetMode) => {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await authedFetch(`${API}/${targetMode.endpoint}`);
-      const json = await res.json().catch(() => ({}));
+  // Each mode keys its own cache entry, so toggling flags/referrals is instant
+  // after the first load instead of refetching every time.
+  const signalsQuery = useQuery({
+    queryKey: qk.candidateSignals(activeMode.endpoint),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/${activeMode.endpoint}`);
+      const json = await readJsonOrThrow(res, `Failed to load ${activeMode.label.toLowerCase()}`);
+      return json[activeMode.dataKey] || [];
+    },
+    staleTime: STALE.dashboard,
+  });
 
-      if (!res.ok) {
-        throw new Error(json.error || `Failed to load ${targetMode.label.toLowerCase()}`);
-      }
-
-      setItems(json[targetMode.dataKey] || []);
-    } catch (err) {
-      console.error(`Failed to load ${targetMode.label.toLowerCase()}:`, err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch]);
-
-  useEffect(() => {
-    loadItems(activeMode);
-  }, [loadItems, activeMode]);
+  const items = useMemo(() => signalsQuery.data ?? [], [signalsQuery.data]);
+  const loading = signalsQuery.isPending;
+  const refreshing = signalsQuery.isFetching;
+  const error = resolveError
+    || (signalsQuery.error ? (signalsQuery.error.message || `Failed to load ${activeMode.label.toLowerCase()}`) : "");
 
   function handleModeChange(nextMode) {
     if (nextMode === mode) return;
     setMode(nextMode);
-    setItems([]);
-    setError("");
+    setResolveError("");
   }
 
   const uniqueCandidateCount = useMemo(
@@ -250,6 +248,7 @@ export default function FlaggedCandidatesPage() {
   async function resolveFlag(flagId) {
     try {
       setResolvingId(flagId);
+      setResolveError("");
       const res = await authedFetch(`${API}/candidate-flags/${flagId}/resolve`, {
         method: "PATCH",
       });
@@ -259,10 +258,14 @@ export default function FlaggedCandidatesPage() {
         throw new Error(json.error || "Failed to resolve flag");
       }
 
-      setItems(current => current.filter(item => item.id !== flagId));
+      // Drop the resolved flag from the cached flags list — snappy, no refetch.
+      queryClient.setQueryData(
+        qk.candidateSignals("candidate-flags"),
+        (current) => (current ? current.filter(item => item.id !== flagId) : current)
+      );
     } catch (err) {
       console.error("Failed to resolve candidate flag:", err);
-      setError(err.message);
+      setResolveError(err.message);
     } finally {
       setResolvingId(null);
     }
@@ -305,33 +308,27 @@ export default function FlaggedCandidatesPage() {
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
         <div style={{ maxWidth: 640, flex: "1 1 260px", minWidth: 0 }}>
           <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>
-            Spring 2025 · {activeMode.eyebrow}
+            {cycle?.name || "Current cycle"} · {activeMode.eyebrow}
           </p>
-          <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
-            <div style={{ width: 4, borderRadius: 4, background: `linear-gradient(180deg, ${css.greenDark} 0%, ${cardMint} 100%)`, flexShrink: 0 }} aria-hidden />
-            <div style={{ minWidth: 0 }}>
-              <h1 style={{ margin: 0, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
-                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 28, fontWeight: 500, color: css.textDark }}>{activeMode.heading}</span>
-                <span style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 600, color: css.greenDark }}>{activeMode.headingAccent}</span>
-              </h1>
-              <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
-                {activeMode.description}
-              </p>
-            </div>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={pageTitleStyle}>{activeMode.heading}{activeMode.headingAccent}</h1>
+            <p style={{ margin: "10px 0 0", fontSize: 14, color: css.textGray, lineHeight: 1.45 }}>
+              {activeMode.description}
+            </p>
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", flexShrink: 0, marginLeft: "auto" }}>
           <button
             type="button"
-            onClick={() => loadItems(activeMode)}
-            disabled={loading}
+            onClick={() => signalsQuery.refetch()}
+            disabled={refreshing}
             aria-label={`Refresh ${activeMode.label.toLowerCase()} list`}
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              cursor: loading ? "wait" : "pointer",
+              cursor: refreshing ? "wait" : "pointer",
               padding: "10px 16px",
               borderRadius: 8,
               background: css.cardWhite,
@@ -341,7 +338,7 @@ export default function FlaggedCandidatesPage() {
               fontWeight: 600,
               fontFamily: "'DM Sans', sans-serif",
               boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-              opacity: loading ? 0.75 : 1,
+              opacity: refreshing ? 0.75 : 1,
             }}
           >
             <span style={{ display: "inline-flex", color: css.greenDark }} aria-hidden>
@@ -380,7 +377,7 @@ export default function FlaggedCandidatesPage() {
 
         {!loading && !error && items.length === 0 && (
           <div style={{ padding: 48, textAlign: "center", background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, color: css.textGray, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
-            <div style={{ width: 44, height: 44, background: "rgba(40, 98, 65, 0.1)", color: css.greenDark, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontWeight: 800, fontSize: 18 }}>
+            <div style={{ width: 44, height: 44, background: "rgba(40, 98, 65, 0.1)", color: css.greenDark, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontWeight: 700, fontSize: 18 }}>
               ✓
             </div>
             {activeMode.emptyLabel}
@@ -417,7 +414,7 @@ const detailLabelStyle = {
   display: "block",
   fontSize: 10,
   color: css.textGray,
-  fontWeight: 800,
+  fontWeight: 700,
   letterSpacing: "0.05em",
   textTransform: "uppercase",
   marginBottom: 4,

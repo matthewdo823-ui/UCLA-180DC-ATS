@@ -77,7 +77,7 @@ export default function CandidateRow({ resume }) {
             background: "rgba(255,255,255,0.2)", 
             color: "#FFF", 
             fontSize: 11, 
-            fontWeight: 800, 
+            fontWeight: 700, 
             textTransform: "uppercase",
             letterSpacing: "0.02em"
           }}>

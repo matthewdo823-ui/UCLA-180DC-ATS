@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
+import PageLoader from "../../components/PageLoader";
 import {
   RUBRIC_IMAGE_OPTIONS,
   RUBRIC_YEAR_KEYS,
@@ -10,7 +14,7 @@ import {
   validateRubricDraft,
 } from "../../utils/rubric";
 import { formatDate } from "../../utils/format";
-import { serifFont } from "../../theme/typography";
+import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatRoundTypeLabel, isResumeScreenType } from "../../constants/rounds";
 
 const CYCLE_STATUS_STYLE = {
@@ -34,7 +38,7 @@ function StatusBadge({ status, styles }) {
       border: `1px solid ${style.bd}`,
       borderRadius: 999,
       fontSize: 10,
-      fontWeight: 800,
+      fontWeight: 700,
       padding: "4px 10px",
       letterSpacing: "0.05em",
       textTransform: "uppercase",
@@ -224,7 +228,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: css.textDark }}>Google Form sync</h4>
               {cycle.hasFormConfig ? (
-                <span style={{ fontSize: 10, fontWeight: 800, color: "#1D9E75", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#1D9E75", letterSpacing: "0.05em", textTransform: "uppercase" }}>
                   Configured
                 </span>
               ) : null}
@@ -647,10 +651,10 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start" }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
-              <h3 style={{ fontFamily: serifFont, fontSize: 20, margin: 0, color: css.textDark }}>{cycle.name}</h3>
+              <h3 style={{ fontFamily: sansFont, fontSize: 20, margin: 0, color: css.textDark }}>{cycle.name}</h3>
               <StatusBadge status={cycle.status} styles={CYCLE_STATUS_STYLE} />
               {cycle.isActive ? (
-                <span style={{ fontSize: 10, fontWeight: 800, color: "#1D9E75", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#1D9E75", letterSpacing: "0.06em", textTransform: "uppercase" }}>
                   Site-wide active
                 </span>
               ) : null}
@@ -701,36 +705,36 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
 
 export default function CycleManagementPage() {
   const authedFetch = useAuthedFetch();
-  const [cycles, setCycles] = useState([]);
-  const [activeCycleId, setActiveCycleId] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  // Action errors live here; the query owns load errors — merged into `error` below.
+  const [actionError, setActionError] = useState("");
   const [newCycleName, setNewCycleName] = useState("");
 
-  const loadCycles = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
+  const cyclesQuery = useQuery({
+    queryKey: qk.cycles(),
+    queryFn: async () => {
       const res = await authedFetch(`${API}/cycles`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Could not load cycles");
-      }
-      const data = await res.json();
-      setCycles(Array.isArray(data.cycles) ? data.cycles : []);
-      setActiveCycleId(data.activeCycleId || null);
-    } catch (e) {
-      setError(e.message || "Could not load cycles");
-      setCycles([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch]);
+      return readJsonOrThrow(res, "Could not load cycles");
+    },
+    staleTime: STALE.dashboard,
+  });
 
-  useEffect(() => {
-    loadCycles();
-  }, [loadCycles]);
+  const cycles = useMemo(
+    () => (Array.isArray(cyclesQuery.data?.cycles) ? cyclesQuery.data.cycles : []),
+    [cyclesQuery.data]
+  );
+  const activeCycleId = cyclesQuery.data?.activeCycleId || null;
+  const loading = cyclesQuery.isPending;
+  const error = actionError
+    || (cyclesQuery.error ? (cyclesQuery.error.message || "Could not load cycles") : "");
+
+  // Expiring ["cycles"] also expires ["cycles","active"] (hierarchical key), so
+  // activating a cycle or round here refreshes the active-cycle entry every page reads.
+  const reloadCycles = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: qk.cycles() }),
+    [queryClient]
+  );
 
   const activeCycle = useMemo(
     () => cycles.find((c) => c.id === activeCycleId) || cycles.find((c) => c.isActive) || null,
@@ -739,12 +743,12 @@ export default function CycleManagementPage() {
 
   async function runAction(action) {
     setBusy(true);
-    setError("");
+    setActionError("");
     try {
       await action();
-      await loadCycles();
+      await reloadCycles();
     } catch (e) {
-      setError(e.message || "Action failed");
+      setActionError(e.message || "Action failed");
     } finally {
       setBusy(false);
     }
@@ -775,7 +779,7 @@ export default function CycleManagementPage() {
 
       <div style={{ maxWidth: 960, margin: "0 auto", width: "100%", padding: "24px 24px 40px" }}>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: serifFont, fontSize: 30, margin: "0 0 8px", color: css.textDark }}>Cycle management</h1>
+          <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>Cycle management</h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
             Create recruiting cycles (e.g. Winter 26), link a Google Form per cycle, and manage rounds within each cycle.
             Only one cycle is active at a time. Close a round before activating the next. Archived cycles can be reactivated here.
@@ -850,7 +854,7 @@ export default function CycleManagementPage() {
         ) : null}
 
         {loading ? (
-          <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading cycles…</div>
+          <PageLoader />
         ) : cycles.length === 0 ? (
           <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No cycles yet. Create one to get started.</div>
         ) : (
@@ -861,7 +865,7 @@ export default function CycleManagementPage() {
                 cycle={cycle}
                 busy={busy}
                 authedFetch={authedFetch}
-                onReload={loadCycles}
+                onReload={reloadCycles}
                 onActivate={(id) => runAction(async () => {
                   const res = await authedFetch(`${API}/cycles/${id}/activate`, { method: "POST" });
                   if (!res.ok) {
