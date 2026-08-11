@@ -1,7 +1,8 @@
- :root {
+:root {
   color-scheme: light;
   --color-background: #EFF5EF;
   --color-surface: #FFFFFF;
+  --color-surface-muted: #F3F4F6;
   --color-text: #111827;
   --color-text-muted: #6B7280;
   --color-border: #EAEAEA;
@@ -19,12 +20,13 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-background: #101712;
-  --color-surface: #18221B;
-  --color-text: #F1F5F2;
-  --color-text-muted: #B7C3BA;
-  --color-border: #304238;
-  --color-primary: #78BE90;
+  --color-background: #0B080C;
+  --color-surface: #181118;
+  --color-surface-muted: #251A25;
+  --color-text: #FCF7FC;
+  --color-text-muted: #C9B8C8;
+  --color-border: #493246;
+  --color-primary: #E36CD7;
   --color-navy: #0D1B2A;
   --color-navy-2: #131F2E;
   --color-dark-surface: #1A2840;
