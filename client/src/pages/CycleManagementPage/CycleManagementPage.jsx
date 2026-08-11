@@ -543,10 +543,13 @@ function RubricEditor({ draft, onChange, error }) {
   );
 }
 
-function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric }) {
+function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric, onSaveAutoDecisions }) {
   const [editingRubric, setEditingRubric] = useState(false);
   const [rubricDraft, setRubricDraft] = useState(() => cloneRubricConfig(round.rubricConfig));
   const [rubricError, setRubricError] = useState("");
+  const [autoAdvancePercent, setAutoAdvancePercent] = useState(round.autoAdvancePercent ?? 0);
+  const [autoRejectPercent, setAutoRejectPercent] = useState(round.autoRejectPercent ?? 0);
+  const [autoDecisionError, setAutoDecisionError] = useState("");
 
   useEffect(() => {
     if (!editingRubric) {
@@ -554,6 +557,12 @@ function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric }) {
       setRubricError("");
     }
   }, [round.rubricConfig, editingRubric]);
+
+  useEffect(() => {
+    setAutoAdvancePercent(round.autoAdvancePercent ?? 0);
+    setAutoRejectPercent(round.autoRejectPercent ?? 0);
+    setAutoDecisionError("");
+  }, [round.autoAdvancePercent, round.autoRejectPercent]);
 
   const isResumeRound = isResumeScreenType(round.type);
 
@@ -596,6 +605,37 @@ function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric }) {
         </p>
       ) : null}
 
+      <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${css.borderLight}` }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: css.textDark }}>Deliberation auto-decisions</div>
+        <p style={{ margin: "4px 0 10px", fontSize: 12, color: css.textGray, lineHeight: 1.4 }}>
+          In deliberation, pending candidates in the top and bottom portions of the equalized-score ranking are automatically marked Advance and Reject.
+        </p>
+        <div style={{ display: "flex", alignItems: "flex-end", flexWrap: "wrap", gap: 10 }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, fontWeight: 700, color: css.textGray }}>
+            Top % · Advance
+            <input type="number" min="0" max="100" step="1" value={autoAdvancePercent}
+              onChange={(e) => { setAutoAdvancePercent(e.target.value); setAutoDecisionError(""); }}
+              disabled={busy} style={{ width: 100, padding: "7px 8px", border: `1px solid ${css.borderLight}`, borderRadius: 6 }} />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, fontWeight: 700, color: css.textGray }}>
+            Bottom % · Reject
+            <input type="number" min="0" max="100" step="1" value={autoRejectPercent}
+              onChange={(e) => { setAutoRejectPercent(e.target.value); setAutoDecisionError(""); }}
+              disabled={busy} style={{ width: 100, padding: "7px 8px", border: `1px solid ${css.borderLight}`, borderRadius: 6 }} />
+          </label>
+          <ActionButton label="Save percentages" disabled={busy} onClick={async () => {
+            const advance = Number(autoAdvancePercent);
+            const reject = Number(autoRejectPercent);
+            if (!Number.isFinite(advance) || !Number.isFinite(reject) || advance < 0 || reject < 0 || advance > 100 || reject > 100 || advance + reject > 100) {
+              setAutoDecisionError("Enter percentages from 0–100 that total no more than 100.");
+              return;
+            }
+            await onSaveAutoDecisions(round.id, advance, reject);
+          }} />
+        </div>
+        {autoDecisionError ? <p style={{ margin: "8px 0 0", fontSize: 12, color: css.red }}>{autoDecisionError}</p> : null}
+      </div>
+
       {isResumeRound && editingRubric ? (
         <div style={{ marginTop: 14 }}>
           <RubricEditor
@@ -636,7 +676,7 @@ function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric }) {
   );
 }
 
-function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, onActivateRound, onCloseRound, onSaveRubric }) {
+function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, onActivateRound, onCloseRound, onSaveRubric, onSaveAutoDecisions }) {
   const [expanded, setExpanded] = useState(cycle.isActive);
 
   return (
@@ -695,6 +735,7 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
               onActivate={onActivateRound}
               onClose={onCloseRound}
               onSaveRubric={onSaveRubric}
+              onSaveAutoDecisions={onSaveAutoDecisions}
             />
           ))}
         </div>
@@ -907,6 +948,17 @@ export default function CycleManagementPage() {
                   if (!res.ok) {
                     const body = await res.json().catch(() => ({}));
                     throw new Error(body.error || "Could not save rubric");
+                  }
+                })}
+                onSaveAutoDecisions={(roundId, autoAdvancePercent, autoRejectPercent) => runAction(async () => {
+                  const res = await authedFetch(`${API}/rounds/${roundId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ autoAdvancePercent, autoRejectPercent }),
+                  });
+                  if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body.error || "Could not save automatic decision percentages");
                   }
                 })}
               />

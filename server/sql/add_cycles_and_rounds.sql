@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS rounds (
                 CHECK (status IN ('draft', 'active', 'closed')),
   sort_order    INT NOT NULL DEFAULT 0,
   rubric_config JSONB,
+  auto_advance_percent NUMERIC NOT NULL DEFAULT 0 CHECK (auto_advance_percent >= 0 AND auto_advance_percent <= 100),
+  auto_reject_percent  NUMERIC NOT NULL DEFAULT 0 CHECK (auto_reject_percent >= 0 AND auto_reject_percent <= 100),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (cycle_id, type)
 );
