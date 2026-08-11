@@ -205,50 +205,54 @@ export default function Sidebar() {
         )}
       </div>
 
-      <div style={{ marginTop: "auto", padding: 16, borderTop: `1px solid ${css.borderLight}`, display: "flex", flexDirection: "column", gap: 10 }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: css.textDark, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {[user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email}
-          </div>
-          <div style={{ fontSize: 11, color: css.textGray, marginTop: 3, textTransform: "capitalize" }}>
-            {user?.role}
-          </div>
+      <div style={{ marginTop: "auto" }}>
+        <div style={{ padding: "12px 16px" }}>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            style={{
+              border: `1px solid ${css.borderLight}`,
+              background: "var(--color-surface-muted)",
+              color: css.textDark,
+              borderRadius: 7,
+              padding: "8px 11px",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              letterSpacing: "0.01em",
+            }}
+          >
+            Vishnu Mode {theme === "dark" ? "Dark" : "Light"}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={toggleTheme}
-          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-          style={{
-            border: `1px solid ${css.borderLight}`,
-            background: css.cardWhite,
-            color: css.textDark,
-            borderRadius: 8,
-            padding: "9px 10px",
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: "pointer",
-            textAlign: "left",
-          }}
-        >
-          {theme === "dark" ? "☀️ Light mode" : "🌙 Dark mode"}
-        </button>
-        <button
-          type="button"
-          onClick={logout}
-          style={{
-            border: `1px solid ${css.borderLight}`,
-            background: css.cardWhite,
-            color: css.textGray,
-            borderRadius: 8,
-            padding: "9px 10px",
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: "pointer",
-            textAlign: "left",
-          }}
-        >
-          Sign out
-        </button>
+        <div style={{ padding: 16, borderTop: `1px solid ${css.borderLight}`, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: css.textDark, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {[user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email}
+            </div>
+            <div style={{ fontSize: 11, color: css.textGray, marginTop: 3, textTransform: "capitalize" }}>
+              {user?.role}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={logout}
+            style={{
+              border: `1px solid ${css.borderLight}`,
+              background: css.cardWhite,
+              color: css.textGray,
+              borderRadius: 8,
+              padding: "9px 10px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            Sign out
+          </button>
+        </div>
       </div>
     </div>
   );
