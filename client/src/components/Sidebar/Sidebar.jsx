@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import logo180 from "@images/180logo.webp";
 import { useAuth } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
+import { useTheme } from "../../theme/ThemeContext";
 import { isAdminRole } from "../../utils/auth";
 
 const homeIcon = (
@@ -157,6 +158,7 @@ export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const isAdmin = isAdminRole(user?.role);
   const menuLinks = baseMenuLinks.map((link) => (
     link.path === "/" && isAdmin
@@ -168,7 +170,7 @@ export default function Sidebar() {
     <div style={{
       width: 240,
       height: "100%",
-      background: "#FFF",
+      background: css.cardWhite,
       borderRight: `1px solid ${css.borderLight}`,
       display: "flex",
       flexDirection: "column",
@@ -214,10 +216,28 @@ export default function Sidebar() {
         </div>
         <button
           type="button"
+          onClick={toggleTheme}
+          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          style={{
+            border: `1px solid ${css.borderLight}`,
+            background: css.cardWhite,
+            color: css.textDark,
+            borderRadius: 8,
+            padding: "9px 10px",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          {theme === "dark" ? "☀️ Light mode" : "🌙 Dark mode"}
+        </button>
+        <button
+          type="button"
           onClick={logout}
           style={{
             border: `1px solid ${css.borderLight}`,
-            background: "#FFF",
+            background: css.cardWhite,
             color: css.textGray,
             borderRadius: 8,
             padding: "9px 10px",
