@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useActiveCycle, getGradingPath } from "../../hooks/useActiveCycle";
 import Topbar from "../../components/Topbar/Topbar";
+import PageLoader from "../../components/PageLoader";
 import { css } from "../../theme/colors";
 
 export default function GradingRouterPage() {
@@ -14,11 +15,7 @@ export default function GradingRouterPage() {
   }, [activeRound, loading, navigate]);
 
   if (loading) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: css.textGray, fontFamily: "'DM Sans', sans-serif" }}>
-        Loading active round…
-      </div>
-    );
+    return <PageLoader fullscreen />;
   }
 
   if (activeRound) {

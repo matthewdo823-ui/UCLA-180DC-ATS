@@ -20,7 +20,7 @@ function SignalItem({ icon, accent, accentBg, accentBorder, label, note, by, cre
         <span
           style={{
             fontSize: 11,
-            fontWeight: 800,
+            fontWeight: 700,
             letterSpacing: "0.05em",
             textTransform: "uppercase",
             color: accent,

@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-import { serifFont } from "../../theme/typography";
+import PageLoader from "../../components/PageLoader";
+import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { getInitials } from "../../utils/format";
 
 const DECISION_STYLE = {
@@ -62,7 +66,7 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
             {getInitials(candidate.name)}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontFamily: serifFont, fontSize: 17, margin: "0 0 4px", color: css.textDark }}>{candidate.name}</p>
+            <p style={{ fontFamily: sansFont, fontSize: 17, margin: "0 0 4px", color: css.textDark }}>{candidate.name}</p>
             <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>
               {[candidate.major, candidate.year, candidate.gpa ? `GPA ${candidate.gpa}` : ""].filter(Boolean).join(" · ") || candidate.email}
             </p>
@@ -73,7 +77,7 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
             ) : null}
           </div>
         </div>
-        <span style={{ background: style.bg, color: style.color, border: `1px solid ${style.bd}`, borderRadius: 999, fontSize: 10, fontWeight: 800, padding: "4px 10px", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+        <span style={{ background: style.bg, color: style.color, border: `1px solid ${style.bd}`, borderRadius: 999, fontSize: 10, fontWeight: 700, padding: "4px 10px", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
           {decision}
         </span>
       </div>
@@ -157,33 +161,27 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
 
 export default function InterviewManagementPage() {
   const authedFetch = useAuthedFetch();
+  const queryClient = useQueryClient();
   const { phaseLabel, activeRound, isInterviewRound, loading: cycleLoading, error: cycleError } = useActiveCycle();
-  const [data, setData] = useState({ candidates: [], stats: null, context: null });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
 
-  const loadCandidates = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await authedFetch(`${API}/interviews/candidates`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Could not load interview candidates");
-      }
-      setData(await res.json());
-    } catch (e) {
-      setError(e.message || "Could not load candidates");
-      setData({ candidates: [], stats: null, context: null });
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch]);
+  const enabled = !cycleLoading && isInterviewRound;
 
-  useEffect(() => {
-    if (!cycleLoading && isInterviewRound) loadCandidates();
-  }, [cycleLoading, isInterviewRound, loadCandidates]);
+  // Shares qk.interviewCandidates() with the admin dashboard, so navigating
+  // between the dashboard and this page reads from cache instead of refetching.
+  const query = useQuery({
+    queryKey: qk.interviewCandidates(),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/interviews/candidates`);
+      return readJsonOrThrow(res, "Could not load interview candidates");
+    },
+    enabled,
+    staleTime: STALE.dashboard,
+  });
+
+  const data = query.data ?? { candidates: [], stats: null, context: null };
+  const loading = enabled && query.isPending;
+  const error = query.error ? (query.error.message || "Could not load candidates") : "";
 
   const saveEvaluation = useCallback(async (payload) => {
     const res = await authedFetch(`${API}/interviews/evaluations`, {
@@ -195,8 +193,10 @@ export default function InterviewManagementPage() {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error || "Could not save evaluation");
     }
-    await loadCandidates();
-  }, [authedFetch, loadCandidates]);
+    // A decision changes this page's list and the dashboard pipeline stats.
+    queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() });
+    queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() });
+  }, [authedFetch, queryClient]);
 
   const filtered = useMemo(() => {
     const list = data.candidates || [];
@@ -214,7 +214,7 @@ export default function InterviewManagementPage() {
 
       <div style={{ maxWidth: 960, margin: "0 auto", width: "100%", padding: "24px 24px 40px" }}>
         <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontFamily: serifFont, fontSize: 28, margin: "0 0 8px" }}>{roundLabel}</h1>
+          <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>{roundLabel}</h1>
           <p style={{ margin: 0, color: css.textGray, lineHeight: 1.5 }}>
             Schedule interviews and record pass / fail / hold decisions. Candidates appear here after advancing from the previous round.
           </p>
@@ -271,7 +271,7 @@ export default function InterviewManagementPage() {
             ) : null}
 
             {loading || cycleLoading ? (
-              <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading candidates…</div>
+              <PageLoader />
             ) : filtered.length === 0 ? (
               <div style={{ padding: 40, textAlign: "center", color: css.textGray, lineHeight: 1.6 }}>
                 {data.deliberationStarted

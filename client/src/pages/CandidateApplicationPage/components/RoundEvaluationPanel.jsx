@@ -30,7 +30,7 @@ export default function RoundEvaluationPanel({ title, status = "upcoming", child
         <span
           style={{
             fontSize: 10,
-            fontWeight: 800,
+            fontWeight: 700,
             letterSpacing: "0.06em",
             textTransform: "uppercase",
             padding: "4px 9px",

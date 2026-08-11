@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
+import { qk } from "../../lib/queryKeys";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-import { serifFont } from "../../theme/typography";
+import PageLoader from "../../components/PageLoader";
+import { pageTitleStyle } from "../../theme/typography";
 import { displayName, formatDate } from "../../utils/format";
 const ASSIGNABLE_ROLES = [
   { value: "member", label: "Member" },
@@ -27,7 +31,7 @@ function RoleBadge({ role }) {
       ...roleBadgeStyle(role),
       borderRadius: 999,
       fontSize: 11,
-      fontWeight: 800,
+      fontWeight: 700,
       padding: "4px 10px",
       letterSpacing: "0.04em",
       textTransform: "uppercase",
@@ -40,34 +44,25 @@ function RoleBadge({ role }) {
 
 export default function UserManagementPage() {
   const authedFetch = useAuthedFetch();
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
   const [savingId, setSavingId] = useState(null);
   const [pendingRoles, setPendingRoles] = useState({});
+  // Separate from the load error so a failed save doesn't clobber (or get
+  // clobbered by) the query's own error state.
+  const [saveError, setSaveError] = useState("");
 
-  const loadUsers = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
+  const usersQuery = useQuery({
+    queryKey: qk.users(),
+    queryFn: async () => {
       const res = await authedFetch(`${API}/users`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to load users");
-      }
-      const data = await res.json();
-      setUsers(data.users || []);
-      setPendingRoles({});
-    } catch (err) {
-      setError(err.message || "Failed to load users");
-    } finally {
-      setLoading(false);
-    }
-  }, [authedFetch]);
+      return readJsonOrThrow(res, "Failed to load users");
+    },
+    staleTime: STALE.dashboard,
+  });
 
-  useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
+  const users = usersQuery.data?.users ?? [];
+  const loading = usersQuery.isPending;
+  const error = saveError || (usersQuery.error ? (usersQuery.error.message || "Failed to load users") : "");
 
   const staffCount = useMemo(
     () => users.filter((u) => u.role === "admin" || u.role === "member").length,
@@ -80,7 +75,7 @@ export default function UserManagementPage() {
 
     try {
       setSavingId(user.user_id);
-      setError("");
+      setSaveError("");
       const res = await authedFetch(`${API}/users/${user.user_id}/role`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -93,14 +88,17 @@ export default function UserManagementPage() {
       }
 
       const data = await res.json();
-      setUsers((prev) => prev.map((u) => (u.user_id === data.user.user_id ? data.user : u)));
+      // Patch the cached list in place — snappy, no refetch, same as before.
+      queryClient.setQueryData(qk.users(), (old) =>
+        old ? { ...old, users: old.users.map((u) => (u.user_id === data.user.user_id ? data.user : u)) } : old
+      );
       setPendingRoles((prev) => {
         const next = { ...prev };
         delete next[user.user_id];
         return next;
       });
     } catch (err) {
-      setError(err.message || "Failed to update role");
+      setSaveError(err.message || "Failed to update role");
     } finally {
       setSavingId(null);
     }
@@ -112,7 +110,7 @@ export default function UserManagementPage() {
 
       <div style={{ padding: "28px 32px 40px", maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: serifFont, fontSize: 28, fontWeight: 500, color: "#111", margin: "0 0 8px" }}>
+          <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>
             Team roles
           </h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
@@ -153,15 +151,13 @@ export default function UserManagementPage() {
           boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
         }}>
           {loading ? (
-            <div style={{ padding: 40, textAlign: "center", color: css.textGray, fontSize: 14 }}>
-              Loading users...
-            </div>
+            <PageLoader />
           ) : error ? (
             <div style={{ padding: 40, textAlign: "center", color: css.textGray, fontSize: 14 }}>
               <p style={{ margin: "0 0 12px" }}>Could not load the user list.</p>
               <button
                 type="button"
-                onClick={loadUsers}
+                onClick={() => usersQuery.refetch()}
                 style={{
                   border: `1px solid ${css.borderLight}`,
                   borderRadius: 8,
@@ -265,7 +261,7 @@ const thStyle = {
   textAlign: "left",
   padding: "14px 18px",
   fontSize: 11,
-  fontWeight: 800,
+  fontWeight: 700,
   color: css.textGray,
   letterSpacing: "0.05em",
   textTransform: "uppercase",
