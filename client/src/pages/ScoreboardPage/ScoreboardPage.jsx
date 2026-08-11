@@ -994,6 +994,7 @@ export default function ScoreboardPage() {
   const adminMenuRef = useRef(null);
   const rowRefs = useRef({});
   const pendingDecisionIdsRef = useRef(new Set());
+  const automaticDecisionRunRef = useRef("");
 
   const scoreboardKey = useMemo(() => qk.scoreboard(viewingRoundId), [viewingRoundId]);
 
@@ -1103,11 +1104,18 @@ export default function ScoreboardPage() {
     if (el) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [focusedCandidateId]);
 
+  const equalizedCandidates = useMemo(() => (
+    equalizeCandidateScores(data.candidates ?? [], {
+      metrics: data.metrics ?? [],
+      maxPerCategory: data.maxPerCategory ?? 4,
+    })
+  ), [data.candidates, data.metrics, data.maxPerCategory]);
+
   const candidates = useMemo(() => {
     const base = data.candidates ?? [];
     if (!equalizeActive) return base;
-    return equalizeCandidateScores(base, { metrics: data.metrics ?? [], maxPerCategory: data.maxPerCategory ?? 4 });
-  }, [data.candidates, data.metrics, data.maxPerCategory, equalizeActive]);
+    return equalizedCandidates;
+  }, [data.candidates, equalizedCandidates, equalizeActive]);
 
   const displayStats = useMemo(() => {
     const base = data.stats ?? {};
@@ -1197,6 +1205,40 @@ export default function ScoreboardPage() {
       setSavingDecisionId(null);
     }
   }, [authedFetch, canEditDeliberations, deliberationMode, setData]);
+
+  useEffect(() => {
+    if (!deliberationMode || !canEditDeliberations || viewingHistorical) return;
+
+    const advancePercent = Number(activeRound?.autoAdvancePercent) || 0;
+    const rejectPercent = Number(activeRound?.autoRejectPercent) || 0;
+    if (advancePercent <= 0 && rejectPercent <= 0) return;
+
+    const ranked = equalizedCandidates
+      .filter((candidate) => canRecordCommitteeDecision(candidate) && hasNumericScore(candidate.normalizedScore ?? candidate.score))
+      .sort((a, b) => {
+        const scoreDifference = Number(b.normalizedScore ?? b.score) - Number(a.normalizedScore ?? a.score);
+        return scoreDifference || String(a.id).localeCompare(String(b.id));
+      });
+    if (!ranked.length) return;
+
+    const advanceCount = Math.ceil((ranked.length * advancePercent) / 100);
+    const rejectCount = Math.ceil((ranked.length * rejectPercent) / 100);
+    const selected = new Map();
+    ranked.slice(0, advanceCount).forEach((candidate) => selected.set(candidate.id, { candidate, decision: "advance" }));
+    ranked.slice(Math.max(advanceCount, ranked.length - rejectCount)).forEach((candidate) => {
+      if (!selected.has(candidate.id)) selected.set(candidate.id, { candidate, decision: "reject" });
+    });
+
+    const pendingSelections = [...selected.values()]
+      .filter(({ candidate }) => getCandidateDecisionStatus(candidate) === "pending");
+    const runKey = `${activeRound?.id}:${advancePercent}:${rejectPercent}:${ranked.map((c) => `${c.id}:${c.normalizedScore ?? c.score}`).join("|")}`;
+    if (!pendingSelections.length || automaticDecisionRunRef.current === runKey) return;
+    automaticDecisionRunRef.current = runKey;
+
+    Promise.all(pendingSelections.map(({ candidate, decision }) => saveDecision(candidate, decision)))
+      .catch(() => {})
+      .finally(() => { automaticDecisionRunRef.current = ""; });
+  }, [activeRound?.autoAdvancePercent, activeRound?.autoRejectPercent, activeRound?.id, canEditDeliberations, deliberationMode, equalizedCandidates, saveDecision, viewingHistorical]);
 
   const handleSignalUpdated = useCallback((update) => {
     setData(prev => ({
@@ -1415,6 +1457,7 @@ export default function ScoreboardPage() {
         setFocusedCandidateId(null);
         setDecisionError("");
       } else {
+        setEqualizeActive(true);
         fetchScoreboard();
       }
       return !on;
