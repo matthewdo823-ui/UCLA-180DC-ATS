@@ -1,12 +1,19 @@
 const CONFETTI_COLORS = ["#E95D5D", "#F2B134", "#4AA86D", "#4B88E8", "#A66BE5", "#F58B60"];
-const CONFETTI = Array.from({ length: 42 }, (_, index) => ({
-  color: CONFETTI_COLORS[index % CONFETTI_COLORS.length],
-  left: (index * 37) % 100,
-  drift: ((index * 29) % 160) - 80,
-  delay: (index % 10) * -0.12,
-  size: 7 + ((index * 3) % 7),
-  rotation: (index * 47) % 360,
-}));
+const CONFETTI = Array.from({ length: 42 }, (_, index) => {
+  const angle = (index * 137.5 * Math.PI) / 180;
+  const distance = 25 + ((index * 11) % 34);
+
+  return {
+    color: CONFETTI_COLORS[index % CONFETTI_COLORS.length],
+    burstX: (Math.cos(angle) * distance).toFixed(1),
+    burstY: (Math.sin(angle) * distance).toFixed(1),
+    burstStartX: (Math.cos(angle) * distance * 0.12).toFixed(1),
+    burstStartY: (Math.sin(angle) * distance * 0.12).toFixed(1),
+    delay: (index % 7) * 0.025,
+    size: 7 + ((index * 3) % 7),
+    rotation: (index * 47) % 360,
+  };
+});
 
 export default function GradeCelebration({ active, specialCelebrationName = "" }) {
   if (!active) return null;
@@ -18,19 +25,24 @@ export default function GradeCelebration({ active, specialCelebrationName = "" }
       <div style={{ position: "absolute", inset: 0, background: specialMode ? "rgba(255, 237, 106, 0.16)" : "transparent", animation: specialMode ? "ryanCelebrationBlink 0.38s steps(2, end) infinite" : "none" }} />
       {CONFETTI.map((piece) => (
         <span
-          key={`${piece.left}-${piece.rotation}`}
+          key={`${piece.burstX}-${piece.burstY}-${piece.rotation}`}
           aria-hidden="true"
           style={{
             position: "absolute",
-            top: -18,
-            left: `${piece.left}%`,
+            top: "50%",
+            left: "50%",
             width: piece.size,
             height: piece.size * 1.55,
+            marginTop: -(piece.size * 1.55) / 2,
+            marginLeft: -piece.size / 2,
             borderRadius: 2,
             background: piece.color,
             transform: `rotate(${piece.rotation}deg)`,
             animation: `gradeConfetti 1.8s cubic-bezier(0.2, 0.7, 0.25, 1) ${piece.delay}s forwards`,
-            "--confetti-drift": `${piece.drift}px`,
+            "--confetti-burst-x": `${piece.burstX}vw`,
+            "--confetti-burst-y": `${piece.burstY}vh`,
+            "--confetti-burst-start-x": `${piece.burstStartX}vw`,
+            "--confetti-burst-start-y": `${piece.burstStartY}vh`,
           }}
         />
       ))}
@@ -59,9 +71,9 @@ export default function GradeCelebration({ active, specialCelebrationName = "" }
       ) : null}
       <style>{`
         @keyframes gradeConfetti {
-          0% { opacity: 0; transform: translate3d(0, -24px, 0) rotate(0deg); }
-          8% { opacity: 1; }
-          100% { opacity: 0; transform: translate3d(var(--confetti-drift), 110vh, 0) rotate(720deg); }
+          0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.25) rotate(0deg); }
+          12% { opacity: 1; transform: translate3d(var(--confetti-burst-start-x), var(--confetti-burst-start-y), 0) scale(1) rotate(90deg); }
+          100% { opacity: 0; transform: translate3d(var(--confetti-burst-x), var(--confetti-burst-y), 0) scale(0.8) rotate(720deg); }
         }
         @keyframes ryanCelebrationBlink {
           50% { opacity: 0.15; }
