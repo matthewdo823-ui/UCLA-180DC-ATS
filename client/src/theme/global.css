@@ -1,3 +1,43 @@
+:root {
+  color-scheme: light;
+  --color-background: #EFF5EF;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #F3F4F6;
+  --color-text: #111827;
+  --color-text-muted: #6B7280;
+  --color-border: #EAEAEA;
+  --color-primary: #286241;
+  --color-navy: #0D1B2A;
+  --color-navy-2: #131F2E;
+  --color-dark-surface: #1A2840;
+  --color-dark-surface-2: #1F3048;
+  --color-dark-border: rgba(255,255,255,0.07);
+  --color-dark-border-strong: rgba(255,255,255,0.13);
+  --color-dark-text: #EEF2F7;
+  --color-dark-text-muted: #8FA3B8;
+  --color-dark-text-subtle: #4A6070;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-background: #0B080C;
+  --color-surface: #181118;
+  --color-surface-muted: #251A25;
+  --color-text: #FCF7FC;
+  --color-text-muted: #C9B8C8;
+  --color-border: #493246;
+  --color-primary: #E36CD7;
+  --color-navy: #0D1B2A;
+  --color-navy-2: #131F2E;
+  --color-dark-surface: #1A2840;
+  --color-dark-surface-2: #1F3048;
+  --color-dark-border: rgba(255,255,255,0.12);
+  --color-dark-border-strong: rgba(255,255,255,0.22);
+  --color-dark-text: #EEF2F7;
+  --color-dark-text-muted: #B8C6D5;
+  --color-dark-text-subtle: #91A4B6;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -5,9 +45,16 @@
 }
 
 body {
-  background: #EFF5EF;
+  background: var(--color-background);
+  color: var(--color-text);
   font-family: 'DM Sans', sans-serif;
   overflow: hidden; /* App container will handle overflow */
+}
+
+input, select, textarea {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
 }
 
 @keyframes spin {
@@ -72,11 +119,11 @@ body {
 }
 
 textarea::placeholder {
-  color: #4A6070;
+  color: var(--color-text-muted);
 }
 
 textarea {
-  color: #8FA3B8 !important;
+  color: var(--color-text) !important;
 }
 
 button {
