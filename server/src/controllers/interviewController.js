@@ -19,6 +19,17 @@ const {
 } = require("../utils/rounds");
 
 const VALID_DECISIONS = new Set(["pending", "pass", "fail", "hold"]);
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 250;
+
+function getPageRequest(req) {
+  const limit = Number(req.query?.limit);
+  const offset = Number(req.query?.offset);
+  return {
+    limit: Number.isInteger(limit) ? Math.min(Math.max(limit, 1), MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE,
+    offset: Number.isInteger(offset) ? Math.max(offset, 0) : 0,
+  };
+}
 
 function mapEvaluation(row) {
   if (!row) return null;
@@ -96,6 +107,7 @@ function candidatePassesPriorRoundGate(candidateId, { gateStarted, eligibleCandi
 
 exports.listInterviewCandidates = async (req, res) => {
   try {
+    const { limit, offset } = getPageRequest(req);
     const ctx = await requireActiveInterviewRound();
     if (ctx.error) {
       return res.status(ctx.status).json({ error: ctx.error });
@@ -115,11 +127,12 @@ exports.listInterviewCandidates = async (req, res) => {
 
     const priorGate = await loadPriorRoundGate(ctx.cycle.id, ctx.round);
 
-    const { data: candidates, error: candError } = await supabase
+    const { data: candidates, error: candError, count: candidateCount } = await supabase
       .from("candidates")
-      .select("id, name, email, major, year, gpa, cycle_id")
+      .select("id, name, email, major, year, gpa, cycle_id", { count: "exact" })
       .eq("cycle_id", ctx.cycle.id)
-      .order("name", { ascending: true });
+      .order("name", { ascending: true })
+      .range(offset, offset + limit - 1);
 
     if (candError) return respondWithServerError(res, candError, "listInterviewCandidates candidates");
 
@@ -236,6 +249,12 @@ exports.listInterviewCandidates = async (req, res) => {
       },
       stats,
       deliberationStarted: priorGate.gateStarted,
+      pagination: {
+        limit,
+        offset,
+        total: candidateCount ?? null,
+        hasMore: candidateCount != null ? offset + (candidates || []).length < candidateCount : (candidates || []).length === limit,
+      },
       candidates: mapped,
     });
   } catch (err) {
