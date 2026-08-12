@@ -40,6 +40,8 @@ function AppShell() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<LoginPage />} />
+            <Route path="/reset-password" element={<LoginPage />} />
             <Route
               path="/no-access"
               element={
