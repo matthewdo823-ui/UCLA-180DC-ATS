@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1380 566" role="img" aria-labelledby="title description">
+  <title id="title">WHY 180 Rubric</title>
+  <desc id="description">A four-point rubric for scoring FRQ responses.</desc>
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #050505; }
+    .title { font-size: 39px; font-weight: 700; }
+    .header { font-size: 29px; font-weight: 700; }
+    .category { font-size: 28px; }
+    .criteria { font-size: 27px; }
+    .point { font-size: 33px; font-weight: 700; }
+    .note { font-size: 27px; }
+  </style>
+  <rect width="1380" height="566" fill="#fff"/>
+  <rect width="1380" height="58" fill="#ffdf72"/>
+  <rect y="58" width="1380" height="43" fill="#ffdf72"/>
+  <rect y="101" width="521" height="296" fill="#fff3ca"/>
+  <rect y="397" width="1380" height="169" fill="#ffdf72"/>
+  <g stroke="#050505" stroke-width="2">
+    <rect x="1" y="1" width="1378" height="564" fill="none"/>
+    <path d="M0 58h1380M0 101h1380M521 58v339M0 159h1380M0 248h1380M0 307h1380M0 397h1380"/>
+  </g>
+  <text class="title" x="690" y="43" text-anchor="middle">WHY 180 RUBRIC (max 4 points)</text>
+  <text class="header" x="260" y="90" text-anchor="middle">Category</text>
+  <text class="header" x="950" y="90" text-anchor="middle">Criteria</text>
+  <text class="category" x="8" y="148">Social Impact Alignment</text>
+  <text class="point" x="538" y="144">+1</text>
+  <text class="criteria" x="591" y="144">If ties personal interest in social impact to 180's mission</text>
+  <text class="category" x="8" y="238">Professional Detail</text>
+  <text class="point" x="538" y="198">+1</text>
+  <text class="criteria" x="591" y="198">If mentions a specific project, committees, SkillUp, newbie case</text>
+  <text class="criteria" x="529" y="237">comp, firm tours, Recruitment Accelerator, alumni connections etc.</text>
+  <text class="category" x="8" y="296">Community Detail</text>
+  <text class="point" x="538" y="291">+1</text>
+  <text class="criteria" x="591" y="291">If mentions volunteering, CC, big/littles, fams, socials, etc.</text>
+  <text class="category" x="8" y="385">Conversation</text>
+  <text class="point" x="538" y="349">+1</text>
+  <text class="criteria" x="591" y="349">if references a particular member, coffee chat, or interaction that</text>
+  <text class="criteria" x="529" y="385">shows genuine engagement</text>
+  <text class="note" x="8" y="427">Scorers are mandated to write 1-2 sentence comment while scoring for delibs. Include:</text>
+  <text class="note" x="8" y="459">- Standout creativity?</text>
+  <text class="note" x="8" y="491">- Written by AI?</text>
+  <text class="note" x="8" y="523">- Poor grammar, typos, or too short?</text>
+  <text class="note" x="8" y="555">- Extenuating circumstances?</text>
+</svg>
