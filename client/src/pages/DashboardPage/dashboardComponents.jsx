@@ -4,7 +4,7 @@ import { formatRoundKind } from "../../constants/rounds";
 
 export const pageStyle = {
   minHeight: "100%",
-  background: "#F8FAFB",
+  background: css.bgLight,
   fontFamily: "'DM Sans', sans-serif",
   color: css.textDark,
   padding: "28px 32px 40px",
@@ -59,7 +59,7 @@ function StackedBar({ segments, total }) {
     return (
       <div style={{
         height: 14,
-        background: "#F3F4F6",
+        background: "var(--color-surface-muted)",
         borderRadius: 7,
       }}
       />
@@ -72,7 +72,7 @@ function StackedBar({ segments, total }) {
       height: 14,
       borderRadius: 7,
       overflow: "hidden",
-      background: "#F3F4F6",
+      background: "var(--color-surface-muted)",
     }}
     >
       {segments.filter((seg) => seg.value > 0).map((seg) => (
@@ -179,7 +179,7 @@ export const twoColumnGridStyle = {
 
 export function ProgressBar({ pct, color = css.greenDark }) {
   return (
-    <div style={{ height: 10, background: "#F3F4F6", borderRadius: 5, overflow: "hidden" }}>
+    <div style={{ height: 10, background: "var(--color-surface-muted)", borderRadius: 5, overflow: "hidden" }}>
       <div
         style={{
           width: `${Math.max(0, Math.min(100, pct || 0))}%`,

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from "r
 import { AuthProvider } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import Sidebar from "./components/Sidebar/Sidebar";
+import { ThemeProvider } from "./theme/ThemeContext";
 
 // Lazy Loading as Vite can handle the chunking for diff elements
 const DashboardPage = lazy(() => import("./pages/DashboardPage/DashboardPage"));
@@ -154,9 +155,11 @@ function AppShell() {
 export default function App() {
   return (
     <Router>
-      <AuthProvider>
-        <AppShell />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppShell />
+        </AuthProvider>
+      </ThemeProvider>
     </Router>
   );
 }
