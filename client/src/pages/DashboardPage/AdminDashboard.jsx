@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
@@ -6,7 +7,6 @@ import useAdminDashboard from "./useAdminDashboard";
 import {
   pageStyle,
   Panel,
-  StatCard,
   ActionItemList,
   GraderProgressRows,
   RoundTimeline,
@@ -14,8 +14,121 @@ import {
   twoColumnGridStyle,
 } from "./dashboardComponents";
 
+const severityRank = { critical: 0, warning: 1, info: 2 };
+
+function getDashboardFocus({ context, pipeline, actionItems, isInterview }) {
+  const sortedActions = [...actionItems].sort(
+    (a, b) => (severityRank[a.severity] ?? 3) - (severityRank[b.severity] ?? 3)
+  );
+  const blocker = sortedActions.find((item) => item.severity === "critical");
+  const priorityAction = sortedActions.find(
+    (item) => item.severity === "critical" || item.severity === "warning"
+  );
+
+  if (!context?.cycle) {
+    return {
+      eyebrow: "Setup required",
+      title: "Create a recruiting cycle",
+      detail: "A cycle is needed before the application pipeline can start.",
+      actionLabel: "Open cycle management",
+      path: "/cycle-management",
+    };
+  }
+  if (!context?.activeRound) {
+    return {
+      eyebrow: "Cycle paused",
+      title: "Activate the next round",
+      detail: "No work can move forward until a round is active.",
+      actionLabel: "Manage rounds",
+      path: "/cycle-management",
+    };
+  }
+  if (blocker) {
+    return {
+      eyebrow: "Action required",
+      title: blocker.label,
+      detail: blocker.detail || "Resolve this before continuing the round.",
+      actionLabel: "Resolve now",
+      path: blocker.path,
+    };
+  }
+  if (priorityAction) {
+    return {
+      eyebrow: "Needs attention",
+      title: priorityAction.label,
+      detail: priorityAction.detail || "Resolve this before moving on to routine work.",
+      actionLabel: "Review now",
+      path: priorityAction.path,
+    };
+  }
+  if ((pipeline?.undecidedCount || 0) > 0 && (pipeline?.reviewed || 0) >= (pipeline?.applicants || 0)) {
+    return {
+      eyebrow: "Decisions ready",
+      title: `${pipeline.undecidedCount} candidate${pipeline.undecidedCount === 1 ? "" : "s"} need a decision`,
+      detail: "Review holds and pending candidates to finish this stage.",
+      actionLabel: "Open decision queue",
+      path: "/scoreboard",
+    };
+  }
+  if ((pipeline?.awaitingReviews || 0) > 0) {
+    return {
+      eyebrow: `${context.activeRound.name || "Active round"}`,
+      title: `${pipeline.awaitingReviews} application${pipeline.awaitingReviews === 1 ? "" : "s"} still need review`,
+      detail: `${pipeline.reviewed || 0} of ${pipeline.applicants || 0} complete across the team.`,
+      actionLabel: isInterview ? "Open interviews" : "Open review queue",
+      path: isInterview ? "/interviews" : "/scoreboard",
+    };
+  }
+  return {
+    eyebrow: `${context.activeRound.name || "Active round"}`,
+    title: "The round is on track",
+    detail: "No review work is waiting. Resolve any exceptions below or prepare the next step.",
+    actionLabel: "View scoreboard",
+    path: "/scoreboard",
+  };
+}
+
+function AllActionItemsModal({ items, onClose, onNavigate }) {
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="all-action-items-title"
+      style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+    >
+      <button
+        type="button"
+        aria-label="Close action items"
+        onClick={onClose}
+        style={{ position: "absolute", inset: 0, border: "none", background: "rgba(13, 27, 42, 0.34)", cursor: "default" }}
+      />
+      <div style={{ position: "relative", zIndex: 1, width: "min(620px, 100%)", maxHeight: "min(680px, calc(100vh - 48px))", overflowY: "auto", background: css.bgLight, border: `1px solid ${css.borderLight}`, borderRadius: 14, boxShadow: "0 20px 56px rgba(0,0,0,0.18)" }}>
+        <div style={{ position: "sticky", top: 0, zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "18px 20px", background: css.bgLight, borderBottom: `1px solid ${css.borderLight}` }}>
+          <div>
+            <h2 id="all-action-items-title" style={{ margin: 0, fontSize: 17, letterSpacing: "-0.015em", color: css.textDark }}>All attention items</h2>
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>{items.length} item{items.length === 1 ? "" : "s"}, ordered by priority</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${css.borderLight}`, background: css.cardWhite, color: css.textGray, cursor: "pointer", fontSize: 16 }}>×</button>
+        </div>
+        <div style={{ padding: 20 }}>
+          <ActionItemList items={items} onNavigate={onNavigate} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const [showAllActionItems, setShowAllActionItems] = useState(false);
   const { data, loading, error } = useAdminDashboard();
 
   const context = data?.context;
@@ -26,41 +139,11 @@ export default function AdminDashboard() {
   const isInterview = context?.isInterviewRound;
   const phaseLabel = context?.phaseLabel || "Admin Dashboard";
 
-  const pipelineStats = isInterview
-    ? [
-        { label: "In pool", value: pipeline?.applicants ?? 0 },
-        { label: "Evaluated", value: pipeline?.reviewed ?? 0 },
-        { label: "Pass", value: pipeline?.pass ?? 0, accent: css.green },
-        { label: "Pending", value: pipeline?.pending ?? 0, accent: css.amber },
-      ]
-    : [
-        { label: "Applicants", value: pipeline?.applicants ?? 0 },
-        { label: "Reviewed", value: pipeline?.reviewed ?? 0 },
-        { label: "Awaiting review", value: pipeline?.awaitingReviews ?? 0, accent: css.amber },
-        { label: "Undecided", value: pipeline?.undecidedCount ?? 0, accent: css.amber },
-      ];
-
-  // The old status banner's alert counts, folded into the At a glance grid as
-  // boxes. They only appear when non-zero, mirroring the banner's old behavior.
-  const criticalCount = actionItems.filter((item) => item.severity === "critical").length;
-  const warningCount = actionItems.filter((item) => item.severity === "warning").length;
-
-  const alertStats = [];
-  if (criticalCount > 0) {
-    alertStats.push({ label: criticalCount === 1 ? "Critical" : "Criticals", value: criticalCount, accent: css.red });
-  }
-  if (warningCount > 0) {
-    alertStats.push({ label: warningCount === 1 ? "Warning" : "Warnings", value: warningCount, accent: css.amber });
-  }
-  if (graderSummary?.behindCount > 0) {
-    alertStats.push({
-      label: graderSummary.behindCount === 1 ? "Grader behind" : "Graders behind",
-      value: graderSummary.behindCount,
-      accent: css.amber,
-    });
-  }
-
-  const glanceStats = [...pipelineStats, ...alertStats];
+  const focus = getDashboardFocus({ context, pipeline, actionItems, isInterview });
+  const sortedActionItems = [...actionItems].sort(
+    (a, b) => (severityRank[a.severity] ?? 3) - (severityRank[b.severity] ?? 3)
+  );
+  const reviewPct = pipeline?.applicants ? Math.round(((pipeline?.reviewed || 0) / pipeline.applicants) * 100) : 0;
 
   return (
     <div style={{ ...pageStyle, padding: 0 }}>
@@ -86,52 +169,67 @@ export default function AdminDashboard() {
           <PageLoader minHeight="60vh" />
         ) : (
           <>
-             <Panel title="Round timeline">
-              <RoundTimeline
-                rounds={context?.allRounds}
-                activeRound={context?.activeRound}
-                nextRound={context?.nextRound}
-              />
-            </Panel>
-
-            <Panel title="At a glance">
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-                {glanceStats.map((stat) => (
-                  <StatCard key={stat.label} {...stat} hero />
-                ))}
+            <section style={{
+              background: css.cardWhite,
+              border: `1px solid ${css.borderLight}`,
+              borderRadius: 14,
+              padding: "28px 30px",
+              marginBottom: 28,
+              boxShadow: "0 2px 10px rgba(0,0,0,0.02)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 24,
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>
+                  {focus.eyebrow}
+                </div>
+                <h1 style={{ fontSize: 26, lineHeight: 1.15, letterSpacing: "-0.025em", margin: 0, color: css.textDark }}>
+                  {focus.title}
+                </h1>
+                <p style={{ margin: "9px 0 0", fontSize: 14, lineHeight: 1.5, color: css.textGray, maxWidth: 620 }}>{focus.detail}</p>
               </div>
-            </Panel>
+              <div style={{ flexShrink: 0, minWidth: 142, textAlign: "right" }}>
+                <div style={{ fontSize: 11, color: css.textGray, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Round progress</div>
+                <div style={{ marginTop: 3, fontSize: 25, fontWeight: 700, color: css.greenDark, letterSpacing: "-0.03em" }}>{reviewPct}%</div>
+                <div style={{ marginTop: 2, marginBottom: 13, fontSize: 12, color: css.textGray }}>{pipeline?.reviewed || 0} of {pipeline?.applicants || 0} reviewed</div>
+                <button
+                  type="button"
+                  onClick={() => navigate(focus.path)}
+                  style={{ border: "none", borderRadius: 8, background: css.greenDark, color: "#FFF", padding: "11px 13px", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(40, 98, 65, 0.16)" }}
+                >
+                  {focus.actionLabel} →
+                </button>
+              </div>
+            </section>
 
-           
+            <Panel
+              title={sortedActionItems.length ? "Needs attention" : "Everything clear"}
+              rightSlot={sortedActionItems.length > 4 ? (
+                <button type="button" onClick={() => setShowAllActionItems(true)} style={{ border: "none", padding: 0, background: "transparent", color: css.greenDark, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  View all {sortedActionItems.length} items →
+                </button>
+              ) : null}
+            >
+              <ActionItemList items={sortedActionItems} onNavigate={navigate} limit={4} />
+            </Panel>
 
             <div style={twoColumnGridStyle}>
-              <Panel title="Needs attention">
-                <ActionItemList items={actionItems} onNavigate={navigate} />
+              <Panel title={isInterview ? "Evaluation pipeline" : "Pipeline"}>
+                <PipelineBreakdown pipeline={pipeline} isInterview={isInterview} />
               </Panel>
 
-              <Panel title="Grading coverage">
+              <Panel title="Team health">
                 {data?.graderLoadError ? (
                   <div style={{ fontSize: 14, color: css.red }}>{data.graderLoadError}</div>
                 ) : !graderSummary ? (
                   <div style={{ fontSize: 14, color: css.textGray }}>No grader data for this cycle.</div>
                 ) : (
-                  <div style={{
-                    background: css.cardWhite,
-                    border: `1px solid ${css.borderLight}`,
-                    borderRadius: 12,
-                    padding: "18px 20px",
-                    boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-                  }}
-                  >
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginBottom: 16 }}>
-                      <StatCard label="Active graders" value={graderSummary.activeGraders} sub={`of ${graderSummary.graders} total`} />
-                      <StatCard label="Total reviews" value={graderSummary.totalReviews} sub={`Avg ${graderSummary.avgReviews} per grader`} />
-                      <StatCard label="Goal complete" value={graderSummary.completeCount} sub={`${graderSummary.expectedReviews} reviews each`} />
-                      <StatCard
-                        label="Not started"
-                        value={graderSummary.notStarted}
-                        accent={graderSummary.notStarted > 0 ? css.amber : css.greenDark}
-                      />
+                  <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: "18px 20px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 16, paddingBottom: 14, marginBottom: 4, borderBottom: `1px solid ${css.borderLight}`, fontSize: 13 }}>
+                      <span style={{ color: css.textDark, fontWeight: 700 }}>{graderSummary.activeGraders} active <span style={{ color: css.textGray, fontWeight: 500 }}>of {graderSummary.graders} graders</span></span>
+                      <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} not started</span>
                     </div>
                     {graderSummary.behindGraders?.length > 0 ? (
                       <>
@@ -144,19 +242,33 @@ export default function AdminDashboard() {
                         />
                       </>
                     ) : (
-                      <div style={{ fontSize: 13, color: css.textGray }}>All active graders are on track.</div>
+                      <div style={{ fontSize: 13, color: css.textGray, paddingTop: 10 }}>All active graders are on track.</div>
                     )}
                   </div>
                 )}
               </Panel>
             </div>
 
-            <Panel title="Pipeline">
-              <PipelineBreakdown pipeline={pipeline} isInterview={isInterview} />
+            <Panel title="Round timeline" style={{ marginTop: 4 }}>
+              <RoundTimeline
+                rounds={context?.allRounds}
+                activeRound={context?.activeRound}
+                nextRound={context?.nextRound}
+              />
             </Panel>
           </>
         )}
       </div>
+      {showAllActionItems ? (
+        <AllActionItemsModal
+          items={sortedActionItems}
+          onClose={() => setShowAllActionItems(false)}
+          onNavigate={(path) => {
+            setShowAllActionItems(false);
+            navigate(path);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
