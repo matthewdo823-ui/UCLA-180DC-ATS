@@ -157,15 +157,35 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
+  const requestPasswordReset = useCallback(async (email) => {
+    const res = await fetch(`${API}/auth/forgot-password`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Could not request a password reset");
+    return data.message;
+  }, []);
+
+  const resetPassword = useCallback(async ({ token, password }) => {
+    const res = await fetch(`${API}/auth/reset-password`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Could not reset password");
+    return data.message;
+  }, []);
+
   const value = useMemo(() => ({
     token,
     user,
     loading,
     login,
     createAccount,
+    requestPasswordReset,
+    resetPassword,
     logout,
     isStaff: isStaffRole(user?.role),
-  }), [createAccount, loading, login, logout, token, user]);
+  }), [createAccount, loading, login, logout, requestPasswordReset, resetPassword, token, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
