@@ -30,6 +30,18 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Install Bun with retries
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 \
+            --output /tmp/bun.zip \
+            https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64.zip
+          rm -rf "$HOME/.bun"
+          unzip -q /tmp/bun.zip -d "$HOME/.bun"
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+          "$HOME/.bun/bin/bun" --version
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -47,4 +59,3 @@ jobs:
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
           # claude_args: '--allowed-tools Bash(gh pr *)'
-
