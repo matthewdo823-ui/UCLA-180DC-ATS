@@ -28,6 +28,8 @@ function mapScoreboardRoundContext(row) {
     type: row.type,
     status: row.status,
     sortOrder: row.sort_order,
+    autoAdvancePercent: Number(row.auto_advance_percent) || 0,
+    autoRejectPercent: Number(row.auto_reject_percent) || 0,
   };
 }
 

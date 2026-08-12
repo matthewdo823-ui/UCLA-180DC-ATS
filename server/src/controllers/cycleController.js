@@ -41,6 +41,8 @@ function mapRound(row) {
     status: row.status,
     sortOrder: row.sort_order,
     rubricConfig: row.rubric_config || null,
+    autoAdvancePercent: Number(row.auto_advance_percent) || 0,
+    autoRejectPercent: Number(row.auto_reject_percent) || 0,
     createdAt: row.created_at,
   };
 }
@@ -422,6 +424,34 @@ exports.patchRound = async (req, res) => {
       return res.status(400).json({ error: validationError });
     }
     updates.rubric_config = req.body.rubricConfig;
+  }
+  if (req.body?.autoAdvancePercent !== undefined || req.body?.autoRejectPercent !== undefined) {
+    const advancePercent = req.body?.autoAdvancePercent === undefined
+      ? undefined
+      : Number(req.body.autoAdvancePercent);
+    const rejectPercent = req.body?.autoRejectPercent === undefined
+      ? undefined
+      : Number(req.body.autoRejectPercent);
+    if ((advancePercent !== undefined && (!Number.isFinite(advancePercent) || advancePercent < 0 || advancePercent > 100))
+      || (rejectPercent !== undefined && (!Number.isFinite(rejectPercent) || rejectPercent < 0 || rejectPercent > 100))) {
+      return res.status(400).json({ error: "Automatic decision percentages must be between 0 and 100" });
+    }
+
+    const { data: existing, error: existingError } = await supabase
+      .from("rounds")
+      .select("auto_advance_percent, auto_reject_percent")
+      .eq("id", roundId)
+      .maybeSingle();
+    if (existingError) return respondWithServerError(res, existingError, "patchRound percentages");
+    if (!existing) return res.status(404).json({ error: "Round not found" });
+
+    const nextAdvance = advancePercent === undefined ? Number(existing.auto_advance_percent) || 0 : advancePercent;
+    const nextReject = rejectPercent === undefined ? Number(existing.auto_reject_percent) || 0 : rejectPercent;
+    if (nextAdvance + nextReject > 100) {
+      return res.status(400).json({ error: "Automatic advance and reject percentages cannot total more than 100" });
+    }
+    if (advancePercent !== undefined) updates.auto_advance_percent = advancePercent;
+    if (rejectPercent !== undefined) updates.auto_reject_percent = rejectPercent;
   }
 
   if (!Object.keys(updates).length) {
