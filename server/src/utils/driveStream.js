@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { pipeline } = require('node:stream/promises');
 const { extractDriveFileID, toDownloadURL } = require('./drive');
 const { getDriveClient } = require('./googleForm');
 
@@ -36,6 +37,28 @@ function driveAccessError(message, code = 'DRIVE_INACCESSIBLE') {
   return err;
 }
 
+/** Write a safe response for a Drive streaming failure, including mid-stream failures. */
+function sendDriveProxyError(res, err, label) {
+  const expected = err.code === 'INVALID_URL' || err.code === 'DRIVE_INACCESSIBLE'
+    || err.response?.status === 404 || err.response?.status === 403;
+  if (!expected) console.error(`Proxy error (${label}):`, err.message);
+
+  if (res.headersSent) return res.destroy();
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (err.code === 'INVALID_URL' || err.code === 'DRIVE_INACCESSIBLE') {
+    return res.status(404).send(err.message);
+  }
+  if (err.response?.status === 404) return res.status(404).send('Drive file not found');
+  if (err.response?.status === 403) return res.status(404).send('Drive file is not publicly accessible');
+  return res.status(502).json({
+    error: `Error fetching ${label} from Drive`,
+    detail: err.message,
+    code: err.code,
+    upstreamStatus: err.response?.status,
+  });
+}
+
 async function streamViaDriveApi(fileId, res, fallbackContentType) {
   let drive;
   try {
@@ -59,7 +82,9 @@ async function streamViaDriveApi(fileId, res, fallbackContentType) {
       { responseType: 'stream' }
     );
     setFileHeaders(res, meta?.mimeType || fallbackContentType);
-    stream.pipe(res);
+    // Keep stream failures in this async call chain rather than allowing an
+    // error emitted after `pipe()` returns to become unhandled.
+    await pipeline(stream, res);
     return true;
   } catch (err) {
     const status = err?.code ?? err?.response?.status;
@@ -171,4 +196,5 @@ async function streamDriveFileToResponse(fileUrl, res, { fallbackContentType }) 
 
 module.exports = {
   streamDriveFileToResponse,
+  sendDriveProxyError,
 };

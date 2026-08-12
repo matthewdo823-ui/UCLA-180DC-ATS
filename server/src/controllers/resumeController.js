@@ -1,6 +1,6 @@
 const supabase = require('../config/supabase');
 const { extractDriveFileID, toDownloadURL, isGoogleDriveFileUrl } = require('../utils/drive');
-const { streamDriveFileToResponse } = require('../utils/driveStream');
+const { streamDriveFileToResponse, sendDriveProxyError } = require('../utils/driveStream');
 const {
     getActiveCycleId,
     getActiveCycleRow,
@@ -1594,47 +1594,6 @@ exports.getResumeFile = async (req, res) => {
         return respondWithServerError(res, err, 'getResumeFile');
     }
 };
-
-function sendDriveProxyError(res, err, label) {
-    const isExpectedAccessFailure =
-        err.code === 'INVALID_URL'
-        || err.code === 'DRIVE_INACCESSIBLE'
-        || err.response?.status === 404
-        || err.response?.status === 403;
-
-    if (!isExpectedAccessFailure) {
-        console.error(`Proxy error (${label}):`, err.message);
-    }
-
-    // The failure can land mid-stream (we set headers and started piping before
-    // Drive cut us off), in which case there is no status left to send — just drop
-    // the connection so the client sees a truncated body rather than us throwing
-    // ERR_HTTP_HEADERS_SENT and taking down the request handler.
-    if (res.headersSent) {
-        return res.destroy();
-    }
-
-    // Never let a browser cache a failure: success responses carry a day-long
-    // Cache-Control, and without this an error could inherit heuristic caching.
-    res.setHeader('Cache-Control', 'no-store');
-
-    if (err.code === 'INVALID_URL' || err.code === 'DRIVE_INACCESSIBLE') {
-        return res.status(404).send(err.message);
-    }
-    const upstreamStatus = err.response?.status;
-    if (upstreamStatus === 404) {
-        return res.status(404).send('Drive file not found');
-    }
-    if (upstreamStatus === 403) {
-        return res.status(404).send('Drive file is not publicly accessible');
-    }
-    return res.status(502).json({
-        error: `Error fetching ${label} from Drive`,
-        detail: err.message,
-        code: err.code,
-        upstreamStatus,
-    });
-}
 
 // Reverse proxy for image streaming (streams drive image to frontend)
 exports.viewImage = async (req, res) => {
