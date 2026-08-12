@@ -10,7 +10,7 @@ import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
-import { formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
+import { formatScore, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
 import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
 import {
@@ -20,7 +20,6 @@ import {
   exportCandidatesDecisionCsv,
   getCandidateDecisionStatus,
   getCommitteeLinkWarning,
-  passesDecisionFilter,
   patchScoreboardWithDecision,
   recomputeDecisionStats,
 } from "./decisionUtils";
@@ -28,184 +27,31 @@ import { equalizeCandidateScores, recomputeEqualizedStats } from "./equalizeUtil
 import AdvanceEmailModal from "./AdvanceEmailModal";
 import ReviewOverrideSection from "../../components/ReviewOverride/ReviewOverrideSection";
 import CandidateSignalActions, { CandidateSignalBadges } from "../../components/CandidateSignalActions/CandidateSignalActions";
-import { formatRoundKind, isInterviewRoundType } from "../../constants/rounds";
+import { isInterviewRoundType } from "../../constants/rounds";
+import {
+  compareCandidates,
+  computeScoreCutoffs,
+  countActiveFilters,
+  defaultFilters,
+  filterCandidates,
+  formatRoundBanner,
+  formatRoundStatus,
+  formatScorePointsLine,
+  getAggregateScore,
+  getHeadlineScore,
+  getReviewerInitials,
+  getReviewerLabel,
+  getReviewTotal,
+  getSourceNormalizedScore,
+  normalizeMetricScore,
+  scoreColor,
+  SORT_TABS,
+  uniqueSortedStrings,
+} from "./scoreboardViewModel";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
 const cardLime = "#C0DD97";
-
-function formatRoundBanner(round) {
-  if (!round?.name) return "CANDIDATE SCORECARD";
-  return `${round.name.toUpperCase()} · ${formatRoundKind(round.type).toUpperCase()}`;
-}
-
-function formatRoundStatus(round) {
-  if (!round?.status) return "VIEW";
-  if (round.status === "active") return "ACTIVE";
-  if (round.status === "closed") return "CLOSED";
-  if (round.status === "draft") return "DRAFT";
-  return String(round.status).toUpperCase();
-}
-
-function scoreColor(score) {
-  if (!hasNumericScore(score)) return css.textGray;
-  const numeric = Number(score);
-  if (numeric >= 90) return css.greenDark;
-  if (numeric >= 80) return "#4CAF50";
-  if (numeric >= 70) return css.amber;
-  return css.textGray;
-}
-
-function getReviewerLabel(review, index) {
-  return review?.reviewerName || review?.reviewerEmail || `Reviewer ${index + 1} not recorded`;
-}
-
-function getReviewerInitials(review, index) {
-  if (review?.reviewerName) return getInitials(review.reviewerName);
-  if (review?.reviewerEmail) return review.reviewerEmail.substring(0, 2).toUpperCase();
-  return `R${index + 1}`;
-}
-
-function getReviewTotal(review) {
-  if (Number.isFinite(Number(review?.score))) return Number(review.score);
-  return Object.values(review?.scores ?? {}).reduce((total, value) => total + (Number(value) || 0), 0);
-}
-
-function uniqueSortedStrings(items) {
-  const set = new Set((items || []).map(s => String(s).trim()).filter(Boolean));
-  return [...set].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-}
-
-const defaultFilters = {
-  major: "all",
-  year: "all",
-  reviews: "all",
-  scoreBand: "all",
-  decision: "all",
-  signals: "all",
-};
-
-function countActiveFilters(filters) {
-  return Object.keys(defaultFilters).filter(key => filters[key] !== defaultFilters[key]).length;
-}
-
-// Fraction of the scored pool each "top" band keeps.
-const SCORE_PERCENTILES = { top: 0.2, strong: 0.3 };
-
-// Score cutoffs for the percentile bands, computed over the whole scored pool.
-// A candidate is in the "top X%" when its ranking score (the raw aggregate — the
-// same source the score sort uses) is at or above the score held by the
-// candidate sitting on the X-percentile rank boundary. Candidates without a
-// score are excluded from the pool (they fall under "No score").
-function computeScoreCutoffs(list) {
-  const scores = (list || [])
-    .map(getPerformanceSortScore)
-    .filter(hasNumericScore)
-    .map(Number)
-    .sort((a, b) => b - a);
-  const n = scores.length;
-  const cutoffAt = (fraction) => {
-    if (n === 0) return null;
-    const count = Math.max(1, Math.ceil(n * fraction));
-    return scores[count - 1];
-  };
-  return {
-    top: cutoffAt(SCORE_PERCENTILES.top),
-    strong: cutoffAt(SCORE_PERCENTILES.strong),
-  };
-}
-
-function passesScoreBand(candidate, scoreBand, cutoffs) {
-  const n = candidate?.numReviews ?? candidate?.reviews?.length ?? 0;
-  const displayPct = getHeadlineScore(candidate);
-  const rankScore = getPerformanceSortScore(candidate);
-  const inPercentile = (cutoff) =>
-    cutoff != null && hasNumericScore(rankScore) && Number(rankScore) >= cutoff;
-
-  switch (scoreBand) {
-    case "top":
-      return inPercentile(cutoffs?.top);
-    case "strong":
-      return inPercentile(cutoffs?.strong);
-    case "low":
-      return displayPct !== null && displayPct < 60 && n > 0;
-    case "pending":
-      return n === 0 || displayPct === null;
-    default:
-      return true;
-  }
-}
-
-function passesReviewFilter(candidate, reviews) {
-  const n = candidate?.numReviews ?? candidate?.reviews?.length ?? 0;
-  switch (reviews) {
-    case "0":
-      return n === 0;
-    case "1":
-      return n === 1;
-    case "1+":
-      return n >= 1;
-    case "2+":
-      return n >= 2;
-    default:
-      return true;
-  }
-}
-
-function passesSignalFilter(candidate, signals) {
-  switch (signals) {
-    case "referred":
-      return (candidate.referralCount || 0) > 0;
-    case "flagged":
-      return (candidate.flagCount || 0) > 0;
-    default:
-      return true;
-  }
-}
-
-function getReferralCount(c) {
-  return c?.referralCount || 0;
-}
-
-function normalizePhoneDigits(value) {
-  return String(value || "").replace(/\D/g, "");
-}
-
-function passesSearchQuery(candidate, query) {
-  const q = String(query || "").trim().toLowerCase();
-  if (!q) return true;
-
-  const fields = [
-    candidate.name,
-    candidate.email,
-    candidate.major,
-    candidate.year,
-    candidate.phoneNumber,
-  ].filter(Boolean).map(value => String(value).toLowerCase());
-
-  if (fields.some(value => value.includes(q))) return true;
-
-  const qDigits = normalizePhoneDigits(q);
-  if (qDigits.length >= 3) {
-    const phoneDigits = normalizePhoneDigits(candidate.phoneNumber);
-    if (phoneDigits.includes(qDigits)) return true;
-  }
-
-  return false;
-}
-
-function filterCandidates(list, filters, searchQuery = "", scoreCutoffs = null) {
-  return list.filter(c => {
-    if (!passesSearchQuery(c, searchQuery)) return false;
-    if (filters.major !== "all" && (c.major || "Undeclared") !== filters.major) return false;
-    if (filters.year !== "all" && String(c.year || "").trim() !== filters.year) return false;
-    if (!passesReviewFilter(c, filters.reviews)) return false;
-    if (!passesScoreBand(c, filters.scoreBand, scoreCutoffs)) return false;
-    if (!passesDecisionFilter(c, filters.decision)) return false;
-    if (!passesSignalFilter(c, filters.signals)) return false;
-    return true;
-  });
-}
 
 const PAGE_THEME = {
   light: {
@@ -387,179 +233,6 @@ function buildActiveFilterPills(filters, deliberationMode) {
   }
 
   return pills;
-}
-
-const SORT_TABS = [
-  { id: "performance_desc", label: "Score · high to low" },
-  { id: "performance_asc", label: "Score · low to high" },
-  { id: "referrals_desc", label: "Referrals · most" },
-  { id: "last_review_desc", label: "Last grade · newest" },
-  { id: "last_review_asc", label: "Last grade · oldest" },
-  { id: "name_asc", label: "Name · A–Z" },
-  { id: "name_desc", label: "Name · Z–A" },
-  { id: "reviews_desc", label: "Reviews · most" },
-  { id: "reviews_asc", label: "Reviews · fewest" },
-  { id: "created_desc", label: "Applied · newest" },
-  { id: "created_asc", label: "Applied · oldest" },
-];
-
-function getNumReviews(c) {
-  return c?.numReviews ?? c?.reviews?.length ?? 0;
-}
-
-function getLastReviewMs(c) {
-  const reviews = c?.reviews ?? [];
-  let max = -Infinity;
-  for (const r of reviews) {
-    if (!r?.submittedAt) continue;
-    const t = new Date(r.submittedAt).getTime();
-    if (Number.isFinite(t) && t > max) max = t;
-  }
-  return max === -Infinity ? null : max;
-}
-
-function getCreatedMs(c) {
-  if (!c?.createdAt) return null;
-  const t = new Date(c.createdAt).getTime();
-  return Number.isFinite(t) ? t : null;
-}
-
-function cmpName(a, b) {
-  return String(a?.name ?? "").localeCompare(String(b?.name ?? ""), undefined, { sensitivity: "base" });
-}
-
-function cmpId(a, b) {
-  return String(a.id).localeCompare(String(b.id));
-}
-
-function compareCandidates(a, b, sortBy) {
-  let primary = 0;
-
-  switch (sortBy) {
-    case "performance_desc": {
-      const as = getPerformanceSortScore(a);
-      const bs = getPerformanceSortScore(b);
-      if (as === null && bs === null) primary = (getCreatedMs(a) ?? 0) - (getCreatedMs(b) ?? 0);
-      else if (as === null) primary = 1;
-      else if (bs === null) primary = -1;
-      else primary = bs - as;
-      break;
-    }
-    case "performance_asc": {
-      const as = getPerformanceSortScore(a);
-      const bs = getPerformanceSortScore(b);
-      if (as === null && bs === null) primary = (getCreatedMs(a) ?? 0) - (getCreatedMs(b) ?? 0);
-      else if (as === null) primary = 1;
-      else if (bs === null) primary = -1;
-      else primary = as - bs;
-      break;
-    }
-    case "last_review_desc": {
-      const ta = getLastReviewMs(a);
-      const tb = getLastReviewMs(b);
-      if (ta === null && tb === null) primary = 0;
-      else if (ta === null) primary = 1;
-      else if (tb === null) primary = -1;
-      else primary = tb - ta;
-      break;
-    }
-    case "last_review_asc": {
-      const ta = getLastReviewMs(a);
-      const tb = getLastReviewMs(b);
-      if (ta === null && tb === null) primary = 0;
-      else if (ta === null) primary = -1;
-      else if (tb === null) primary = 1;
-      else primary = ta - tb;
-      break;
-    }
-    case "name_asc":
-      primary = cmpName(a, b);
-      break;
-    case "name_desc":
-      primary = cmpName(b, a);
-      break;
-    case "reviews_desc":
-      primary = getNumReviews(b) - getNumReviews(a);
-      break;
-    case "reviews_asc":
-      primary = getNumReviews(a) - getNumReviews(b);
-      break;
-    case "referrals_desc":
-      primary = getReferralCount(b) - getReferralCount(a);
-      break;
-    case "created_desc": {
-      const ta = getCreatedMs(a);
-      const tb = getCreatedMs(b);
-      if (ta === null && tb === null) primary = 0;
-      else if (ta === null) primary = 1;
-      else if (tb === null) primary = -1;
-      else primary = tb - ta;
-      break;
-    }
-    case "created_asc": {
-      const ta = getCreatedMs(a);
-      const tb = getCreatedMs(b);
-      if (ta === null && tb === null) primary = 0;
-      else if (ta === null) primary = 1;
-      else if (tb === null) primary = -1;
-      else primary = ta - tb;
-      break;
-    }
-    default:
-      primary = 0;
-  }
-
-  if (primary !== 0) return primary;
-  const referralTiebreak = getReferralCount(b) - getReferralCount(a);
-  if (referralTiebreak !== 0) return referralTiebreak;
-  return cmpName(a, b) || cmpId(a, b);
-}
-
-function normalizeMetricScore(candidate, metric) {
-  const value = candidate?.categoryScores?.[metric];
-  return hasNumericScore(value) ? Number(value) : null;
-}
-
-function getNormalizedScore(candidate) {
-  if (hasNumericScore(candidate?.normalizedScore)) return Number(candidate.normalizedScore);
-  return null;
-}
-
-function getScoreMaxTotal(candidate) {
-  if (hasNumericScore(candidate?.compositeMax)) return Number(candidate.compositeMax);
-  if (hasNumericScore(candidate?.maxScore)) return Number(candidate.maxScore);
-  return null;
-}
-
-/** Cosmetic display % — capped at 100, not used for ranking. */
-function getHeadlineScore(candidate) {
-  const normalized = getNormalizedScore(candidate);
-  if (normalized == null) return null;
-  return Math.min(100, normalized);
-}
-
-function formatScorePointsLine(candidate) {
-  const pts = getAggregateScore(candidate);
-  const max = getScoreMaxTotal(candidate);
-  if (!hasNumericScore(pts) || max == null) return null;
-  return `${formatScore(pts)} pts / ${formatScore(max)}`;
-}
-
-function getSourceNormalizedScore(candidate) {
-  if (hasNumericScore(candidate?.sourceNormalizedScore)) return Number(candidate.sourceNormalizedScore);
-  return getNormalizedScore(candidate);
-}
-
-function getAggregateScore(candidate) {
-  if (hasNumericScore(candidate?.aggregateScore)) {
-    return Number(candidate.aggregateScore);
-  }
-  return null;
-}
-
-/** Raw pts average — source of truth for ranking/sorting. */
-function getPerformanceSortScore(candidate) {
-  return getAggregateScore(candidate);
 }
 
 function ReviewerStack({ reviews }) {
