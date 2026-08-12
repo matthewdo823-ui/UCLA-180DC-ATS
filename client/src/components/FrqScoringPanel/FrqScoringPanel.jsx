@@ -34,6 +34,25 @@ export default function FrqScoringPanel({
           background: css.cardWhite,
           border: `1px solid ${css.borderLight}`,
           borderRadius: 12,
+          padding: "12px 14px",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
+        }}
+      >
+        <div style={{ fontSize: 11, fontWeight: 700, color: css.greenDark, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 8 }}>
+          WHY 180 rubric
+        </div>
+        <img
+          src="/rubrics/Why180Rubric.svg"
+          alt="WHY 180 FRQ scoring rubric"
+          style={{ width: "100%", height: "auto", display: "block", borderRadius: 8, border: `1px solid ${css.borderLight}` }}
+        />
+      </div>
+
+      <div
+        style={{
+          background: css.cardWhite,
+          border: `1px solid ${css.borderLight}`,
+          borderRadius: 12,
           padding: "20px 24px",
           boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
         }}
