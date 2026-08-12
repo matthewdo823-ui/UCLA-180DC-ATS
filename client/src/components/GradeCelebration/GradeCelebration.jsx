@@ -8,12 +8,14 @@ const CONFETTI = Array.from({ length: 42 }, (_, index) => ({
   rotation: (index * 47) % 360,
 }));
 
-export default function GradeCelebration({ active, ryanMode = false }) {
+export default function GradeCelebration({ active, specialCelebrationName = "" }) {
   if (!active) return null;
+
+  const specialMode = Boolean(specialCelebrationName);
 
   return (
     <div data-grade-celebration aria-live="polite" aria-atomic="true" style={{ position: "fixed", inset: 0, zIndex: 500, overflow: "hidden", pointerEvents: "none" }}>
-      <div style={{ position: "absolute", inset: 0, background: ryanMode ? "rgba(255, 237, 106, 0.16)" : "transparent", animation: ryanMode ? "ryanCelebrationBlink 0.38s steps(2, end) infinite" : "none" }} />
+      <div style={{ position: "absolute", inset: 0, background: specialMode ? "rgba(255, 237, 106, 0.16)" : "transparent", animation: specialMode ? "ryanCelebrationBlink 0.38s steps(2, end) infinite" : "none" }} />
       {CONFETTI.map((piece) => (
         <span
           key={`${piece.left}-${piece.rotation}`}
@@ -32,7 +34,7 @@ export default function GradeCelebration({ active, ryanMode = false }) {
           }}
         />
       ))}
-      {ryanMode ? (
+      {specialMode ? (
         <div
           style={{
             position: "absolute",
@@ -52,7 +54,7 @@ export default function GradeCelebration({ active, ryanMode = false }) {
             animation: "ryanCelebrationText 0.38s steps(2, end) infinite",
           }}
         >
-          CONGRAGULATIONS, RYAN!
+          CONGRAGULATIONS, {specialCelebrationName.toUpperCase()}!
         </div>
       ) : null}
       <style>{`
