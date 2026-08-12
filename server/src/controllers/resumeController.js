@@ -91,6 +91,17 @@ const FRQ_REVIEW_GOAL = Number.isFinite(configuredFrqReviewGoal) && configuredFr
     : GRADER_REVIEW_GOAL;
 const VALID_REVIEW_DECISIONS = new Set(["pass", "flag", "reject"]);
 const MIN_SIGNAL_NOTE_LENGTH = 20;
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 250;
+
+function getPageRequest(req) {
+    const limit = Number(req.query?.limit);
+    const offset = Number(req.query?.offset);
+    return {
+        limit: Number.isInteger(limit) ? Math.min(Math.max(limit, 1), MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE,
+        offset: Number.isInteger(offset) ? Math.max(offset, 0) : 0,
+    };
+}
 
 function getReviewScore(scores = {}, metrics = null) {
     return computeRawScore(scores, metrics);
@@ -437,11 +448,15 @@ exports.getNextResume = async (req, res) => {
     // This is a soft tie-breaker only: the least-reviewed candidates still
     // come first, while candidates already reviewed by another grader can be
     // chosen to build the shared-candidate graph used for calibration.
-    const { data: cycleReviewRows, error: cycleReviewError } = await supabase
-        .from('resume_reviews')
-        .select('resume_id, graded_by')
-        .eq('cycle_id', screening.cycle.id)
-        .not('graded_by', 'is', null);
+    const candidateIdsForRanking = (resumeCandidates || []).map((row) => row.id);
+    const { data: cycleReviewRows, error: cycleReviewError } = candidateIdsForRanking.length
+        ? await supabase
+            .from('resume_reviews')
+            .select('resume_id, graded_by')
+            .eq('cycle_id', screening.cycle.id)
+            .in('resume_id', candidateIdsForRanking)
+            .not('graded_by', 'is', null)
+        : { data: [], error: null };
     if (cycleReviewError) return respondWithServerError(res, cycleReviewError, 'getNextResume overlap');
 
     const rankedResumeCandidates = rankSharedQueueResumes({
@@ -455,8 +470,28 @@ exports.getNextResume = async (req, res) => {
             continue;
         }
 
+        // A lease is acquired atomically in Postgres. Another grader that
+        // loaded the same priority list will fail this claim and try its next
+        // candidate instead of receiving duplicate work.
+        const { data: claimed, error: claimError } = await supabase.rpc('claim_review_queue_lease', {
+            p_resume_id: row.id,
+            p_cycle_id: screening.cycle.id,
+            p_round_id: screening.round.id,
+            p_grader_id: gradedBy,
+            p_kind: 'resume',
+        });
+        if (claimError) return respondWithServerError(res, claimError, 'getNextResume claim');
+        if (!claimed) continue;
+
         if (!isGoogleDriveFileUrl(row.file_url)) {
             console.warn(`[getNextResume] Skipping resume ${row.id}: not a valid Google Drive URL`);
+            await supabase.rpc('release_review_queue_lease', {
+                p_resume_id: row.id,
+                p_cycle_id: screening.cycle.id,
+                p_round_id: screening.round.id,
+                p_grader_id: gradedBy,
+                p_kind: 'resume',
+            });
             continue;
         }
 
@@ -729,6 +764,14 @@ exports.saveReview = async (req, res) => {
         }
         return respondWithServerError(res, saveError, 'saveReview rpc');
     }
+
+    await supabase.rpc('release_review_queue_lease', {
+        p_resume_id: resume_id,
+        p_cycle_id: screening.cycle.id,
+        p_round_id: screening.round.id,
+        p_grader_id: gradedBy,
+        p_kind: 'resume',
+    });
 
     return res.json({ success: true });
 };
@@ -1034,6 +1077,15 @@ exports.getNextFrq = async (req, res) => {
 
     for (const row of resumeCandidates || []) {
         if (reviewedResumeIdSet.has(row.id)) continue;
+        const { data: claimed, error: claimError } = await supabase.rpc('claim_review_queue_lease', {
+            p_resume_id: row.id,
+            p_cycle_id: screening.cycle.id,
+            p_round_id: screening.round.id,
+            p_grader_id: gradedBy,
+            p_kind: 'frq',
+        });
+        if (claimError) return respondWithServerError(res, claimError, 'getNextFrq claim');
+        if (!claimed) continue;
         return res.json(formatFrqCandidateRow(row));
     }
 
@@ -1195,6 +1247,14 @@ exports.saveFrqReview = async (req, res) => {
         }
         return respondWithServerError(res, saveError, "saveFrqReview rpc");
     }
+
+    await supabase.rpc('release_review_queue_lease', {
+        p_resume_id: resume_id,
+        p_cycle_id: screening.cycle.id,
+        p_round_id: screening.round.id,
+        p_grader_id: gradedBy,
+        p_kind: 'frq',
+    });
 
     return res.json({ success: true });
 };
@@ -1793,6 +1853,7 @@ async function maybeBackfillResumeCandidateId(resumeId, candidateId) {
 // Gets scoreboard data
 exports.getScoreboard = async (req, res) => {
     try {
+        const { limit, offset } = getPageRequest(req);
         const requestedRoundId = String(req.query?.roundId || "").trim();
         const activeCycle = await getActiveCycleRow();
         const activeCycleId = activeCycle?.id || null;
@@ -1846,7 +1907,7 @@ exports.getScoreboard = async (req, res) => {
         const decisionOptions = { provisional: !decisionsFinalized };
         const canDeliberate = !viewingHistorical && deliberationRound.status === "active";
 
-        const { data: resumes, error: resumeError } = await supabase
+        const { data: resumes, error: resumeError, count: resumeCount } = await supabase
             .from('resumes')
             .select(`
                 id,
@@ -1856,6 +1917,7 @@ exports.getScoreboard = async (req, res) => {
                 created_at,
                 candidates (
                     id,
+                    name,
                     email,
                     phone_number,
                     major,
@@ -1865,36 +1927,19 @@ exports.getScoreboard = async (req, res) => {
                     linkedin,
                     gm,
                     newbie_training,
-                    headshot
+                    headshot,
+                    resume_file_url
                 )
-            `)
+            `, { count: 'exact' })
             .eq('cycle_id', activeCycleId)
-            .order('created_at', { ascending: true });
+            .order('created_at', { ascending: true })
+            .range(offset, offset + limit - 1);
 
         if (resumeError) throw resumeError;
 
-        const { data: cycleCandidates, error: cycleCandError } = await supabase
-            .from("candidates")
-            .select(`
-                id,
-                name,
-                email,
-                phone_number,
-                major,
-                gpa,
-                year,
-                pronouns,
-                linkedin,
-                gm,
-                newbie_training,
-                headshot,
-                resume_file_url
-            `)
-            .eq("cycle_id", activeCycleId);
-
-        if (cycleCandError) throw cycleCandError;
-
-        const candidateLinkLookups = buildCandidateLinkLookups(cycleCandidates);
+        const candidateLinkLookups = buildCandidateLinkLookups(
+            (resumes || []).map((resume) => firstRel(resume.candidates)).filter(Boolean)
+        );
 
         const { data: roundDecisionRows, error: decisionError } = await supabase
             .from('round_decisions')
@@ -1912,8 +1957,9 @@ exports.getScoreboard = async (req, res) => {
             cycleRounds
         );
 
-        const { data: reviews, error: reviewError } = await supabase
-            .from('resume_reviews')
+        const resumeIds = (resumes || []).map((resume) => resume.id);
+        const { data: reviews, error: reviewError } = resumeIds.length
+            ? await supabase.from('resume_reviews')
             .select(`
                 *,
                 resumes (
@@ -1937,7 +1983,9 @@ exports.getScoreboard = async (req, res) => {
                 )
             `)
             .eq('cycle_id', activeCycleId)
-            .eq('round_id', resumeRound.id);
+            .eq('round_id', resumeRound.id)
+            .in('resume_id', resumeIds)
+            : { data: [], error: null };
             
         if (reviewError) throw reviewError;
 
@@ -2118,11 +2166,13 @@ exports.getScoreboard = async (req, res) => {
             { rubricConfig: resumeRound.rubric_config, metrics }
         );
 
-        const { data: frqRows, error: frqError } = await supabase
-            .from("frq_reviews")
+        const { data: frqRows, error: frqError } = resumeIds.length
+            ? await supabase.from("frq_reviews")
             .select("id, resume_id, score, notes, graded_by, submitted_at")
             .eq("cycle_id", activeCycleId)
-            .eq("round_id", resumeRound.id);
+            .eq("round_id", resumeRound.id)
+            .in("resume_id", resumeIds)
+            : { data: [], error: null };
 
         if (frqError) throw frqError;
 
@@ -2213,6 +2263,12 @@ exports.getScoreboard = async (req, res) => {
                 rejected: decisionCounts.reject,
                 pending: decisionCounts.pending,
                 avgScore: avgScore,
+            },
+            pagination: {
+                limit,
+                offset,
+                total: resumeCount ?? null,
+                hasMore: resumeCount != null ? offset + (resumes || []).length < resumeCount : (resumes || []).length === limit,
             },
             calibration,
             candidates: candidatesWithSignals
@@ -2722,7 +2778,9 @@ exports.getScoreboardApplicationSummary = async (req, res) => {
             return res.status(503).json({ error: 'AI summary is not configured on the server' });
         }
 
-        const forceRefresh = String(req.query.refresh || '').trim() === '1';
+        // Cache refresh is deliberately not request-controlled: this endpoint
+        // transmits applicant material to a paid external model service.
+        const forceRefresh = false;
 
         const payload = await fetchScoreboardApplicationPayload(resumeId);
 

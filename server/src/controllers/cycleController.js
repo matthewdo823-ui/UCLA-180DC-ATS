@@ -152,19 +152,8 @@ async function buildActiveCyclePayload() {
 }
 
 async function applyActiveCycleSwitch(cycleId) {
-  const { error: archiveError } = await supabase
-    .from("cycles")
-    .update({ status: "archived" })
-    .neq("id", cycleId)
-    .eq("status", "active");
-
-  if (archiveError) throw archiveError;
-
-  const { error: settingsError } = await supabase
-    .from("app_settings")
-    .upsert({ id: 1, active_cycle_id: cycleId }, { onConflict: "id" });
-
-  if (settingsError) throw settingsError;
+  const { error } = await supabase.rpc("activate_cycle", { p_cycle_id: cycleId });
+  if (error) throw error;
 }
 
 async function ensureUniqueSlug(baseSlug) {
@@ -494,21 +483,9 @@ exports.activateRound = async (req, res) => {
       return res.status(400).json({ error: "Invalid round type" });
     }
 
-    const { error: closeOthersError } = await supabase
-      .from("rounds")
-      .update({ status: "closed" })
-      .eq("cycle_id", target.cycle_id)
-      .eq("status", "active")
-      .neq("id", roundId);
-
-    if (closeOthersError) return respondWithServerError(res, closeOthersError, "activateRound close others");
-
-    const { data, error } = await supabase
-      .from("rounds")
-      .update({ status: "active" })
-      .eq("id", roundId)
-      .select("*")
-      .single();
+    const { error: activationError } = await supabase.rpc("activate_round", { p_round_id: roundId });
+    if (activationError) return respondWithServerError(res, activationError, "activateRound transaction");
+    const { data, error } = await supabase.from("rounds").select("*").eq("id", roundId).single();
 
     if (error) return respondWithServerError(res, error, "activateRound update");
 
@@ -615,6 +592,9 @@ exports.syncCycleForm = async (req, res) => {
       }),
     });
   } catch (err) {
+    if (err.code === "SYNC_IN_PROGRESS") {
+      return res.status(409).json({ error: err.message });
+    }
     return respondWithServerError(res, err, "syncCycleForm", "Form sync failed");
   }
 };
@@ -688,24 +668,12 @@ exports.advanceToNextRound = async (req, res) => {
       });
     }
 
-    const { error: closeError } = await supabase
-      .from("rounds")
-      .update({ status: "closed" })
-      .eq("id", roundId);
-
-    if (closeError) return respondWithServerError(res, closeError, "advanceToNextRound close");
-
-    const { data: nextCandidates, error: nextError } = await supabase
-      .from("rounds")
-      .select("*")
-      .eq("cycle_id", current.cycle_id)
-      .gt("sort_order", current.sort_order)
-      .order("sort_order", { ascending: true })
-      .limit(1);
-
+    const { data: nextRoundId, error: advanceError } = await supabase.rpc("advance_round", { p_round_id: roundId });
+    if (advanceError) return respondWithServerError(res, advanceError, "advanceToNextRound transaction");
+    const { data: nextRound, error: nextError } = nextRoundId
+      ? await supabase.from("rounds").select("*").eq("id", nextRoundId).maybeSingle()
+      : { data: null, error: null };
     if (nextError) return respondWithServerError(res, nextError, "advanceToNextRound next");
-
-    const nextRound = nextCandidates?.[0] || null;
     if (!nextRound) {
       return res.json({
         closedRound: mapRound({ ...current, status: "closed" }),
@@ -714,27 +682,9 @@ exports.advanceToNextRound = async (req, res) => {
       });
     }
 
-    const { error: closeOthersError } = await supabase
-      .from("rounds")
-      .update({ status: "closed" })
-      .eq("cycle_id", current.cycle_id)
-      .eq("status", "active")
-      .neq("id", nextRound.id);
-
-    if (closeOthersError) return respondWithServerError(res, closeOthersError, "advanceToNextRound close others");
-
-    const { data: activated, error: activateError } = await supabase
-      .from("rounds")
-      .update({ status: "active" })
-      .eq("id", nextRound.id)
-      .select("*")
-      .single();
-
-    if (activateError) return respondWithServerError(res, activateError, "advanceToNextRound activate");
-
     return res.json({
       closedRound: mapRound({ ...current, status: "closed" }),
-      activatedRound: mapRound(activated),
+      activatedRound: mapRound(nextRound),
     });
   } catch (err) {
     return respondWithServerError(res, err, "advanceToNextRound");

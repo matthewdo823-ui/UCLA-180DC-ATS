@@ -23,6 +23,7 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 17 | `add_candidate_referrals.sql` | Member referrals (positive counterpart to flags) |
 | 18 | `add_candidate_summaries.sql` | Cached AI candidate summaries for the full application view |
 | 19 | `backfill_resume_candidate_ids.sql` | **Optional data repair** — link orphan `resumes` to `candidates` by name / Drive file id |
+| 20 | `add_concurrency_controls.sql` | **Required upgrade** — distributed form-sync lock, review leases, transactional cycle/round transitions, and idempotent email batches |
 
 ## Notes
 
@@ -32,3 +33,4 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 - **`fix_candidates_form_sync_upsert.sql` (#5):** Run only if you applied an older `add_cycle_form_config.sql` that created a **partial** unique index (`WHERE google_form_response_id IS NOT NULL`). Fresh installs get the full index from #4 and can skip this. The server also handles form sync without relying on PostgREST upsert.
 - **`alter_resume_review_overrides_scores.sql` (#14):** Run only if `resume_review_overrides` was created with a single `override_score` column and no `override_scores`. **Do not run** if you applied the current `add_resume_review_overrides.sql`, which creates both columns.
 - **`backfill_resume_candidate_ids.sql` (#19):** Run only when you have `resumes` rows with `candidate_id IS NULL` that should be linked to existing candidates.
+- **`add_concurrency_controls.sql` (#20):** Run after all applicable earlier migrations and before deploying the corresponding server code. It will refuse to add the active-cycle/round indexes if production already has more than one active cycle or more than one active round in a cycle; correct that data first.

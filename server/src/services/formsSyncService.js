@@ -8,6 +8,7 @@
  */
 
 const supabase = require("../config/supabase");
+const crypto = require("crypto");
 const { getActiveCycleId } = require("../utils/cycleContext");
 const { mapFormResponseToCandidate } = require("../utils/dataMapper");
 const { isGoogleDriveFileUrl } = require("../utils/drive");
@@ -328,7 +329,7 @@ async function syncFormResponsesForCycle(target) {
  * @param {string} [cycleId] — sync only this cycle; otherwise sync all configured non-archived cycles
  * @returns {Promise<{ processed: number, errors: number, cycles: Array<{ cycleId: string, processed: number, errors: number }> }>}
  */
-async function syncFormResponsesToDatabase(cycleId) {
+async function syncFormResponsesToDatabaseUnlocked(cycleId) {
   if (cycleId) {
     const { data: cycle, error } = await supabase
       .from("cycles")
@@ -399,6 +400,28 @@ async function syncFormResponsesToDatabase(cycleId) {
     errors: result.errors,
     cycles: [{ cycleId: result.cycleId, processed: result.processed, errors: result.errors }],
   };
+}
+
+async function syncFormResponsesToDatabase(cycleId) {
+  const ownerId = crypto.randomUUID();
+  const { data: acquired, error: lockError } = await supabase.rpc("acquire_forms_sync_lock", {
+    p_owner_id: ownerId,
+  });
+  if (lockError) throw lockError;
+  if (!acquired) {
+    const err = new Error("A forms sync is already in progress");
+    err.code = "SYNC_IN_PROGRESS";
+    throw err;
+  }
+
+  try {
+    return await syncFormResponsesToDatabaseUnlocked(cycleId);
+  } finally {
+    const { error: releaseError } = await supabase.rpc("release_forms_sync_lock", {
+      p_owner_id: ownerId,
+    });
+    if (releaseError) console.error("[formsSync] Could not release sync lock:", releaseError.message);
+  }
 }
 
 function isSyncConfigured() {
