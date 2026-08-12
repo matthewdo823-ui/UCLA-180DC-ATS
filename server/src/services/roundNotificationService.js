@@ -222,7 +222,7 @@ async function sendAdvanceNotificationTest({ roundId, adminUser }) {
   };
 }
 
-async function sendAdvanceNotifications({ roundId, adminUser, allowResend = false }) {
+async function sendAdvanceNotifications({ roundId, adminUser }) {
   if (!isGmailConfigured()) {
     return { error: "Gmail is not configured on the server", status: 503 };
   }
@@ -241,15 +241,13 @@ async function sendAdvanceNotifications({ roundId, adminUser, allowResend = fals
     };
   }
 
-  if (!allowResend) {
-    const existing = await fetchLatestAdvanceBatch(roundId);
-    if (existing) {
-      return {
-        error: "Advance emails were already sent for this round. Pass allowResend to send again.",
-        status: 409,
-        lastBatch: existing,
-      };
-    }
+  const existing = await fetchLatestAdvanceBatch(roundId);
+  if (existing) {
+    return {
+      error: "Advance emails were already sent for this round.",
+      status: 409,
+      lastBatch: existing,
+    };
   }
 
   const loaded = await getAdvancedCandidatesWithEmail(roundId);
@@ -273,6 +271,7 @@ async function sendAdvanceNotifications({ roundId, adminUser, allowResend = fals
       round_id: round.id,
       notification_type: "advance",
       is_test: false,
+      idempotency_key: `advance:${round.id}`,
       sent_by: adminUser.user_id,
       recipient_count: 0,
       failed_count: 0,
@@ -282,13 +281,43 @@ async function sendAdvanceNotifications({ roundId, adminUser, allowResend = fals
     .select("id, sent_at")
     .single();
 
-  if (batchError) throw batchError;
+  if (batchError) {
+    if (batchError.code === '23505') {
+      return {
+        error: "Advance emails are already being sent or were already sent for this round.",
+        status: 409,
+        lastBatch: await fetchLatestAdvanceBatch(roundId),
+      };
+    }
+    throw batchError;
+  }
+
+  // Persist every recipient before external side effects. The unique database
+  // constraints make a concurrent send request harmless and retain a durable
+  // delivery record if this process exits during the send loop.
+  const recipientRows = [
+    ...withEmail.map((candidate) => ({
+      batch_id: batch.id,
+      candidate_id: candidate.candidateId,
+      email: candidate.email,
+      status: 'pending',
+    })),
+    ...missingEmail.map((candidate) => ({
+      batch_id: batch.id,
+      candidate_id: candidate.candidateId,
+      email: '',
+      status: 'skipped',
+      error: 'No email on file',
+    })),
+  ];
+  const { error: recipientsError } = await supabase
+    .from("round_notification_recipients")
+    .insert(recipientRows);
+  if (recipientsError) throw recipientsError;
 
   let sent = 0;
   let failed = 0;
   const failures = [];
-  const recipientRows = [];
-
   for (const candidate of withEmail) {
     const rendered = renderNotificationTemplate(template, {
       candidateName: candidate.name || "there",
@@ -304,42 +333,20 @@ async function sendAdvanceNotifications({ roundId, adminUser, allowResend = fals
         body: rendered.body,
       });
       sent += 1;
-      recipientRows.push({
-        batch_id: batch.id,
-        candidate_id: candidate.candidateId,
-        email: candidate.email,
-        status: "sent",
-      });
+      await supabase.from("round_notification_recipients")
+        .update({ status: "sent", error: null })
+        .eq('batch_id', batch.id)
+        .eq('candidate_id', candidate.candidateId);
     } catch (err) {
       failed += 1;
       failures.push({ email: candidate.email, error: err.message || "Send failed" });
-      recipientRows.push({
-        batch_id: batch.id,
-        candidate_id: candidate.candidateId,
-        email: candidate.email,
-        status: "failed",
-        error: err.message || "Send failed",
-      });
+      await supabase.from("round_notification_recipients")
+        .update({ status: "failed", error: err.message || "Send failed" })
+        .eq('batch_id', batch.id)
+        .eq('candidate_id', candidate.candidateId);
     }
 
     await sleep(SEND_DELAY_MS);
-  }
-
-  for (const candidate of missingEmail) {
-    recipientRows.push({
-      batch_id: batch.id,
-      candidate_id: candidate.candidateId,
-      email: "",
-      status: "skipped",
-      error: "No email on file",
-    });
-  }
-
-  if (recipientRows.length) {
-    const { error: recipientError } = await supabase
-      .from("round_notification_recipients")
-      .insert(recipientRows);
-    if (recipientError) throw recipientError;
   }
 
   const { error: updateBatchError } = await supabase
