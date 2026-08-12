@@ -4,6 +4,9 @@ const LOGIN_WINDOW_MS = 60 * 1000;
 const REGISTER_MAX_ATTEMPTS = 3;
 const REGISTER_WINDOW_MS = 15 * 60 * 1000;
 
+const PASSWORD_RESET_MAX_ATTEMPTS = 3;
+const PASSWORD_RESET_WINDOW_MS = 15 * 60 * 1000;
+
 function getClientIp(req) {
     const forwarded = req.headers['x-forwarded-for'];
     if (typeof forwarded === 'string' && forwarded.length) {
@@ -59,7 +62,14 @@ const registerRateLimit = createIpRateLimiter({
     errorMessage: 'Too many registration attempts. Please try again in 15 minutes.',
 });
 
+const passwordResetRateLimit = createIpRateLimiter({
+    maxAttempts: PASSWORD_RESET_MAX_ATTEMPTS,
+    windowMs: PASSWORD_RESET_WINDOW_MS,
+    errorMessage: 'Too many password reset requests. Please try again in 15 minutes.',
+});
+
 module.exports = {
     loginRateLimit,
     registerRateLimit,
+    passwordResetRateLimit,
 };

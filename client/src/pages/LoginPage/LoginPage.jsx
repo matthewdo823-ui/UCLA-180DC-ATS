@@ -6,16 +6,17 @@ import { css } from "../../theme/colors";
 import { isStaffRole } from "../../utils/auth";
 
 export default function LoginPage() {
-  const { login, createAccount, user, loading, isStaff } = useAuth();
+  const { login, createAccount, requestPasswordReset, resetPassword, user, loading, isStaff } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState(location.pathname === "/forgot-password" ? "forgot" : location.pathname === "/reset-password" ? "reset" : "login");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const requestedPath = location.state?.from?.pathname;
@@ -23,6 +24,9 @@ export default function LoginPage() {
     ? requestedPath
     : "/";
   const isCreateMode = mode === "create";
+  const isForgotMode = mode === "forgot";
+  const isResetMode = mode === "reset";
+  const resetToken = new URLSearchParams(location.search).get("token") || "";
 
   useEffect(() => {
     if (loading || !user) return;
@@ -35,8 +39,25 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
-      if (isCreateMode && password !== confirmPassword) {
+      if ((isCreateMode || isResetMode) && password !== confirmPassword) {
         throw new Error("Passwords do not match");
+      }
+
+      if (isForgotMode) {
+        const message = await requestPasswordReset(email);
+        setError("");
+        setNotice(message);
+        return;
+      }
+      if (isResetMode) {
+        if (!resetToken) throw new Error("This reset link is missing its token");
+        const message = await resetPassword({ token: resetToken, password });
+        setNotice(message);
+        setMode("login");
+        setPassword("");
+        setConfirmPassword("");
+        navigate("/login", { replace: true });
+        return;
       }
 
       const loggedInUser = isCreateMode
@@ -80,11 +101,13 @@ export default function LoginPage() {
         />
 
         <h1 style={{ fontSize: 26, margin: "0 0 8px", letterSpacing: "-0.03em" }}>
-          {isCreateMode ? "Create account" : "Sign in"}
+          {isCreateMode ? "Create account" : isForgotMode ? "Reset your password" : isResetMode ? "Choose a new password" : "Sign in"}
         </h1>
         <p style={{ fontSize: 14, color: css.textGray, marginBottom: 28 }}>
           {isCreateMode
             ? "New accounts start as applicants until an admin updates their role."
+            : isForgotMode ? "Enter your email and we’ll send a password-reset link if an account exists."
+            : isResetMode ? "Choose a new password for your account."
             : "Log into your account to continue to the epic 180DC recruitment platform."}
         </p>
 
@@ -117,31 +140,17 @@ export default function LoginPage() {
           </div>
         )}
 
-        <label style={labelStyle} htmlFor="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          required
-          style={inputStyle}
-          placeholder="you@example.com"
-        />
+        {!isResetMode && <>
+          <label style={labelStyle} htmlFor="email">Email</label>
+          <input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required style={inputStyle} placeholder="you@example.com" />
+        </>}
 
-        <label style={{ ...labelStyle, marginTop: 16 }} htmlFor="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          required
-          style={inputStyle}
-          placeholder="Password"
-        />
+        {!isForgotMode && <>
+          <label style={{ ...labelStyle, marginTop: 16 }} htmlFor="password">{isResetMode ? "New password" : "Password"}</label>
+          <input id="password" type="password" autoComplete={isResetMode ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required style={inputStyle} placeholder="Password" />
+        </>}
 
-        {isCreateMode && (
+        {(isCreateMode || isResetMode) && (
           <>
             <label style={{ ...labelStyle, marginTop: 16 }} htmlFor="confirmPassword">Confirm password</label>
             <input
@@ -162,6 +171,7 @@ export default function LoginPage() {
             {error}
           </div>
         )}
+        {notice && <div style={{ marginTop: 16, color: css.greenDark, background: "rgba(29,158,117,0.08)", border: "1px solid rgba(29,158,117,0.18)", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>{notice}</div>}
 
         <button
           type="submit"
@@ -179,15 +189,19 @@ export default function LoginPage() {
             cursor: submitting ? "not-allowed" : "pointer",
           }}
         >
-          {submitting ? (isCreateMode ? "Creating account..." : "Signing in...") : (isCreateMode ? "Create account" : "Sign in")}
+          {submitting ? "Please wait..." : (isCreateMode ? "Create account" : isForgotMode ? "Send reset link" : isResetMode ? "Reset password" : "Sign in")}
         </button>
+
+        {!isCreateMode && !isForgotMode && !isResetMode && <button type="button" onClick={() => { setMode("forgot"); setError(""); setNotice(""); navigate("/forgot-password"); }} style={{ width: "100%", marginTop: 10, border: "none", background: "transparent", color: css.textGray, padding: "6px 0", fontSize: 13, cursor: "pointer" }}>Forgot password?</button>}
 
         <button
           type="button"
           onClick={() => {
-            setMode(isCreateMode ? "login" : "create");
+            setMode(isForgotMode || isResetMode ? "login" : isCreateMode ? "login" : "create");
             setError("");
+            setNotice("");
             setConfirmPassword("");
+            if (isForgotMode || isResetMode) navigate("/login");
           }}
           style={{
             width: "100%",
@@ -201,7 +215,7 @@ export default function LoginPage() {
             cursor: "pointer",
           }}
         >
-          {isCreateMode ? "Already have an account? Sign in" : "Create new account"}
+          {isCreateMode ? "Already have an account? Sign in" : isForgotMode || isResetMode ? "Back to sign in" : "Create new account"}
         </button>
       </form>
     </div>
