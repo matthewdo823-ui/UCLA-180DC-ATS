@@ -36,6 +36,9 @@ export default function Topbar({
   reviewed,
   onHistory,
   historyCount,
+  phaseLabel,
+  activeLabel,
+  showActivePill = true,
 }) {
   // The default "Past Reviews" + "done" controls belong to the grading/screener
   // flow. Only render them when their data/handler is actually supplied, so
@@ -44,8 +47,21 @@ export default function Topbar({
   const hasReviewControls = onHistory != null || reviewed != null || historyCount != null;
 
   return (
-    <div style={{ height: 60, background: "transparent", borderBottom: `1px solid ${css.borderLight}`, display: "flex", alignItems: "center", padding: "0 24px", gap: 12, flexShrink: 0 }}>
+    <div style={{ minHeight: 60, background: "transparent", borderBottom: `1px solid ${css.borderLight}`, display: "flex", alignItems: "center", padding: "10px 24px", gap: 12, flexShrink: 0 }}>
       <span style={{ fontSize: 16, fontWeight: 700, color: css.greenDark, fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em" }}>180° Resume Screener</span>
+      {phaseLabel ? (
+        <>
+          <span aria-hidden="true" style={{ width: 1, height: 18, background: css.borderLight, flexShrink: 0 }} />
+          <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, fontWeight: 600, color: css.textGray }}>
+            {phaseLabel}
+          </span>
+        </>
+      ) : null}
+      {showActivePill && activeLabel ? (
+        <span style={{ flexShrink: 0, borderRadius: 999, background: "rgba(29,158,117,0.10)", color: css.greenDark, padding: "4px 9px", fontSize: 11, fontWeight: 700 }}>
+          {activeLabel}
+        </span>
+      ) : null}
       <div style={{ flex: 1 }} />
 
       {rightSlot ?? (hasReviewControls ? (
