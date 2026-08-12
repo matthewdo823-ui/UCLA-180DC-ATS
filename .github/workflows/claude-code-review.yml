@@ -42,7 +42,9 @@ jobs:
             --output /tmp/bun.zip \
             https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64.zip
           rm -rf "$HOME/.bun"
-          unzip -q /tmp/bun.zip -d "$HOME/.bun"
+          mkdir -p "$HOME/.bun/bin"
+          unzip -qp /tmp/bun.zip 'bun-linux-x64/bun' > "$HOME/.bun/bin/bun"
+          chmod +x "$HOME/.bun/bin/bun"
           echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
           "$HOME/.bun/bin/bun" --version
 
