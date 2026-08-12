@@ -76,13 +76,10 @@ exports.sendAdvanceNotifications = async (req, res) => {
     return res.status(400).json({ error: "roundId is required" });
   }
 
-  const allowResend = req.body?.allowResend === true;
-
   try {
     const result = await sendAdvanceNotifications({
       roundId,
       adminUser: req.user,
-      allowResend,
     });
     if (result.error) {
       const body = { error: result.error };

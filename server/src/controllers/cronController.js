@@ -31,6 +31,9 @@ exports.syncForms = async (req, res) => {
       cycles: result.cycles,
     });
   } catch (err) {
+    if (err.code === "SYNC_IN_PROGRESS") {
+      return res.status(409).json({ error: err.message });
+    }
     return respondWithServerError(res, err, "syncForms", "Form sync failed");
   }
 };
