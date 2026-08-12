@@ -113,7 +113,7 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
       ];
 
   const breakdownTotal = segments.reduce((sum, seg) => sum + seg.value, 0);
-  const breakdownTitle = isInterview ? "Evaluation outcomes" : "Deliberation outcomes";
+  const breakdownTitle = isInterview ? "Evaluation outcomes" : "Decision outcomes";
 
   return (
     <div style={{
@@ -124,29 +124,28 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
       boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
     }}
     >
-      <div style={{ marginBottom: 18 }}>
+      <div style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: css.textDark }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>
             {isInterview ? "Evaluation progress" : "Review progress"}
           </span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: css.greenDark }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>
             {reviewed} / {applicants} ({reviewPct}%)
           </span>
         </div>
         <ProgressBar pct={reviewPct} />
       </div>
 
-      <div style={{ fontSize: 13, fontWeight: 700, color: css.textDark, marginBottom: 10 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
         {breakdownTitle}
       </div>
       <StackedBar segments={segments} total={breakdownTotal} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${segments.length}, minmax(0, 1fr))`, gap: 8, marginTop: 14 }}>
         {segments.map((seg) => {
           const pct = breakdownTotal > 0 ? Math.round((seg.value / breakdownTotal) * 100) : 0;
           return (
-            <div key={seg.label}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 8, color: css.textDark }}>
+            <div key={seg.label} style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: css.textGray }}>
                   <span style={{
                     width: 8,
                     height: 8,
@@ -156,12 +155,10 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
                   }}
                   />
                   {seg.label}
-                </span>
-                <span style={{ fontWeight: 700, color: css.textGray }}>
-                  {seg.value} {breakdownTotal > 0 ? `(${pct}%)` : ""}
-                </span>
               </div>
-              <ProgressBar pct={breakdownTotal > 0 ? pct : 0} color={seg.color} />
+              <div style={{ fontSize: 18, fontWeight: 700, color: css.textDark, marginTop: 5 }}>
+                {seg.value}<span style={{ fontSize: 11, fontWeight: 600, color: css.textGray, marginLeft: 4 }}>{breakdownTotal > 0 ? `${pct}%` : ""}</span>
+              </div>
             </div>
           );
         })}
@@ -199,7 +196,7 @@ const SEVERITY_STYLE = {
   info: { bg: "rgba(29,158,117,0.08)", color: css.green, bd: "rgba(29,158,117,0.22)" },
 };
 
-export function ActionItemList({ items, onNavigate }) {
+export function ActionItemList({ items, onNavigate, limit }) {
   if (!items?.length) {
     return (
       <div style={{
@@ -217,9 +214,11 @@ export function ActionItemList({ items, onNavigate }) {
     );
   }
 
+  const visibleItems = limit ? items.slice(0, limit) : items;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {items.map((item) => {
+    <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, overflow: "hidden" }}>
+      {visibleItems.map((item, index) => {
         const style = SEVERITY_STYLE[item.severity] || SEVERITY_STYLE.info;
         return (
           <button
@@ -233,17 +232,19 @@ export function ActionItemList({ items, onNavigate }) {
               gap: 16,
               width: "100%",
               textAlign: "left",
-              background: css.cardWhite,
-              border: `1px solid ${css.borderLight}`,
-              borderLeft: `3px solid ${style.color}`,
-              borderRadius: 10,
-              padding: "14px 16px",
+              background: "transparent",
+              border: "none",
+              borderTop: index ? `1px solid ${css.borderLight}` : "none",
+              padding: "14px 18px",
               cursor: "pointer",
               fontFamily: "'DM Sans', sans-serif",
             }}
           >
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>{item.label}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, color: css.textDark }}>
+                <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 999, background: style.color, flexShrink: 0 }} />
+                {item.label}
+              </div>
               {item.detail ? (
                 <div style={{ fontSize: 12, color: css.textGray, marginTop: 4 }}>{item.detail}</div>
               ) : null}
@@ -382,11 +383,11 @@ export function RoundTimeline({ rounds, activeRound, nextRound }) {
       background: css.cardWhite,
       border: `1px solid ${css.borderLight}`,
       borderRadius: 12,
-      padding: "18px 20px",
+      padding: "12px 14px",
       boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
     }}
     >
-      <div style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "stretch", gap: 6, overflowX: "auto" }}>
         {sorted.map((round, index) => {
           const status = round.status || "draft";
           const style = ROUND_STATUS_STYLE[status] || ROUND_STATUS_STYLE.draft;
@@ -400,16 +401,16 @@ export function RoundTimeline({ rounds, activeRound, nextRound }) {
                 flex: 1,
                 minWidth: 0,
                 background: isCurrent ? style.bg : css.cardWhite,
-                border: `2px solid ${isCurrent ? style.color : style.bd}`,
-                borderRadius: 10,
-                padding: "10px 14px",
-                boxShadow: isCurrent ? `0 0 0 3px ${style.bg}` : "none",
+                border: `1px solid ${isCurrent ? style.color : style.bd}`,
+                borderRadius: 8,
+                padding: "8px 10px",
+                boxShadow: isCurrent ? `0 0 0 2px ${style.bg}` : "none",
               }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ color: style.color, fontSize: 11, fontWeight: 700 }}>{style.icon}</span>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: isCurrent ? 700 : 600, color: css.textDark }}>
+                    <div style={{ fontSize: 12, fontWeight: isCurrent ? 700 : 600, color: css.textDark }}>
                       {round.name || formatRoundKind(round.type)}
                       {isCurrent ? (
                         <span style={{
@@ -451,10 +452,15 @@ export function RoundTimeline({ rounds, activeRound, nextRound }) {
   );
 }
 
-export function Panel({ title, children, style }) {
+export function Panel({ title, children, style, rightSlot }) {
   return (
     <section style={{ marginBottom: 28, ...style }}>
-      {title ? <h2 style={sectionTitleStyle}>{title}</h2> : null}
+      {title || rightSlot ? (
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, marginBottom: 14 }}>
+          {title ? <h2 style={{ ...sectionTitleStyle, margin: 0 }}>{title}</h2> : <span />}
+          {rightSlot}
+        </div>
+      ) : null}
       {children}
     </section>
   );
@@ -496,17 +502,15 @@ export function GraderProgressRows({ graders, expectedReviews }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {graders.map((grader) => {
+    <div>
+      {graders.map((grader, index) => {
         const pct = expectedReviews > 0
           ? Math.min(100, Math.round((grader.reviewCount / expectedReviews) * 100))
           : 0;
         return (
           <div key={grader.id} style={{
-            background: css.cardWhite,
-            border: `1px solid ${css.borderLight}`,
-            borderRadius: 10,
-            padding: "12px 14px",
+            padding: "11px 0",
+            borderTop: index ? `1px solid ${css.borderLight}` : "none",
           }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
