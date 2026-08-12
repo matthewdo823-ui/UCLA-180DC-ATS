@@ -93,7 +93,8 @@ export default function ScreenerPage() {
   const [celebrationKey, setCelebrationKey] = useState(0);
   const panelRef = useRef(null);
 
-  const isRyanChao = `${user?.first_name || ""} ${user?.last_name || ""}`.trim().toLowerCase() === "ryan chao";
+  const graderName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim();
+  const specialCelebrationName = ["ryan chao", "matthew do"].includes(graderName.toLowerCase()) ? graderName : "";
 
   const isFrqMode = gradingMode === GRADING_MODES.FRQ;
 
@@ -313,9 +314,9 @@ export default function ScreenerPage() {
 
   useEffect(() => {
     if (!celebrationKey) return undefined;
-    const timeout = setTimeout(() => setCelebrationKey(0), isRyanChao ? 2600 : 1800);
+    const timeout = setTimeout(() => setCelebrationKey(0), specialCelebrationName ? 2600 : 1800);
     return () => clearTimeout(timeout);
-  }, [celebrationKey, isRyanChao]);
+  }, [celebrationKey, specialCelebrationName]);
 
   async function handleResumeAction(type) {
     if (!resumeScoringComplete) return;
@@ -461,7 +462,7 @@ export default function ScreenerPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "hidden" }}>
-      <GradeCelebration key={celebrationKey} active={Boolean(celebrationKey)} ryanMode={isRyanChao} />
+      <GradeCelebration key={celebrationKey} active={Boolean(celebrationKey)} specialCelebrationName={specialCelebrationName} />
       <Topbar
         phaseLabel={phaseLabel}
         activeLabel={isFrqMode ? "FRQ grading" : "Resume grading"}
