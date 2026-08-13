@@ -37,7 +37,7 @@ export default function ApplicationSummarySection({
     <SectionCard title="AI candidate summary">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: loading || summary ? 14 : 0 }}>
         <p style={{ margin: 0, fontSize: 13, color: css.textGray, lineHeight: 1.5, maxWidth: 560 }}>
-          A quick briefing from reviewer notes, or from free-response answers when screening notes are not available yet.
+          Incredible, 130 character AI summary powered by Gemma 4
         </p>
         {summary && !loading && (
           <button
