@@ -16,6 +16,7 @@ import FrqResponsesPanel from "../../components/FrqScoringPanel/FrqResponsesPane
 import FrqScoringPanel from "../../components/FrqScoringPanel/FrqScoringPanel";
 import Drawer from "../../components/Drawer/Drawer";
 import FrqDrawer from "../../components/FrqScoringPanel/FrqDrawer";
+import GradeCelebration from "../../components/GradeCelebration/GradeCelebration";
 import PastReviewDetailModal from "../../components/PastReviewDetailModal/PastReviewDetailModal";
 import PageLoader from "../../components/PageLoader";
 
@@ -89,7 +90,11 @@ export default function ScreenerPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pastReviewDetail, setPastReviewDetail] = useState(null);
   const [editingReviewId, setEditingReviewId] = useState(null);
+  const [celebrationKey, setCelebrationKey] = useState(0);
   const panelRef = useRef(null);
+
+  const graderName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim();
+  const specialCelebrationName = ["ryan chao", "matthew do"].includes(graderName.toLowerCase()) ? graderName : "";
 
   const isFrqMode = gradingMode === GRADING_MODES.FRQ;
 
@@ -307,6 +312,12 @@ export default function ScreenerPage() {
     }
   }, [isAdmin, gradingMode]);
 
+  useEffect(() => {
+    if (!celebrationKey) return undefined;
+    const timeout = setTimeout(() => setCelebrationKey(0), specialCelebrationName ? 2600 : 1800);
+    return () => clearTimeout(timeout);
+  }, [celebrationKey, specialCelebrationName]);
+
   async function handleResumeAction(type) {
     if (!resumeScoringComplete) return;
     setSubmitError("");
@@ -337,6 +348,7 @@ export default function ScreenerPage() {
       // grader's coverage — expire them so those pages don't serve a cached
       // number that's now one review out of date.
       invalidateAfterReview(queryClient);
+      setCelebrationKey((key) => key + 1);
     } catch (e) {
       console.warn("Could not save review:", e);
       return;
@@ -450,6 +462,7 @@ export default function ScreenerPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "hidden" }}>
+      <GradeCelebration key={celebrationKey} active={Boolean(celebrationKey)} specialCelebrationName={specialCelebrationName} />
       <Topbar
         phaseLabel={phaseLabel}
         activeLabel={isFrqMode ? "FRQ grading" : "Resume grading"}
