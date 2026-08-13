@@ -23,6 +23,7 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 17 | `add_candidate_referrals.sql` | Member referrals (positive counterpart to flags) |
 | 18 | `add_candidate_summaries.sql` | Cached AI candidate summaries for the full application view |
 | 19 | `backfill_resume_candidate_ids.sql` | **Optional data repair** — link orphan `resumes` to `candidates` by name / Drive file id |
+| 20 | `add_auto_variance_candidate_flags.sql` | Prevent duplicate automatic high-variance flags when graders submit simultaneously |
 
 ## Notes
 

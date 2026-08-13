@@ -71,6 +71,7 @@ cp server/.env.example server/.env
 | `SUPABASE_SERVICE_KEY` | Yes | Supabase service role key |
 | `JWT_SECRET` | Yes | Secret for signing auth tokens |
 | `PORT` | No | API port (default `3000`) |
+| `AUTO_FLAG_VARIANCE_THRESHOLD` | No | Normalized-score spread (0–100) that automatically flags a candidate after two independent reviews; defaults to a conservative `60` |
 | `CORS_ALLOWED_ORIGINS` | No | Comma-separated production frontend origins |
 | `GOOGLE_CLOUD_KEY_PATH` | For Forms sync | Path to GCP service account JSON |
 | `FORM_CONFIG_PATH` | For Forms sync | Path to `form-config.json` (default: `server/form-config.json`) |
