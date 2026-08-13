@@ -41,7 +41,7 @@ const SIGNAL_MODES = [
 
 function FlagCard({ flag, onResolve, resolving }) {
   const candidate = flag.candidate || {};
-  const flaggedBy = flag.flaggedBy?.name || flag.flaggedBy?.email || "Unknown reviewer";
+  const flaggedBy = flag.flaggedBy?.name || flag.flaggedBy?.email || (flag.automated ? "Automated variance check" : "Unknown reviewer");
 
   return (
     <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 20, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
