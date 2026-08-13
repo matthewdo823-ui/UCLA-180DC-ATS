@@ -73,6 +73,10 @@ const {
     applyCompositeScoringToCandidates,
     appendFrqMetric,
 } = require('../services/frqScoringService');
+const {
+    findHighVarianceReviewPair,
+    buildVarianceFlagReason,
+} = require('../services/reviewVarianceService');
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
@@ -83,6 +87,62 @@ const FRQ_REVIEW_GOAL = Number.isFinite(configuredFrqReviewGoal) && configuredFr
     : GRADER_REVIEW_GOAL;
 const VALID_REVIEW_DECISIONS = new Set(["pass", "flag", "reject"]);
 const MIN_SIGNAL_NOTE_LENGTH = 20;
+
+async function createHighVarianceFlagIfNeeded({ resumeId, candidateId, cycleId, roundId }) {
+    if (!resumeId || !candidateId || !cycleId || !roundId) return false;
+
+    const { data: reviews, error: reviewsError } = await supabase
+        .from('resume_reviews')
+        .select('graded_by, normalized_score')
+        .eq('resume_id', resumeId)
+        .eq('cycle_id', cycleId)
+        .eq('round_id', roundId);
+
+    if (reviewsError) throw reviewsError;
+
+    const pair = findHighVarianceReviewPair(reviews);
+    if (!pair) return false;
+
+    // Do not add a second queue item while an admin already has this candidate in view.
+    const { data: existingOpenFlag, error: existingOpenFlagError } = await supabase
+        .from('candidate_flags')
+        .select('id')
+        .eq('candidate_id', candidateId)
+        .eq('resume_id', resumeId)
+        .eq('status', 'open')
+        .limit(1)
+        .maybeSingle();
+
+    if (existingOpenFlagError) throw existingOpenFlagError;
+    if (existingOpenFlag) return false;
+
+    // A resolved automatic alert has already drawn attention to this disagreement.
+    const { data: existingAutomaticFlag, error: existingAutomaticFlagError } = await supabase
+        .from('candidate_flags')
+        .select('id')
+        .eq('candidate_id', candidateId)
+        .eq('resume_id', resumeId)
+        .like('reason', 'Automatic variance alert:%')
+        .limit(1)
+        .maybeSingle();
+
+    if (existingAutomaticFlagError) throw existingAutomaticFlagError;
+    if (existingAutomaticFlag) return false;
+
+    const { error: flagError } = await supabase
+        .from('candidate_flags')
+        .insert({
+            candidate_id: candidateId,
+            resume_id: resumeId,
+            flagged_by: null,
+            reason: buildVarianceFlagReason(pair),
+        });
+
+    // The partial unique index also protects this path if two graders submit together.
+    if (flagError?.code === '23505') return false;
+    if (flagError) throw flagError;
+    return true;
+}
 
 function getReviewScore(scores = {}, metrics = null) {
     return computeRawScore(scores, metrics);
@@ -683,7 +743,14 @@ exports.saveReview = async (req, res) => {
             }
         }
 
-        return res.json({ success: true, updated: true, reviewId: existingReview.id });
+        const varianceFlagged = await createHighVarianceFlagIfNeeded({
+            resumeId: resume_id,
+            candidateId: resumeRow.candidate_id,
+            cycleId: screening.cycle.id,
+            roundId: screening.round.id,
+        });
+
+        return res.json({ success: true, updated: true, reviewId: existingReview.id, varianceFlagged });
     }
 
     const { error: saveError } = await supabase.rpc('save_resume_review', {
@@ -706,7 +773,14 @@ exports.saveReview = async (req, res) => {
         return respondWithServerError(res, saveError, 'saveReview rpc');
     }
 
-    return res.json({ success: true });
+    const varianceFlagged = await createHighVarianceFlagIfNeeded({
+        resumeId: resume_id,
+        candidateId: resumeRow.candidate_id,
+        cycleId: screening.cycle.id,
+        roundId: screening.round.id,
+    });
+
+    return res.json({ success: true, varianceFlagged });
 };
 
 /** Reviews submitted by the authenticated screener (JWT → req.user.user_id / graded_by). */
@@ -888,7 +962,22 @@ exports.patchMyReview = async (req, res) => {
     if (readError) return respondWithServerError(res, readError, 'patchMyReview read');
     if (!row) return respondWithServerError(res, new Error('updated review missing'), 'patchMyReview read');
 
-    return res.json({ review: mapMyReviewRow(row, cycleRubricConfig) });
+    const { data: patchedResume, error: patchedResumeError } = await supabase
+        .from('resumes')
+        .select('candidate_id')
+        .eq('id', existing.resume_id)
+        .maybeSingle();
+
+    if (patchedResumeError) return respondWithServerError(res, patchedResumeError, 'patchMyReview resume candidate');
+
+    const varianceFlagged = await createHighVarianceFlagIfNeeded({
+        resumeId: existing.resume_id,
+        candidateId: patchedResume?.candidate_id,
+        cycleId: screening.cycle.id,
+        roundId: screening.round.id,
+    });
+
+    return res.json({ review: mapMyReviewRow(row, cycleRubricConfig), varianceFlagged });
 };
 
 function mapMyFrqReviewRow(row) {
@@ -1407,6 +1496,7 @@ exports.getCandidateFlags = async (req, res) => {
             resumeId: flag.resume_id,
             reason: flag.reason || '',
             status: flag.status,
+            automated: !flag.flagged_by && /^Automatic variance alert:/.test(flag.reason || ''),
             createdAt: flag.created_at,
             resolvedAt: flag.resolved_at,
             candidate: flag.candidates ? {
