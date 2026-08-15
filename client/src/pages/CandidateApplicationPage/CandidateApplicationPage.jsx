@@ -7,7 +7,6 @@ import AdminOverridesSection from "./AdminOverridesSection";
 import ApplicationContactSection from "./ApplicationContactSection";
 import ApplicationEvaluationsSection from "./ApplicationEvaluationsSection";
 import ApplicationProfileSidebar from "./ApplicationProfileSidebar";
-import ApplicationResponsesSection from "./ApplicationResponsesSection";
 import ApplicationResumeSection from "./ApplicationResumeSection";
 import ApplicationSignalsSection from "./ApplicationSignalsSection";
 import ApplicationSummarySection from "./ApplicationSummarySection";
@@ -73,7 +72,6 @@ export default function CandidateApplicationPage() {
                   onOverrideSaved={() => refresh()}
                 />
               )}
-              <ApplicationResponsesSection candidate={candidate} />
               <ApplicationResumeSection candidate={candidate} resume={resume} authToken={token} />
               <ApplicationEvaluationsSection scoring={scoring} />
             </div>
