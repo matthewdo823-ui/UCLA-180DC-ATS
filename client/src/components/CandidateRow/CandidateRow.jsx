@@ -43,9 +43,9 @@ export default function CandidateRow({ resume }) {
         <span style={{ fontSize: 20, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", color: "#FFF", letterSpacing: "-0.01em" }}>
           {resume.name ?? "—"}
         </span>
-        <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.8)" }}>
-          B.A. Business Economics • UCLA • Expected 2029
-        </span>
+       <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.8)" }}>
+          {[resume.candidates.major || "Undeclared"].filter(Boolean).join(" • ")}
+      </span>
       </div>
 
       <div style={{ flex: 1 }} />
@@ -65,7 +65,6 @@ export default function CandidateRow({ resume }) {
             fontSize: 11, 
             fontWeight: 700, 
           }}>
-            <span>{year.icon}</span>
             {year.label.charAt(0).toUpperCase() + year.label.slice(1)}
           </span>
           <span style={{ 

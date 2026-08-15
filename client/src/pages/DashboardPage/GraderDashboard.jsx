@@ -159,14 +159,14 @@ export default function GraderDashboard() {
         <Panel title="Quick links">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
             {[
-              { label: "Past reviews", path: gradingPath, icon: "📋", desc: "View and edit your submissions" },
+              { label: "Past reviews", path: gradingPath, icon: "📋", desc: "View and edit your submissions", state: { openPastQueue: true } },
               { label: "Scoreboard", path: "/scoreboard", icon: "📊", desc: "See ranked candidates" },
               { label: "Demographics", path: "/demographics", icon: "📈", desc: "Pipeline diversity overview" },
             ].map((link) => (
               <button
                 key={link.path + link.label}
                 type="button"
-                onClick={() => navigate(link.path)}
+                onClick={() => navigate(link.path, link.state ? { state: link.state } : undefined)}
                 style={{
                   background: css.cardWhite,
                   border: `1px solid ${css.borderLight}`,
