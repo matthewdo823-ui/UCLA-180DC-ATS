@@ -1,10 +1,7 @@
 export const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 export const METRIC_ICONS = {
-  "experience": "💼",
-  "leadership": "👑",
   "social impact": "🤝",
-  "communication": "🗣️",
   "work experience": "💼",
   "leadership experience": "👑",
   "leadership/work experience": "💼",
@@ -14,27 +11,27 @@ export const RUBRIC_MAX_PER_CATEGORY = 4;
 
 export const YEAR_CFG = {
   freshman: {
-    label: "freshman", icon: "🌱", sub: "1st Year",
+    label: "freshman", sub: "1st Year",
     panelColor: "#5BA3E0", panelBg: "rgb(0, 104, 216)", panelBd: "rgba(91,163,224,0.30)",
     badgeBg: "rgba(74,144,217,0.13)", badgeColor: "#5BA3E0", badgeBd: "rgba(91,163,224,0.35)",
   },
   sophomore: {
-    label: "sophomore", icon: "📚", sub: "2nd Year",
+    label: "sophomore",  sub: "2nd Year",
     panelColor: "#3DC9A0", panelBg: "rgb(0, 184, 126)", panelBd: "rgba(61,201,160,0.30)",
     badgeBg: "rgba(29,158,117,0.13)", badgeColor: "#3DC9A0", badgeBd: "rgba(61,201,160,0.35)",
   },
   junior: {
-    label: "junior", icon: "⭐", sub: "3rd Year",
+    label: "junior",  sub: "3rd Year",
     panelColor: "#F5C060", panelBg: "rgb(206, 124, 0)", panelBd: "rgba(245,192,96,0.30)",
     badgeBg: "rgba(239,159,39,0.13)", badgeColor: "#F5C060", badgeBd: "rgba(245,192,96,0.35)",
   },
   juniortransfer: {
-    label: "juniortransfer", icon: "⭐", sub: "3rd Year Transfer",
+    label: "Junior Transfer", sub: "3rd Year Transfer",
     panelColor: "#F5C060", panelBg: "rgb(206, 124, 0)", panelBd: "rgba(245,192,96,0.30)",
     badgeBg: "rgba(239,159,39,0.13)", badgeColor: "#F5C060", badgeBd: "rgba(245,192,96,0.35)",
   },
   senior: {
-    label: "senior", icon: "⭐", sub: "4th Year",
+    label: "senior", sub: "4th Year",
     panelColor: "#F5C060", panelBg: "rgb(225, 0, 0)", panelBd: "rgba(245,192,96,0.30)",
     badgeBg: "rgba(239,159,39,0.13)", badgeColor: "#F5C060", badgeBd: "rgba(245,192,96,0.35)",
   },

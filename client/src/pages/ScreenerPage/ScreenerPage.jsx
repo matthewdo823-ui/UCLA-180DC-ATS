@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { isAdminRole } from "../../utils/auth";
@@ -90,6 +91,18 @@ export default function ScreenerPage() {
   const [pastReviewDetail, setPastReviewDetail] = useState(null);
   const [editingReviewId, setEditingReviewId] = useState(null);
   const panelRef = useRef(null);
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Open the past-reviews queue when navigated here from the dashboard's "Past reviews" link.
+  useEffect(() => {
+    if (location.state?.openPastQueue) {
+      setDrawerOpen(true);
+      // Clear the flag so the drawer doesn't reopen on re-render or back navigation.
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, location.pathname, navigate]);
 
   const isFrqMode = gradingMode === GRADING_MODES.FRQ;
 
@@ -400,6 +413,12 @@ export default function ScreenerPage() {
     }
   }
 
+  function handleResumeReset() {
+    setScores({});
+    setNotes("");
+    setSubmitError("");
+  }
+
   function handleGradingModeChange(nextMode) {
     if (nextMode === gradingMode) return;
     setGradingMode(nextMode);
@@ -510,6 +529,7 @@ export default function ScreenerPage() {
                       notes={notes}
                       onNotes={setNotes}
                       onAction={handleResumeAction}
+                      onReset={handleResumeReset}
                       scoringComplete={resumeScoringComplete}
                       submitError={submitError}
                     />
