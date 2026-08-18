@@ -47,6 +47,7 @@ import {
   scoreColor,
   SORT_TABS,
   uniqueSortedStrings,
+  sortYears,
 } from "./scoreboardViewModel";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
@@ -308,7 +309,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4, equalized = false }) {
         </span>
       </div>
       <div style={{ height: 5, background: "#EEF1EC", borderRadius: 3, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${pct}%`, background: cardMint, borderRadius: 3, transition: "width 0.35s ease" }} />
+        <div style={{ height: "100%", width: "100%", background: cardMint, transformOrigin: "left", transform: `scaleX(${Math.max(0, Math.min(100, pct)) / 100})`, transition: "transform 0.35s ease" }} />
       </div>
     </div>
   );
@@ -632,7 +633,7 @@ function rowIconBtnStyle(theme, primary) {
     padding: 0,
     borderRadius: 6,
     background: primary ? theme.accent : theme.btnGhostBg,
-    color: primary ? "#0B1628" : theme.text,
+    color: primary ? "#FFFFFF" : theme.text,
     border: primary ? "none" : `1px solid ${theme.border}`,
     cursor: "pointer",
     flexShrink: 0,
@@ -821,7 +822,7 @@ export default function ScoreboardPage() {
   );
 
   const yearOptions = useMemo(
-    () => uniqueSortedStrings(candidates.map(c => c.year).filter(Boolean)),
+    () => sortYears(candidates.map(c => c.year)),
     [candidates]
   );
 
@@ -1071,7 +1072,7 @@ export default function ScoreboardPage() {
   );
   const t = deliberationMode ? PAGE_THEME.dark : PAGE_THEME.light;
   const gridColumns = deliberationMode
-    ? "4px 36px minmax(180px, 2.2fr) 100px minmax(196px, 0.9fr) minmax(108px, auto)"
+    ? "16px 36px minmax(180px, 2.2fr) 100px minmax(196px, 0.9fr) minmax(108px, auto)"
     : "48px minmax(220px, 2.2fr) 108px minmax(100px, auto)";
 
   function statCount(value) {
@@ -1320,7 +1321,7 @@ export default function ScoreboardPage() {
                   padding: "8px 14px",
                   borderRadius: 8,
                   background: equalizeActive ? t.accent : t.btnGhostBg,
-                  color: equalizeActive ? "#0B1628" : t.btnGhostText,
+                  color: equalizeActive ? "#FFFFFF" : t.btnGhostText,
                   border: `1px solid ${equalizeActive ? t.accent : t.border}`,
                   fontSize: 12,
                   fontWeight: 600,
@@ -1655,8 +1656,8 @@ export default function ScoreboardPage() {
       ) : null}
 
       {equalizeActive ? (
-        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.infoBorder}`, background: t.infoBg, fontSize: 13, color: t.text, lineHeight: 1.45 }}>
-          <strong style={{ color: t.accent }}>Equalized scores</strong> — adjusted by grader z-scores per rubric category. Toggle “Raw scores” to compare.
+        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${deliberationMode ? t.infoBorder : css.greenDark}`, background: deliberationMode ? t.infoBg : css.greenDark, fontSize: 13, color: deliberationMode ? t.text : "#FFFFFF", lineHeight: 1.45 }}>
+          <strong style={{ color: deliberationMode ? t.accent : "#FFFFFF" }}>Equalized scores</strong> — adjusted by grader z-scores per rubric category. Toggle “Raw scores” to compare.
         </div>
       ) : null}
 
@@ -1704,7 +1705,7 @@ export default function ScoreboardPage() {
               <span style={{ fontWeight: 600, color: t.text }}>{decidedCount} / {totalApplicants} decided ({decisionProgress}%)</span>
             </div>
             <div style={{ height: 6, borderRadius: 999, background: t.btnGhostBg, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${decisionProgress}%`, background: t.accent, borderRadius: 999, transition: "width 0.3s ease" }} />
+              <div style={{ height: "100%", width: "100%", background: t.accent, transformOrigin: "left", transform: `scaleX(${Math.max(0, Math.min(100, decisionProgress)) / 100})`, transition: "transform 0.3s ease" }} />
             </div>
           </div>
         ) : null}

@@ -13,13 +13,23 @@ export const SORT_TABS = [
   { id: "created_asc", label: "Applied · oldest" },
 ];
 
-export function formatRoundBanner(round) { return round?.name ? `${round.name.toUpperCase()} · ${formatRoundKind(round.type).toUpperCase()}` : "CANDIDATE SCORECARD"; }
+export function formatRoundBanner(round) { if (!round?.name) return "CANDIDATE SCORECARD"; const name = round.name.toUpperCase(); const kind = formatRoundKind(round.type).toUpperCase(); return name === kind ? name : `${name} · ${kind}`; }
 export function formatRoundStatus(round) { return round?.status ? String(round.status).toUpperCase() : "VIEW"; }
 export function scoreColor(score) { if (!hasNumericScore(score)) return css.textGray; return Number(score) >= 90 ? css.greenDark : Number(score) >= 80 ? "#4CAF50" : Number(score) >= 70 ? css.amber : css.textGray; }
 export function getReviewerLabel(review, index) { return review?.reviewerName || review?.reviewerEmail || `Reviewer ${index + 1} not recorded`; }
 export function getReviewerInitials(review, index) { return review?.reviewerName ? getInitials(review.reviewerName) : review?.reviewerEmail ? review.reviewerEmail.substring(0, 2).toUpperCase() : `R${index + 1}`; }
 export function getReviewTotal(review) { return Number.isFinite(Number(review?.score)) ? Number(review.score) : Object.values(review?.scores ?? {}).reduce((total, value) => total + (Number(value) || 0), 0); }
 export function uniqueSortedStrings(items) { return [...new Set((items || []).map((item) => String(item).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })); }
+
+// The five academic-year values, in display order. Anything else sorts after these, alphabetically.
+const YEAR_ORDER = ["freshman", "sophomore", "junior", "junior transfer", "senior"];
+function yearRank(value) { const i = YEAR_ORDER.indexOf(value.toLowerCase()); return i === -1 ? YEAR_ORDER.length : i; }
+
+// Like uniqueSortedStrings, but orders academic years by standing instead of alphabetically.
+export function sortYears(items) {
+  return [...new Set((items || []).map((item) => String(item).trim()).filter(Boolean))]
+    .sort((a, b) => yearRank(a) - yearRank(b) || a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
 export function countActiveFilters(filters) { return Object.keys(defaultFilters).filter((key) => filters[key] !== defaultFilters[key]).length; }
 export function getNumReviews(candidate) { return candidate?.numReviews ?? candidate?.reviews?.length ?? 0; }
 export function getNormalizedScore(candidate) { return hasNumericScore(candidate?.normalizedScore) ? Number(candidate.normalizedScore) : null; }
