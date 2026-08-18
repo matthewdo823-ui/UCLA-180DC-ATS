@@ -11,6 +11,7 @@ export default function ScoringPanel({
   notes,
   onNotes,
   onAction,
+  onReset,
   scoringComplete = true,
   submitError = "",
 }) {
@@ -82,7 +83,7 @@ export default function ScoringPanel({
         <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 4 }}>Aggregate Score</div>
 
         <div style={{ height: 6, background: css.bgLight, borderRadius: 3, overflow: "hidden", marginTop: 12 }}>
-          <div style={{ height: "100%", width: `${maxScore ? (total / maxScore) * 100 : 0}%`, background: scoreColor, borderRadius: 3, transition: "width 0.3s ease" }} />
+          <div style={{ height: "100%", width: "100%", background: scoreColor, transformOrigin: "left", transform: `scaleX(${maxScore ? total / maxScore : 0})`, transition: "transform 0.3s ease" }} />
         </div>
       </div>
 
@@ -109,6 +110,15 @@ export default function ScoringPanel({
       ) : null}
 
       <div style={{ display: "flex", gap: 12 }}>
+        {onReset ? (
+          <ActionBtn
+            label="↺ Reset"
+            style={{ borderColor: css.borderLight, color: css.textGray, bg: css.cardWhite, hoverBg: css.bgLight }}
+            disabled={total === 0 && notes.length === 0}
+            title="Clear all scores and notes for this resume"
+            onClick={onReset}
+          />
+        ) : null}
         {[
           { type: "flag",   label: "⚑ Flag",    style: { borderColor: css.amber, color: css.amber, bg: css.cardWhite, hoverBg: "rgba(239,159,39,0.05)" } },
           { type: "pass",   label: "✓ Complete", style: { borderColor: css.greenDark, color: css.cardWhite, bg: css.greenDark, hoverBg: "#1F4E33" } },

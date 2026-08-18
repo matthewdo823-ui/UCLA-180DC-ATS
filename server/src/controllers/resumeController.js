@@ -351,7 +351,7 @@ async function fetchAssignedResumesForGrader({ gradedBy, cycleId, reviewedResume
     const { data, error } = await supabase
         .from('resumes')
         .select(`*,
-            candidates(year)
+            candidates(year, major)
         `)
         .eq('cycle_id', cycleId)
         .in('id', pendingIds);
@@ -412,7 +412,7 @@ exports.getNextResume = async (req, res) => {
     let query = supabase
         .from('resumes')
         .select(`*,
-            candidates(year)
+            candidates(year, major)
         `)
         .eq('cycle_id', screening.cycle.id)
         .order('review_count', { ascending: true })
@@ -464,7 +464,7 @@ async function fetchResumeRowById(resumeId) {
     return supabase
         .from('resumes')
         .select(`*,
-            candidates ( year, cycle_id )
+            candidates ( year, major, cycle_id )
         `)
         .eq('id', resumeId)
         .maybeSingle();
@@ -717,9 +717,11 @@ exports.listMyReviews = async (req, res) => {
     }
 
     const activeCycleId = await getActiveCycleId();
-    const resumeRound = activeCycleId
-        ? await getResumeScreenRoundForCycle(activeCycleId)
-        : null;
+    if (!activeCycleId) {
+        return res.json({ reviews: [], count: 0, expectedReviews: GRADER_REVIEW_GOAL });
+    }
+
+    const resumeRound = await getResumeScreenRoundForCycle(activeCycleId);
     const rubricConfig = resumeRound?.rubric_config || null;
 
     let reviewQuery = supabase
@@ -740,11 +742,8 @@ exports.listMyReviews = async (req, res) => {
             )
         `)
         .eq("graded_by", gradedBy)
+        .eq("cycle_id", activeCycleId)
         .order("submitted_at", { ascending: false });
-
-    if (activeCycleId) {
-        reviewQuery = reviewQuery.eq("cycle_id", activeCycleId);
-    }
 
     const { data, error } = await reviewQuery;
 
@@ -1028,7 +1027,11 @@ exports.listMyFrqReviews = async (req, res) => {
     }
 
     const activeCycleId = await getActiveCycleId();
-    let reviewQuery = supabase
+    if (!activeCycleId) {
+        return res.json({ reviews: [], count: 0 });
+    }
+
+    const reviewQuery = supabase
         .from("frq_reviews")
         .select(`
             id,
@@ -1043,11 +1046,8 @@ exports.listMyFrqReviews = async (req, res) => {
             )
         `)
         .eq("graded_by", gradedBy)
+        .eq("cycle_id", activeCycleId)
         .order("submitted_at", { ascending: false });
-
-    if (activeCycleId) {
-        reviewQuery = reviewQuery.eq("cycle_id", activeCycleId);
-    }
 
     const { data, error } = await reviewQuery;
     if (error) return respondWithServerError(res, error, "listMyFrqReviews");
@@ -2063,7 +2063,11 @@ exports.getScoreboard = async (req, res) => {
             frqByResumeId,
             rubricConfig: resumeRound.rubric_config,
         });
-        const metricsWithFrq = appendFrqMetric(metrics);
+        // Display only the current rubric's categories — the `metrics` union above still
+        // carries retired categories from older reviews' snapshots (needed for override/score
+        // math), but those should not surface in the scorecard breakdown.
+        const currentMetrics = getMetricsFromRubricConfig(resumeRound.rubric_config);
+        const metricsWithFrq = appendFrqMetric(currentMetrics.length ? currentMetrics : metrics);
 
         const signalCandidateIds = [
             ...new Set(candidatesWithComposite.map((c) => c.candidateId).filter(Boolean)),
@@ -2548,6 +2552,10 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         rubricConfig: resumeRound.rubric_config,
     });
 
+    // Display only the current rubric's categories; the metricSet union carries retired
+    // categories from older reviews' snapshots (kept for override/score math above).
+    const currentMetrics = getMetricsFromRubricConfig(resumeRound.rubric_config);
+
     return {
         context: {
             cycle: { id: activeCycle.id, name: activeCycle.name },
@@ -2565,7 +2573,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         resumeRoundId: resumeRound.id,
         activeCycleId,
         scoring: {
-            metrics: appendFrqMetric([...metricSet]),
+            metrics: appendFrqMetric(currentMetrics.length ? currentMetrics : [...metricSet]),
             maxPerCategory: resumeRound.rubric_config?.maxPerCategory || 4,
             numReviews: compositeCandidate.numReviews,
             aggregateScore: compositeCandidate.aggregateScore,
@@ -3074,7 +3082,10 @@ exports.getGraderScoreboard = async (req, res) => {
             });
         });
 
-        const metrics = [...metricSet];
+        // Display only the current rubric's categories; the union carries retired categories
+        // from older reviews' snapshots, which should not surface in the grader breakdown.
+        const currentMetrics = getMetricsFromRubricConfig(resumeRound?.rubric_config);
+        const metrics = currentMetrics.length ? currentMetrics : [...metricSet];
 
         const graders = Object.values(graderMap).map(grader => {
             const averageScore = grader.reviewCount > 0 ? grader.totalScore / grader.reviewCount : null;
@@ -3150,28 +3161,27 @@ exports.getFrqGraderScoreboard = async (req, res) => {
 
         if (userError) throw userError;
 
-        let reviewQuery = supabase
-            .from('frq_reviews')
-            .select(`
-                id,
-                graded_by,
-                score,
-                notes,
-                submitted_at,
-                resumes (
-                    id,
-                    name
-                )
-            `)
-            .not('graded_by', 'is', null);
-
+        let reviews = [];
         if (activeCycleId) {
-            reviewQuery = reviewQuery.eq('cycle_id', activeCycleId);
+            const { data, error: reviewError } = await supabase
+                .from('frq_reviews')
+                .select(`
+                    id,
+                    graded_by,
+                    score,
+                    notes,
+                    submitted_at,
+                    resumes (
+                        id,
+                        name
+                    )
+                `)
+                .not('graded_by', 'is', null)
+                .eq('cycle_id', activeCycleId);
+
+            if (reviewError) throw reviewError;
+            reviews = data || [];
         }
-
-        const { data: reviews, error: reviewError } = await reviewQuery;
-
-        if (reviewError) throw reviewError;
 
         const metrics = [FRQ_METRIC];
         const maxPerCategory = FRQ_MAX_SCORE;
