@@ -47,10 +47,10 @@ function ScoreTiles({ score, maxScore }) {
 }
 
 function CategoryRowEdit({ metric, value, onScore, maxPerCategory = RUBRIC_MAX_PER_CATEGORY }) {
-  const num = Number(value);
-  const has = Number.isFinite(num);
+  const has = typeof value === "number" && Number.isFinite(value);
+  const num = has ? value : NaN;
   const pct = has ? Math.max(0, Math.min(100, (num / maxPerCategory) * 100)) : 0;
-  const levels = Array.from({ length: maxPerCategory }, (_, i) => i + 1);
+  const levels = Array.from({ length: maxPerCategory + 1 }, (_, i) => i);
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 6, alignItems: "center" }}>
@@ -65,7 +65,7 @@ function CategoryRowEdit({ metric, value, onScore, maxPerCategory = RUBRIC_MAX_P
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {levels.map((n) => {
           const sel = has && num === n;
-          const c = BUBBLE_COLORS[n];
+          const c = BUBBLE_COLORS[n] || BUBBLE_COLORS[0];
           return (
             <button
               key={n}
@@ -139,7 +139,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
     for (const m of reviewMetrics) {
       const raw = review.scores?.[m];
       const n = Number(raw);
-      next[m] = Number.isFinite(n) && n >= 1 && n <= max ? Math.round(n) : null;
+      next[m] = Number.isFinite(n) && n >= 0 && n <= max ? Math.round(n) : null;
     }
     setScores(next);
     setNotes(review.notes ?? "");
@@ -168,7 +168,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
       metrics.length > 0 &&
       metrics.every((m) => {
         const v = Number(scores[m]);
-        return Number.isFinite(v) && v >= 1 && v <= maxPerCategory;
+        return typeof scores[m] === "number" && Number.isFinite(v) && v >= 0 && v <= maxPerCategory;
       }),
     [scores, metrics, maxPerCategory]
   );

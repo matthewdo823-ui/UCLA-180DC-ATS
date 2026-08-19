@@ -110,8 +110,8 @@ function validateScreeningScores(scores, rubricForYear) {
   const max = rubricForYear.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
   for (const metric of rubricForYear.metrics) {
     const value = Number(scores[metric]);
-    if (!Number.isFinite(value) || value < 1 || value > max) {
-      return `Each category must be scored 1–${max} (${metric})`;
+    if (!Number.isFinite(value) || value < 0 || value > max) {
+      return `Each category must be scored 0–${max} (${metric})`;
     }
   }
   return null;
