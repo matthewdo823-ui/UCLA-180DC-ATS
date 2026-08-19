@@ -27,8 +27,8 @@ export default function ScoringPanel({
   const maxScore = getRubricMaxScore(rubric);
   const total = rubric.metrics.reduce((sum, m) => sum + (Number(scores[m]) || 0), 0);
   const scoredCount = rubric.metrics.filter((m) => {
-    const v = Number(scores[m]);
-    return Number.isFinite(v) && v >= 1 && v <= maxPerCategory;
+    const v = scores[m];
+    return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= maxPerCategory;
   }).length;
   const scoreColor = total >= maxScore * 0.75 ? css.greenDark : total >= maxScore * 0.5 ? css.amber : css.red;
 
@@ -61,7 +61,7 @@ export default function ScoringPanel({
             <span style={{ fontSize: 14 }}>⚖️</span>
             SCORING RUBRIC
           </div>
-          <span style={{ fontSize: 11, color: css.textGray, fontWeight: 500 }}>Rate 1–{maxPerCategory} per category</span>
+          <span style={{ fontSize: 11, color: css.textGray, fontWeight: 500 }}>Rate 0–{maxPerCategory} per category</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {rubric.metrics.map(m => (
@@ -114,7 +114,7 @@ export default function ScoringPanel({
           <ActionBtn
             label="↺ Reset"
             style={{ borderColor: css.borderLight, color: css.textGray, bg: css.cardWhite, hoverBg: css.bgLight }}
-            disabled={total === 0 && notes.length === 0}
+            disabled={scoredCount === 0 && notes.length === 0}
             title="Clear all scores and notes for this resume"
             onClick={onReset}
           />
@@ -128,7 +128,7 @@ export default function ScoringPanel({
             label={label}
             style={style}
             disabled={!scoringComplete}
-            title={!scoringComplete ? `Rate each rubric category from 1 to ${maxPerCategory} first` : undefined}
+            title={!scoringComplete ? `Rate each rubric category from 0 to ${maxPerCategory} first` : undefined}
             onClick={() => onAction(type)}
           />
         ))}

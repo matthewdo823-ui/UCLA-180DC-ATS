@@ -1112,8 +1112,8 @@ exports.saveFrqReview = async (req, res) => {
     }
 
     const numericScore = Number(score);
-    if (!Number.isFinite(numericScore) || numericScore < 1 || numericScore > FRQ_MAX_SCORE) {
-        return res.status(400).json({ error: `score must be a number between 1 and ${FRQ_MAX_SCORE}` });
+    if (!Number.isFinite(numericScore) || numericScore < 0 || numericScore > FRQ_MAX_SCORE) {
+        return res.status(400).json({ error: `score must be a number between 0 and ${FRQ_MAX_SCORE}` });
     }
 
     const screening = await requireActiveResumeScreening();
@@ -1191,8 +1191,8 @@ exports.patchMyFrqReview = async (req, res) => {
 
     const { score, notes } = req.body;
     const numericScore = Number(score);
-    if (!Number.isFinite(numericScore) || numericScore < 1 || numericScore > FRQ_MAX_SCORE) {
-        return res.status(400).json({ error: `score must be a number between 1 and ${FRQ_MAX_SCORE}` });
+    if (!Number.isFinite(numericScore) || numericScore < 0 || numericScore > FRQ_MAX_SCORE) {
+        return res.status(400).json({ error: `score must be a number between 0 and ${FRQ_MAX_SCORE}` });
     }
 
     const { data: existing, error: fetchError } = await supabase
