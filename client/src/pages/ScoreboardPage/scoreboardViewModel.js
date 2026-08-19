@@ -50,10 +50,15 @@ export function computeScoreCutoffs(candidates) {
 function matchesSearch(candidate, query) {
   const term = String(query || "").trim().toLowerCase();
   if (!term) return true;
-  const fields = [candidate.name, candidate.email, candidate.major, candidate.year, candidate.phoneNumber].filter(Boolean).map((value) => String(value).toLowerCase());
+  const fields = [candidate.name, candidate.email, candidate.major, candidate.year, candidate.phoneNumber]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
   if (fields.some((value) => value.includes(term))) return true;
+  // Phone fallback only: require enough digits to be meaningful, otherwise
+  // letter-only queries (e.g. a name) would match every candidate.
   const digits = term.replace(/\D/g, "");
-  return digits.length < 3 || String(candidate.phoneNumber || "").replace(/\D/g, "").includes(digits);
+  if (digits.length < 3) return false;
+  return String(candidate.phoneNumber || "").replace(/\D/g, "").includes(digits);
 }
 
 export function filterCandidates(candidates, filters, searchQuery, cutoffs) {
