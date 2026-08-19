@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS frq_reviews (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   resume_id    UUID NOT NULL REFERENCES resumes(id) ON DELETE CASCADE,
-  score        SMALLINT NOT NULL CHECK (score BETWEEN 1 AND 4),
+  score        SMALLINT NOT NULL CHECK (score BETWEEN 0 AND 4),
   notes        TEXT,
   graded_by    INT REFERENCES users(user_id) ON DELETE SET NULL,
   cycle_id     UUID NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
@@ -34,8 +34,8 @@ RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF score_input < 1 OR score_input > 4 THEN
-    RAISE EXCEPTION 'FRQ score must be between 1 and 4';
+  IF score_input < 0 OR score_input > 4 THEN
+    RAISE EXCEPTION 'FRQ score must be between 0 and 4';
   END IF;
 
   IF EXISTS (

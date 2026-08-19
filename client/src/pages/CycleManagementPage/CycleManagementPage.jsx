@@ -418,7 +418,7 @@ function RubricEditor({ draft, onChange, error }) {
           onChange={(e) => onChange({ ...draft, maxPerCategory: Number(e.target.value) })}
           style={{ ...inputStyle, width: 72 }}
         />
-        <span style={{ fontSize: 12, color: css.textGray }}>Typically 4 for 1–4 scoring</span>
+        <span style={{ fontSize: 12, color: css.textGray }}>Typically 4 for 0–4 scoring</span>
       </div>
 
       {RUBRIC_YEAR_KEYS.map(({ key, title }) => {

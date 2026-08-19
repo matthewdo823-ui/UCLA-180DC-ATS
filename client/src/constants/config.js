@@ -38,6 +38,7 @@ export const YEAR_CFG = {
 };
 
 export const BUBBLE_COLORS = {
+  0: { bg: "rgba(197,48,48,0.16)", bd: "#C53030", color: "#C53030"  },
   1: { bg: "rgba(226,75,74,0.1)",  bd: "#E24B4A", color: "#E24B4A"  },
   2: { bg: "rgba(226,75,74,0.05)", bd: "rgba(226,75,74,0.5)", color: "#E24B4A"  },
   3: { bg: "rgba(239,159,39,0.1)", bd: "#EF9F27", color: "#EF9F27"  },
