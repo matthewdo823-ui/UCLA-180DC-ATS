@@ -653,7 +653,6 @@ export default function ScoreboardPage() {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [filters, setFilters] = useState(() => ({ ...defaultFilters }));
   const [sortBy, setSortBy] = useState("performance_desc");
-  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [deliberationMode, setDeliberationMode] = useState(false);
   const [equalizeActive, setEqualizeActive] = useState(false);
@@ -727,11 +726,6 @@ export default function ScoreboardPage() {
     if (opts.silent !== true) setDecisionError("");
     return queryClient.invalidateQueries({ queryKey: scoreboardKey });
   }, [queryClient, scoreboardKey]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setSearchQuery(searchInput), 300);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
 
   useEffect(() => {
     if (scoreboardQuery.error) {
@@ -1064,7 +1058,7 @@ export default function ScoreboardPage() {
   const activeFilterCount = countActiveFilters(
     deliberationMode ? filters : { ...filters, decision: "all" }
   );
-  const hasActiveSearch = searchInput.trim().length > 0;
+  const hasActiveSearch = searchQuery.trim().length > 0;
   const hasActiveNarrowing = activeFilterCount > 0 || hasActiveSearch;
   const activeFilterPills = useMemo(
     () => buildActiveFilterPills(filters, deliberationMode),
@@ -1100,7 +1094,7 @@ export default function ScoreboardPage() {
           break;
         case "APPLICANTS":
           setFilters({ ...defaultFilters });
-          setSearchInput("");
+          setSearchQuery("");
           break;
         default:
           break;
@@ -1116,7 +1110,7 @@ export default function ScoreboardPage() {
         break;
       case "APPLICANTS":
         setFilters({ ...defaultFilters });
-        setSearchInput("");
+        setSearchQuery("");
         break;
       default:
         break;
@@ -1490,8 +1484,8 @@ export default function ScoreboardPage() {
         </svg>
         <input
           type="search"
-          value={searchInput}
-          onChange={e => setSearchInput(e.target.value)}
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
           placeholder="Search by name, email, or phone…"
           aria-label="Search candidates"
           style={{
@@ -1511,7 +1505,7 @@ export default function ScoreboardPage() {
           <button
             type="button"
             aria-label="Clear search"
-            onClick={() => { setSearchInput(""); setSearchQuery(""); }}
+            onClick={() => setSearchQuery("")}
             style={{
               position: "absolute",
               right: 10,
@@ -1621,7 +1615,7 @@ export default function ScoreboardPage() {
               Search: “{searchQuery.trim()}”
               <button
                 type="button"
-                onClick={() => { setSearchInput(""); setSearchQuery(""); }}
+                onClick={() => setSearchQuery("")}
                 aria-label="Clear search filter"
                 style={{ border: "none", background: "none", color: t.textMuted, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}
               >
@@ -1647,7 +1641,7 @@ export default function ScoreboardPage() {
           ))}
           <button
             type="button"
-            onClick={() => { setFilters({ ...defaultFilters }); setSearchInput(""); setSearchQuery(""); }}
+            onClick={() => { setFilters({ ...defaultFilters }); setSearchQuery(""); }}
             style={{ border: "none", background: "none", color: t.accent, fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "4px 0" }}
           >
             Clear all
