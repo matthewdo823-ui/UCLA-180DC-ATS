@@ -122,13 +122,13 @@ export default function ScreenerPage() {
     () =>
       Boolean(rubric?.metrics?.length) &&
       rubric.metrics.every(
-        (m) => typeof scores[m] === "number" && scores[m] >= 1 && scores[m] <= maxPerCategory
+        (m) => typeof scores[m] === "number" && scores[m] >= 0 && scores[m] <= maxPerCategory
       ),
     [scores, rubric, maxPerCategory]
   );
 
   const frqScoringComplete = useMemo(
-    () => typeof frqScore === "number" && frqScore >= 1 && frqScore <= FRQ_MAX_SCORE,
+    () => typeof frqScore === "number" && frqScore >= 0 && frqScore <= FRQ_MAX_SCORE,
     [frqScore]
   );
 

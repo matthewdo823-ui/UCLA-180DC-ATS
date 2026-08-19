@@ -13,9 +13,9 @@ export default function FrqScoringPanel({
   submitError = "",
 }) {
   const total = typeof score === "number" ? score : 0;
-  const hasScore = typeof score === "number" && score >= 1 && score <= FRQ_MAX_SCORE;
+  const hasScore = typeof score === "number" && score >= 0 && score <= FRQ_MAX_SCORE;
   const scoreColor = total >= FRQ_MAX_SCORE * 0.75 ? css.greenDark : total >= FRQ_MAX_SCORE * 0.5 ? css.amber : css.red;
-  const levels = Array.from({ length: FRQ_MAX_SCORE }, (_, i) => i + 1);
+  const levels = Array.from({ length: FRQ_MAX_SCORE + 1 }, (_, i) => i);
 
   return (
     <div
@@ -72,7 +72,7 @@ export default function FrqScoringPanel({
             <span style={{ fontSize: 14 }}>⚖️</span>
             APPLICATION RESPONSES
           </div>
-          <span style={{ fontSize: 11, color: css.textGray, fontWeight: 500 }}>Rate 1–{FRQ_MAX_SCORE}</span>
+          <span style={{ fontSize: 11, color: css.textGray, fontWeight: 500 }}>Rate 0–{FRQ_MAX_SCORE}</span>
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -80,7 +80,7 @@ export default function FrqScoringPanel({
           <div style={{ display: "flex", gap: 6 }}>
             {levels.map((n) => {
               const sel = hasScore && score === n;
-              const c = BUBBLE_COLORS[n];
+              const c = BUBBLE_COLORS[n] || BUBBLE_COLORS[0];
               return (
                 <button
                   key={n}
@@ -215,7 +215,7 @@ export default function FrqScoringPanel({
         label="✓ Complete"
         style={{ borderColor: css.greenDark, color: css.cardWhite, bg: css.greenDark, hoverBg: "#1F4E33" }}
         disabled={!scoringComplete}
-        title={!scoringComplete ? `Rate application responses from 1 to ${FRQ_MAX_SCORE} first` : undefined}
+        title={!scoringComplete ? `Rate application responses from 0 to ${FRQ_MAX_SCORE} first` : undefined}
         onClick={onComplete}
       />
     </div>
