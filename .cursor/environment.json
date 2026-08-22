@@ -3,7 +3,12 @@
   "user": "ubuntu",
   "install": ".cursor/install.sh",
   "start": ".cursor/start.sh",
-  "ports": [3000, 5173, 3001, 3002],
+  "ports": [
+    { "name": "web", "port": 5173 },
+    { "name": "api", "port": 3000 },
+    { "name": "postgrest", "port": 3001 },
+    { "name": "supabase-proxy", "port": 3002 }
+  ],
   "terminals": [
     {
       "name": "api-server",
