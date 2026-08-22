@@ -1,0 +1,19 @@
+{
+  "name": "Resume Screener",
+  "user": "ubuntu",
+  "install": ".cursor/install.sh",
+  "start": ".cursor/start.sh",
+  "ports": [3000, 5173, 3001, 3002],
+  "terminals": [
+    {
+      "name": "api-server",
+      "command": "cd server && npm start",
+      "description": "Express API on http://localhost:3000 (talks to the local Supabase-compatible stack, or a real Supabase project if SUPABASE_URL/SUPABASE_SERVICE_KEY secrets are set)."
+    },
+    {
+      "name": "web-client",
+      "command": "cd client && npm run dev -- --host 0.0.0.0",
+      "description": "Vite dev server for the React UI on http://localhost:5173 (proxying to the API via VITE_API_URL)."
+    }
+  ]
+}
