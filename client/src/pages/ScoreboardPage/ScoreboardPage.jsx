@@ -9,6 +9,8 @@ import { css } from "../../theme/colors";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
+import { UserFriendlyError, formatResponseError } from "../../utils/errors";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatScore, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
@@ -729,10 +731,7 @@ export default function ScoreboardPage() {
 
   useEffect(() => {
     if (scoreboardQuery.error) {
-      setDecisionError(
-        scoreboardQuery.error.message
-        || "Could not reach the API — check that the server is running on port 3000."
-      );
+      setDecisionError(scoreboardQuery.error);
     }
   }, [scoreboardQuery.error]);
 
@@ -743,7 +742,12 @@ export default function ScoreboardPage() {
       || Object.prototype.hasOwnProperty.call(candidates[0], "decision");
     if (!hasDecisionSupport) {
       setDecisionError(
-        "Deliberation API is missing on the server — restart it with the latest code (cd server && node index.js) or redeploy Render."
+        new UserFriendlyError({
+          title: "Deliberation Unavailable",
+          explanation: "Deliberation decision support is not enabled for this dataset.",
+          action: "Please refresh the page or contact an administrator.",
+          devDetails: "Candidates array is missing the 'decision' field.",
+        })
       );
     }
   }, [scoreboardQuery.data]);
@@ -852,11 +856,11 @@ export default function ScoreboardPage() {
         }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        if (res.status === 404) {
-          throw new Error("Decision API not found — restart the local server or redeploy Render with the latest code.");
-        }
-        throw new Error(body.error || "Could not save decision");
+        throw await formatResponseError(
+          res,
+          "saving candidate decision",
+          "Check POST /scoreboard/decisions endpoint in server/src/routes/dashboardRoutes.js"
+        );
       }
       const { decision: savedDecision } = await res.json();
       const confirmed = { ...savedDecision, provisional: true };
@@ -867,7 +871,7 @@ export default function ScoreboardPage() {
       setSelectedCandidate(prev => (
         prev?.id === candidate.id ? { ...prev, decision: previousDecision || buildDecisionPayload("pending") } : prev
       ));
-      setDecisionError(err.message || "Could not save decision");
+      setDecisionError(err);
     } finally {
       pendingDecisionIdsRef.current.delete(candidate.id);
       setSavingDecisionId(null);
@@ -960,12 +964,11 @@ export default function ScoreboardPage() {
     if (!confirmed) return;
 
     setAdvanceRoundBusy(true);
-    setDecisionError("");
+    setDecisionError(null);
     try {
       const res = await authedFetch(`${API}/rounds/${activeRound.id}/advance-to-next`, { method: "POST" });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Could not advance to next round");
+        throw await formatResponseError(res, "advancing to the next round");
       }
       setViewingRoundId(null);
       setDeliberationMode(false);
@@ -974,7 +977,7 @@ export default function ScoreboardPage() {
       await queryClient.invalidateQueries({ queryKey: qk.scoreboardRoot() });
       queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() });
     } catch (err) {
-      setDecisionError(err.message || "Could not advance to next round");
+      setDecisionError(err);
     } finally {
       setAdvanceRoundBusy(false);
     }
@@ -982,11 +985,11 @@ export default function ScoreboardPage() {
 
   const handleExport = useCallback((decision) => {
     setExportBusy(true);
-    setDecisionError("");
+    setDecisionError(null);
     try {
       exportCandidatesDecisionCsv(candidates, decision);
     } catch (err) {
-      setDecisionError(err.message || "Export failed");
+      setDecisionError(err);
     } finally {
       setExportBusy(false);
     }
@@ -1461,8 +1464,12 @@ export default function ScoreboardPage() {
       ) : null}
 
       {decisionError ? (
-        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "0 0 8px", color: css.red, fontSize: 13, fontWeight: 600 }}>
-          {decisionError}
+        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "0 0 8px" }}>
+          <ErrorBanner
+            error={decisionError}
+            onDismiss={() => setDecisionError(null)}
+            onRetry={decisionError === scoreboardQuery.error ? () => scoreboardQuery.refetch() : undefined}
+          />
         </div>
       ) : null}
 

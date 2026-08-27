@@ -7,6 +7,7 @@ import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatDate, formatNumber, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 const cardGreen = "#085041";
@@ -283,7 +284,7 @@ export default function GraderScoreboardPage() {
     queryKey: activeMode.id === "frq" ? qk.frqGraderScoreboard() : qk.graderScoreboard(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/${activeMode.endpoint}`);
-      return readJsonOrThrow(res, `Could not load ${activeMode.label.toLowerCase()}`);
+      return readJsonOrThrow(res, `loading ${activeMode.label.toLowerCase()}`, `Check GET /${activeMode.endpoint} in server/src/routes/resumeRoutes.js`);
     },
     staleTime: STALE.dashboard,
   });
@@ -356,6 +357,11 @@ export default function GraderScoreboardPage() {
           );
         })}
       </div>
+      {graderQuery.error ? (
+        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+          <ErrorBanner error={graderQuery.error} onRetry={() => graderQuery.refetch()} />
+        </div>
+      ) : null}
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
         <div style={{ maxWidth: 640, flex: "1 1 260px", minWidth: 0 }}>
           <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: css.greenDark }}>

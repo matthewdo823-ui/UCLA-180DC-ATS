@@ -4,6 +4,7 @@ import logo180 from "@images/180logo.webp";
 import { useAuth } from "../../auth/AuthContext";
 import { css } from "../../theme/colors";
 import { isStaffRole } from "../../utils/auth";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 
 export default function LoginPage() {
   const { login, createAccount, requestPasswordReset, resetPassword, user, loading, isStaff } = useAuth();
@@ -15,7 +16,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(null);
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -35,7 +36,7 @@ export default function LoginPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setError("");
+    setError(null);
     setSubmitting(true);
 
     try {
@@ -45,7 +46,7 @@ export default function LoginPage() {
 
       if (isForgotMode) {
         const message = await requestPasswordReset(email);
-        setError("");
+        setError(null);
         setNotice(message);
         return;
       }
@@ -65,7 +66,7 @@ export default function LoginPage() {
         : await login({ email, password });
       navigate(isStaffRole(loggedInUser?.role) ? redirectTo : "/no-access", { replace: true });
     } catch (err) {
-      setError(err.message);
+      setError(err);
     } finally {
       setSubmitting(false);
     }
@@ -166,11 +167,7 @@ export default function LoginPage() {
           </>
         )}
 
-        {error && (
-          <div style={{ marginTop: 16, color: css.red, background: "rgba(226,75,74,0.08)", border: "1px solid rgba(226,75,74,0.18)", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
-            {error}
-          </div>
-        )}
+        <ErrorBanner error={error} style={{ marginTop: 16 }} onDismiss={() => setError(null)} />
         {notice && <div style={{ marginTop: 16, color: css.greenDark, background: "rgba(29,158,117,0.08)", border: "1px solid rgba(29,158,117,0.18)", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>{notice}</div>}
 
         <button

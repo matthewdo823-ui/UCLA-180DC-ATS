@@ -1604,7 +1604,11 @@ exports.viewImage = async (req, res) => {
     }
 
     try {
-        await streamDriveFileToResponse(fileUrl, res, { fallbackContentType: 'image/jpeg' });
+        // Avatars render at 40–132px; a single 320px thumbnail covers the largest
+        // (retina) case and keeps egress in the KB range instead of streaming the
+        // multi-MB original. One fixed size means a candidate shown in several
+        // places shares one cached blob.
+        await streamDriveFileToResponse(fileUrl, res, { fallbackContentType: 'image/jpeg', thumbnailSize: 320 });
     } catch (err) {
         sendDriveProxyError(res, err, 'image');
     }

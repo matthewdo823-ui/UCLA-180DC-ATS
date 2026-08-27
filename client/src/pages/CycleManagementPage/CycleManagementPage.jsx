@@ -7,6 +7,8 @@ import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
+import { formatResponseError } from "../../utils/errors";
 import {
   RUBRIC_IMAGE_OPTIONS,
   RUBRIC_YEAR_KEYS,
@@ -128,8 +130,8 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ formUrl: formUrl.trim() }),
       });
+      if (!res.ok) throw await formatResponseError(res, "discovering form fields");
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || "Could not discover form fields");
 
       setQuestions(body.questions || []);
       setFieldMap(body.suggestedFieldMap || {});
@@ -164,8 +166,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
           headshotQuestionId: headshotQuestionId || null,
         }),
       });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || "Could not save form config");
+      if (!res.ok) throw await formatResponseError(res, "saving form configuration");
       setPanelMessage("Form config saved.");
       setExpanded(false);
       await onSaved();
@@ -182,8 +183,8 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
     setPanelMessage("");
     try {
       const res = await authedFetch(`${API}/cycles/${cycle.id}/sync-form`, { method: "POST" });
+      if (!res.ok) throw await formatResponseError(res, "syncing form responses");
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || "Sync failed");
       setPanelMessage(`Sync complete. ${body.processed ?? 0} responses processed, ${body.errors ?? 0} errors.`);
       await onSaved();
     } catch (e) {
@@ -749,14 +750,14 @@ export default function CycleManagementPage() {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   // Action errors live here; the query owns load errors — merged into `error` below.
-  const [actionError, setActionError] = useState("");
+  const [actionError, setActionError] = useState(null);
   const [newCycleName, setNewCycleName] = useState("");
 
   const cyclesQuery = useQuery({
     queryKey: qk.cycles(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/cycles`);
-      return readJsonOrThrow(res, "Could not load cycles");
+      return readJsonOrThrow(res, "loading cycles", "Check GET /cycles in server/src/routes/cycleRoutes.js");
     },
     staleTime: STALE.dashboard,
   });
@@ -767,8 +768,7 @@ export default function CycleManagementPage() {
   );
   const activeCycleId = cyclesQuery.data?.activeCycleId || null;
   const loading = cyclesQuery.isPending;
-  const error = actionError
-    || (cyclesQuery.error ? (cyclesQuery.error.message || "Could not load cycles") : "");
+  const error = actionError || cyclesQuery.error;
 
   // Expiring ["cycles"] also expires ["cycles","active"] (hierarchical key), so
   // activating a cycle or round here refreshes the active-cycle entry every page reads.
@@ -784,12 +784,12 @@ export default function CycleManagementPage() {
 
   async function runAction(action) {
     setBusy(true);
-    setActionError("");
+    setActionError(null);
     try {
       await action();
       await reloadCycles();
     } catch (e) {
-      setActionError(e.message || "Action failed");
+      setActionError(e);
     } finally {
       setBusy(false);
     }
@@ -807,8 +807,7 @@ export default function CycleManagementPage() {
         body: JSON.stringify({ name }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Could not create cycle");
+        throw await formatResponseError(res, "creating recruiting cycle");
       }
       setNewCycleName("");
     });
@@ -889,9 +888,12 @@ export default function CycleManagementPage() {
         </form>
 
         {error ? (
-          <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 10, background: "rgba(226,75,74,0.08)", border: "1px solid rgba(226,75,74,0.18)", color: css.red, fontSize: 13 }}>
-            {error}
-          </div>
+          <ErrorBanner
+            error={error}
+            onDismiss={actionError ? () => setActionError(null) : undefined}
+            onRetry={cyclesQuery.isError ? () => cyclesQuery.refetch() : undefined}
+            style={{ marginBottom: 16 }}
+          />
         ) : null}
 
         {loading ? (
@@ -910,8 +912,7 @@ export default function CycleManagementPage() {
                 onActivate={(id) => runAction(async () => {
                   const res = await authedFetch(`${API}/cycles/${id}/activate`, { method: "POST" });
                   if (!res.ok) {
-                    const body = await res.json().catch(() => ({}));
-                    throw new Error(body.error || "Could not activate cycle");
+                    throw await formatResponseError(res, "activating cycle");
                   }
                 })}
                 onArchive={(id) => runAction(async () => {
@@ -921,22 +922,19 @@ export default function CycleManagementPage() {
                     body: JSON.stringify({ status: "archived" }),
                   });
                   if (!res.ok) {
-                    const body = await res.json().catch(() => ({}));
-                    throw new Error(body.error || "Could not archive cycle");
+                    throw await formatResponseError(res, "archiving cycle");
                   }
                 })}
                 onActivateRound={(roundId) => runAction(async () => {
                   const res = await authedFetch(`${API}/rounds/${roundId}/activate`, { method: "POST" });
                   if (!res.ok) {
-                    const body = await res.json().catch(() => ({}));
-                    throw new Error(body.error || "Could not activate round");
+                    throw await formatResponseError(res, "activating round");
                   }
                 })}
                 onCloseRound={(roundId) => runAction(async () => {
                   const res = await authedFetch(`${API}/rounds/${roundId}/close`, { method: "POST" });
                   if (!res.ok) {
-                    const body = await res.json().catch(() => ({}));
-                    throw new Error(body.error || "Could not close round");
+                    throw await formatResponseError(res, "closing round");
                   }
                 })}
                 onSaveRubric={(roundId, rubricConfig) => runAction(async () => {
@@ -946,8 +944,7 @@ export default function CycleManagementPage() {
                     body: JSON.stringify({ rubricConfig }),
                   });
                   if (!res.ok) {
-                    const body = await res.json().catch(() => ({}));
-                    throw new Error(body.error || "Could not save rubric");
+                    throw await formatResponseError(res, "saving rubric");
                   }
                 })}
                 onSaveAutoDecisions={(roundId, autoAdvancePercent, autoRejectPercent) => runAction(async () => {
@@ -957,8 +954,7 @@ export default function CycleManagementPage() {
                     body: JSON.stringify({ autoAdvancePercent, autoRejectPercent }),
                   });
                   if (!res.ok) {
-                    const body = await res.json().catch(() => ({}));
-                    throw new Error(body.error || "Could not save automatic decision percentages");
+                    throw await formatResponseError(res, "saving automatic decision percentages");
                   }
                 })}
               />

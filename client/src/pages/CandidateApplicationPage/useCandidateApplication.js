@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
+import { formatResponseError, normalizeError } from "../../utils/errors";
 
 export default function useCandidateApplication(resumeId) {
   const authedFetch = useAuthedFetch();
@@ -9,27 +10,26 @@ export default function useCandidateApplication(resumeId) {
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(null);
 
   const refresh = useCallback(async () => {
     const id = String(resumeId || "").trim();
     if (!id) return;
 
-    setError("");
+    setError(null);
     try {
       const res = await fetchRef.current(`${API}/scoreboard/${encodeURIComponent(id)}/application`);
-      const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(json.error || "Failed to load application");
+        throw await formatResponseError(
+          res,
+          "loading candidate application",
+          "Check GET /scoreboard/:id/application endpoint in server/src/routes/dashboardRoutes.js"
+        );
       }
+      const json = await res.json().catch(() => ({}));
       setData(json);
     } catch (err) {
-      const message = err?.message || "Failed to load application";
-      setError(
-        message === "Failed to fetch"
-          ? "Could not reach the API — check that the server is running on port 3000."
-          : message
-      );
+      setError(normalizeError(err, "loading candidate application"));
     }
   }, [resumeId]);
 
@@ -46,22 +46,21 @@ export default function useCandidateApplication(resumeId) {
 
     async function loadApplication() {
       setLoading(true);
-      setError("");
+      setError(null);
       try {
         const res = await fetchRef.current(`${API}/scoreboard/${encodeURIComponent(id)}/application`);
-        const json = await res.json().catch(() => ({}));
         if (!res.ok) {
-          throw new Error(json.error || "Failed to load application");
+          throw await formatResponseError(
+            res,
+            "loading candidate application",
+            "Check GET /scoreboard/:id/application endpoint in server/src/routes/dashboardRoutes.js"
+          );
         }
+        const json = await res.json().catch(() => ({}));
         if (!cancelled) setData(json);
       } catch (err) {
         if (!cancelled) {
-          const message = err?.message || "Failed to load application";
-          setError(
-            message === "Failed to fetch"
-              ? "Could not reach the API — check that the server is running on port 3000."
-              : message
-          );
+          setError(normalizeError(err, "loading candidate application"));
           setData(null);
         }
       } finally {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
+import { formatResponseError, normalizeError } from "../../utils/errors";
 
 export default function useCandidateApplicationSummary(resumeId, enabled = true) {
   const authedFetch = useAuthedFetch();
@@ -10,7 +11,7 @@ export default function useCandidateApplicationSummary(resumeId, enabled = true)
   const [summary, setSummary] = useState("");
   const [generatedAt, setGeneratedAt] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(null);
   const [unavailable, setUnavailable] = useState(false);
 
   const loadSummary = useCallback(async (options = {}) => {
@@ -18,7 +19,7 @@ export default function useCandidateApplicationSummary(resumeId, enabled = true)
     if (!id) return;
 
     setLoading(true);
-    setError("");
+    setError(null);
     if (!options.preserveSummary) {
       setSummary("");
       setGeneratedAt(null);
@@ -27,27 +28,33 @@ export default function useCandidateApplicationSummary(resumeId, enabled = true)
     try {
       const url = `${API}/scoreboard/${encodeURIComponent(id)}/application/summary${options.refresh ? "?refresh=1" : ""}`;
       const res = await fetchRef.current(url);
-      const json = await res.json().catch(() => ({}));
 
-      if (res.status === 503 && /not configured/i.test(json.error || "")) {
-        setUnavailable(true);
-        setSummary("");
-        setGeneratedAt(null);
-        return;
+      if (res.status === 503) {
+        // Probe on a clone so the original body stays unread for
+        // formatResponseError below if this turns out to be a real 503.
+        const json = await res.clone().json().catch(() => ({}));
+        if (/not configured/i.test(json.error || "")) {
+          setUnavailable(true);
+          setSummary("");
+          setGeneratedAt(null);
+          return;
+        }
       }
 
       if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error("Summary endpoint not found — restart the API server and try again.");
-        }
-        throw new Error(json.error || "Failed to generate summary");
+        throw await formatResponseError(
+          res,
+          "generating application summary",
+          "Check GET /scoreboard/:id/application/summary in server/src/routes/dashboardRoutes.js"
+        );
       }
 
+      const json = await res.json().catch(() => ({}));
       setUnavailable(false);
       setSummary(String(json.summary || "").trim());
       setGeneratedAt(json.generatedAt || null);
     } catch (err) {
-      setError(err?.message || "Failed to generate summary");
+      setError(normalizeError(err, "generating candidate summary"));
     } finally {
       setLoading(false);
     }
