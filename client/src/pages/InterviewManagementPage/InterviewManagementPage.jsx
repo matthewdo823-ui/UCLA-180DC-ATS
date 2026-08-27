@@ -8,6 +8,8 @@ import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
+import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { getInitials } from "../../utils/format";
 
@@ -173,7 +175,7 @@ export default function InterviewManagementPage() {
     queryKey: qk.interviewCandidates(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/interviews/candidates`);
-      return readJsonOrThrow(res, "Could not load interview candidates");
+      return readJsonOrThrow(res, "loading interview candidates", "Check GET /interviews/candidates in server/src/routes/interviewRoutes.js");
     },
     enabled,
     staleTime: STALE.dashboard,
@@ -181,7 +183,6 @@ export default function InterviewManagementPage() {
 
   const data = query.data ?? { candidates: [], stats: null, context: null };
   const loading = enabled && query.isPending;
-  const error = query.error ? (query.error.message || "Could not load candidates") : "";
 
   const saveEvaluation = useCallback(async (payload) => {
     const res = await authedFetch(`${API}/interviews/evaluations`, {
@@ -190,8 +191,7 @@ export default function InterviewManagementPage() {
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || "Could not save evaluation");
+      throw await formatResponseError(res, "saving interview evaluation");
     }
     // A decision changes this page's list and the dashboard pipeline stats.
     queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() });
@@ -266,8 +266,12 @@ export default function InterviewManagementPage() {
               ))}
             </div>
 
-            {error ? (
-              <div style={{ marginBottom: 16, padding: 12, borderRadius: 10, background: "rgba(226,75,74,0.08)", color: css.red }}>{error}</div>
+            {query.error ? (
+              <ErrorBanner
+                error={query.error}
+                onRetry={() => query.refetch()}
+                style={{ marginBottom: 16 }}
+              />
             ) : null}
 
             {loading || cycleLoading ? (

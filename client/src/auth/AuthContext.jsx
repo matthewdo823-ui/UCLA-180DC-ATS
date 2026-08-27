@@ -3,6 +3,7 @@ import { API } from "../constants/config";
 import { isStaffRole } from "../utils/auth";
 import { queryClient } from "../lib/queryClient";
 import { clearDriveFileCache } from "../utils/driveFileCache";
+import { formatNetworkError, formatResponseError } from "../utils/errors";
 
 const TOKEN_STORAGE_KEY = "resume_screener_jwt";
 const USER_STORAGE_KEY = "resume_screener_user";
@@ -36,13 +37,6 @@ function storeUser(user) {
   } else {
     localStorage.removeItem(USER_STORAGE_KEY);
   }
-}
-
-function formatAuthError(err) {
-  if (err instanceof TypeError && err.message === "Failed to fetch") {
-    return new Error("Cannot reach the API server. Make sure the backend is running (cd server && npm start).");
-  }
-  return err;
 }
 
 export function AuthProvider({ children }) {
@@ -116,14 +110,18 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ email, password }),
       });
     } catch (err) {
-      throw formatAuthError(err);
+      throw formatNetworkError(
+        err,
+        "signing into your account",
+        "Check if backend is running (cd server && npm run dev)."
+      );
     }
-    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      throw new Error(data.error || "Login failed");
+      throw await formatResponseError(res, "signing in", "Check /auth/login credentials or server logs.");
     }
 
+    const data = await res.json().catch(() => ({}));
     storeToken(data.token);
     storeUser(data.user);
     setToken(data.token);
@@ -141,14 +139,18 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ email, password, first_name, last_name }),
       });
     } catch (err) {
-      throw formatAuthError(err);
+      throw formatNetworkError(
+        err,
+        "creating your account",
+        "Check if backend is running (cd server && npm run dev)."
+      );
     }
-    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      throw new Error(data.error || "Account creation failed");
+      throw await formatResponseError(res, "creating account", "Check /auth/register payload or server logs.");
     }
 
+    const data = await res.json().catch(() => ({}));
     storeToken(data.token);
     storeUser(data.user);
     setToken(data.token);
@@ -158,20 +160,42 @@ export function AuthProvider({ children }) {
   }, []);
 
   const requestPasswordReset = useCallback(async (email) => {
-    const res = await fetch(`${API}/auth/forgot-password`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }),
-    });
+    let res;
+    try {
+      res = await fetch(`${API}/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch (err) {
+      throw formatNetworkError(err, "requesting password reset", "Is backend server running?");
+    }
+
+    if (!res.ok) {
+      throw await formatResponseError(res, "requesting password reset");
+    }
+
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || "Could not request a password reset");
     return data.message;
   }, []);
 
   const resetPassword = useCallback(async ({ token, password }) => {
-    const res = await fetch(`${API}/auth/reset-password`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, password }),
-    });
+    let res;
+    try {
+      res = await fetch(`${API}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+    } catch (err) {
+      throw formatNetworkError(err, "resetting password", "Is backend server running?");
+    }
+
+    if (!res.ok) {
+      throw await formatResponseError(res, "resetting password");
+    }
+
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || "Could not reset password");
     return data.message;
   }, []);
 

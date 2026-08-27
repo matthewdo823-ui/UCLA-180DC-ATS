@@ -19,7 +19,7 @@ export function useActiveCycle() {
     queryKey: qk.activeCycle(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/cycles/active`);
-      return readJsonOrThrow(res, "Could not load active cycle");
+      return readJsonOrThrow(res, "loading the active cycle", "Check GET /cycles/active in server/src/routes/cycleRoutes.js");
     },
     staleTime: STALE.cycle,
   });

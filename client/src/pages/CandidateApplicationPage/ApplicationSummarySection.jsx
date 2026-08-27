@@ -1,6 +1,7 @@
 import { css } from "../../theme/colors";
 import { cardGreen, cardPale } from "./constants";
 import SectionCard from "./components/SectionCard";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 
 function SummaryParagraphs({ text }) {
   const paragraphs = String(text || "")
@@ -86,27 +87,7 @@ export default function ApplicationSummarySection({
       )}
 
       {!loading && error && (
-        <div style={{ padding: "12px 14px", borderRadius: 8, background: "#FEF2F2", border: "1px solid #FECACA", color: "#991B1B", fontSize: 13 }}>
-          {error}
-          <button
-            type="button"
-            onClick={onRefresh}
-            style={{
-              display: "block",
-              marginTop: 10,
-              padding: "6px 10px",
-              borderRadius: 6,
-              border: "1px solid #FECACA",
-              background: css.cardWhite,
-              color: "#991B1B",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Try again
-          </button>
-        </div>
+        <ErrorBanner error={error} onRetry={onRefresh} style={{ margin: "10px 0" }} />
       )}
 
       {!loading && !error && summary && (

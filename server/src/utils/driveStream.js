@@ -41,7 +41,17 @@ function driveAccessError(message, code = 'DRIVE_INACCESSIBLE') {
 function sendDriveProxyError(res, err, label) {
   const expected = err.code === 'INVALID_URL' || err.code === 'DRIVE_INACCESSIBLE'
     || err.response?.status === 404 || err.response?.status === 403;
-  if (!expected) console.error(`Proxy error (${label}):`, err.message);
+  // Log code + upstream status alongside the message: connection resets surface
+  // an empty message, so message alone left most incident log lines blank and
+  // indistinguishable from genuine Drive 503s.
+  if (!expected) {
+    console.error(
+      `Proxy error (${label}):`,
+      `code=${err.code || 'n/a'}`,
+      `upstream=${err.response?.status ?? 'n/a'}`,
+      err.message || '(no message)'
+    );
+  }
 
   if (res.headersSent) return res.destroy();
   res.setHeader('Cache-Control', 'no-store');
@@ -180,14 +190,115 @@ async function streamViaPublicUrl(fileId, res, fallbackContentType) {
   return true;
 }
 
+// The Drive API's thumbnailLink ends with a size token — "=s220" on the
+// googleusercontent host, or "&sz=s220"/"&sz=w220" on older links. Rewrite it to
+// the width we actually render so we pull ~KB instead of the multi-MB original.
+function withThumbnailSize(thumbnailLink, size) {
+  if (/=s\d+(-c)?$/.test(thumbnailLink)) {
+    return thumbnailLink.replace(/=s\d+(-c)?$/, `=s${size}`);
+  }
+  if (/([?&]sz=)[sw]\d+/.test(thumbnailLink)) {
+    return thumbnailLink.replace(/([?&]sz=)[sw]\d+/, `$1s${size}`);
+  }
+  return thumbnailLink;
+}
+
+// Authorized thumbnail: ask the Drive API for the file's thumbnailLink — which it
+// only returns when our service account can actually read the file — resize it,
+// and stream those bytes. Returns false (never the full original) when no
+// thumbnail is available or auth is unusable, so the caller can try the cheap
+// public thumbnail and ultimately fall back to the initials placeholder.
+async function streamViaApiThumbnail(fileId, res, size) {
+  let drive;
+  try {
+    drive = await getDriveClient();
+  } catch (err) {
+    console.warn('[driveStream] getDriveClient failed for thumbnail, falling back:', err.message);
+    return false;
+  }
+  if (!drive) return false;
+
+  let thumbnailLink;
+  try {
+    const { data: meta } = await drive.files.get({
+      fileId,
+      fields: 'thumbnailLink',
+      supportsAllDrives: true,
+    });
+    thumbnailLink = meta?.thumbnailLink;
+  } catch (err) {
+    const status = err?.code ?? err?.response?.status;
+    if (status === 404 || status === 403 || status === 401) return false;
+    throw err;
+  }
+  if (!thumbnailLink) return false;
+
+  // Anything that fails before setFileHeaders returns false so the caller can try
+  // the public thumbnail; a failure after (mid-stream) throws, since headers are
+  // already committed and we can't restart the response.
+  let response;
+  try {
+    response = await axios.get(withThumbnailSize(thumbnailLink, size), {
+      responseType: 'stream',
+      maxRedirects: 5,
+      validateStatus: (status) => status >= 200 && status < 400,
+    });
+  } catch {
+    return false;
+  }
+  const contentType = response.headers['content-type'] || 'image/jpeg';
+  if (isHtmlContentType(contentType)) {
+    response.data.destroy();
+    return false;
+  }
+  setFileHeaders(res, contentType);
+  await pipeline(response.data, res);
+  return true;
+}
+
+// Cheap unauthenticated thumbnail — bounded by sz=w, so even this fallback pulls
+// KB, not MB. Works for link-shared files; for a restricted file Drive returns a
+// sign-in HTML page, which the HTML guards turn into a DRIVE_INACCESSIBLE error
+// and, upstream, into the initials placeholder.
+async function streamViaPublicThumbnail(fileId, res, size) {
+  const url = `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w${size}`;
+  const response = await axios.get(url, {
+    responseType: 'stream',
+    maxRedirects: 5,
+    headers: { 'User-Agent': USER_AGENT },
+    validateStatus: (status) => status >= 200 && status < 400,
+  });
+  const contentType = response.headers['content-type'] || 'image/jpeg';
+  if (isHtmlContentType(contentType)) {
+    response.data.destroy();
+    throw driveAccessError('Drive thumbnail is not available');
+  }
+  await pipeStreamWithHtmlGuard(response.data, res, contentType);
+}
+
+// Thumbnail-only path for image/avatar views. Every branch is size-bounded; we
+// never touch the full-resolution original here, because a 40–132px avatar is the
+// entire reason this proxy blew the bandwidth budget.
+async function streamDriveThumbnail(fileId, res, size) {
+  if (await streamViaApiThumbnail(fileId, res, size)) return;
+  await streamViaPublicThumbnail(fileId, res, size);
+}
+
 /**
  * Stream a Google Drive file to an Express response.
  * Tries the Drive API (service account) first, then an unauthenticated download URL.
  */
-async function streamDriveFileToResponse(fileUrl, res, { fallbackContentType }) {
+async function streamDriveFileToResponse(fileUrl, res, { fallbackContentType, thumbnailSize } = {}) {
   const fileId = extractDriveFileID(fileUrl);
   if (!fileId) {
     throw driveAccessError('Invalid Drive file URL', 'INVALID_URL');
+  }
+
+  // Image/avatar callers pass a thumbnailSize and get a size-bounded thumbnail
+  // only — if none can be produced we deliberately fail (the caller renders
+  // initials) rather than falling through to the multi-MB original.
+  if (thumbnailSize) {
+    return streamDriveThumbnail(fileId, res, thumbnailSize);
   }
 
   if (await streamViaDriveApi(fileId, res, fallbackContentType)) return;

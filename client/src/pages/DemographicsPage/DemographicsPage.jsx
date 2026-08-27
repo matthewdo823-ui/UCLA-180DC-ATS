@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
-import { STALE } from "../../lib/queryClient";
+import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import {
   DemographicsLegend,
   DemographicsStackedBarChart,
@@ -74,22 +75,18 @@ export default function DemographicsPage() {
   // Cached under qk.demographics so revisiting the page (or bouncing back to it)
   // renders instantly from cache and refreshes in the background instead of
   // showing a spinner and refetching from scratch every mount.
-  const { data, isPending: loading, error: queryError } = useQuery({
+  const { data, isPending: loading, error: queryError, refetch } = useQuery({
     queryKey: qk.demographics(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/demographics`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        if (res.status === 404) {
-          throw new Error("Demographics API not found — restart the server in /server.");
-        }
-        throw new Error(body.error || `Could not load demographics (${res.status})`);
-      }
-      return res.json();
+      return readJsonOrThrow(
+        res,
+        "loading demographic data",
+        "Check GET /demographics endpoint in server/src/routes/dashboardRoutes.js"
+      );
     },
     staleTime: STALE.dashboard,
   });
-  const error = queryError ? (queryError.message || "Could not load demographics") : "";
 
   const stages = data?.stages || [];
   const dimensions = data?.dimensions || [];
@@ -124,23 +121,13 @@ export default function DemographicsPage() {
 
         {loading && <PageLoader />}
 
-        {!loading && error && (
-          <div style={{
-            maxWidth: 1200,
-            margin: "24px auto 0",
-            width: "100%",
-            padding: "14px 16px",
-            borderRadius: 10,
-            background: "rgba(226,75,74,0.08)",
-            border: "1px solid rgba(226,75,74,0.18)",
-            color: css.red,
-          }}
-          >
-            {error}
+        {!loading && queryError && (
+          <div style={{ maxWidth: 1200, margin: "16px auto 0", width: "100%" }}>
+            <ErrorBanner error={queryError} onRetry={() => refetch()} />
           </div>
         )}
 
-        {!loading && !error && data && (
+        {!loading && !queryError && data && (
           <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
               {stages.map((stage) => (
