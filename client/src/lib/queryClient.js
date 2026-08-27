@@ -1,13 +1,14 @@
 import { QueryClient } from "@tanstack/react-query";
+import { formatResponseError } from "../utils/errors";
 
 /**
- * Shared error shape for query functions so pages keep rendering the same
- * `error.message` strings they did when each hook hand-rolled its own try/catch.
+ * Shared JSON reader for query and fetch functions.
+ * Throws a UserFriendlyError on non-2xx responses with status code context,
+ * an explanatory sentence, and optional developer diagnostics.
  */
-export async function readJsonOrThrow(res, fallbackMessage) {
+export async function readJsonOrThrow(res, fallbackContext = "loading data", devHint = "") {
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || fallbackMessage);
+    throw await formatResponseError(res, fallbackContext, devHint);
   }
   return res.json();
 }
@@ -35,9 +36,12 @@ export const queryClient = new QueryClient({
       // bouncing between pages reads from cache instead of refetching.
       gcTime: 10 * 60 * 1000,
       staleTime: STALE.dashboard,
-      // One retry smooths over a dropped connection without turning a genuine
-      // 500 into four sequential round trips against a slow server.
-      retry: 1,
+      // One retry smooths over a dropped connection or a genuine 5xx without
+      // turning it into four sequential round trips against a slow server. But
+      // 4xx (401/403/404/422/…) will never succeed on retry — retrying them just
+      // doubles a doomed request, the same fan-out that fed the bandwidth
+      // incident — so retry only network errors (no status) and 5xx.
+      retry: (failureCount, error) => failureCount < 1 && (!error?.status || error.status >= 500),
     },
   },
 });

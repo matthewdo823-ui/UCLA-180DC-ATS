@@ -3,6 +3,7 @@ import { useAuth } from "../../auth/AuthContext";
 import Topbar from "../../components/Topbar/Topbar";
 import { css } from "../../theme/colors";
 import { isAdminRole } from "../../utils/auth";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import AdminOverridesSection from "./AdminOverridesSection";
 import ApplicationContactSection from "./ApplicationContactSection";
 import ApplicationEvaluationsSection from "./ApplicationEvaluationsSection";
@@ -52,9 +53,7 @@ export default function CandidateApplicationPage() {
         )}
 
         {!loading && error && (
-          <div style={{ padding: 24, borderRadius: 10, background: "#FEF2F2", border: "1px solid #FECACA", color: "#991B1B" }}>
-            {error}
-          </div>
+          <ErrorBanner error={error} onRetry={refresh} style={{ marginBottom: 20 }} />
         )}
 
         {!loading && !error && candidate && (

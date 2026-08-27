@@ -7,6 +7,8 @@ import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
+import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle } from "../../theme/typography";
 import { displayName, formatDate } from "../../utils/format";
 const ASSIGNABLE_ROLES = [
@@ -49,20 +51,20 @@ export default function UserManagementPage() {
   const [pendingRoles, setPendingRoles] = useState({});
   // Separate from the load error so a failed save doesn't clobber (or get
   // clobbered by) the query's own error state.
-  const [saveError, setSaveError] = useState("");
+  const [saveError, setSaveError] = useState(null);
 
   const usersQuery = useQuery({
     queryKey: qk.users(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/users`);
-      return readJsonOrThrow(res, "Failed to load users");
+      return readJsonOrThrow(res, "loading users", "Check GET /users in server/src/routes/userRoutes.js");
     },
     staleTime: STALE.dashboard,
   });
 
   const users = usersQuery.data?.users ?? [];
   const loading = usersQuery.isPending;
-  const error = saveError || (usersQuery.error ? (usersQuery.error.message || "Failed to load users") : "");
+  const error = saveError || usersQuery.error;
 
   const staffCount = useMemo(
     () => users.filter((u) => u.role === "admin" || u.role === "member").length,
@@ -75,7 +77,7 @@ export default function UserManagementPage() {
 
     try {
       setSavingId(user.user_id);
-      setSaveError("");
+      setSaveError(null);
       const res = await authedFetch(`${API}/users/${user.user_id}/role`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -83,8 +85,7 @@ export default function UserManagementPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to update role");
+        throw await formatResponseError(res, "updating user role");
       }
 
       const data = await res.json();
@@ -98,7 +99,7 @@ export default function UserManagementPage() {
         return next;
       });
     } catch (err) {
-      setSaveError(err.message || "Failed to update role");
+      setSaveError(err);
     } finally {
       setSavingId(null);
     }
@@ -130,17 +131,12 @@ export default function UserManagementPage() {
         </div>
 
         {error && (
-          <div style={{
-            marginBottom: 16,
-            padding: "12px 14px",
-            borderRadius: 8,
-            background: "rgba(226,75,74,0.08)",
-            border: "1px solid rgba(226,75,74,0.22)",
-            color: "#C0392B",
-            fontSize: 13,
-          }}>
-            {error}
-          </div>
+          <ErrorBanner
+            error={error}
+            onDismiss={saveError ? () => setSaveError(null) : undefined}
+            onRetry={usersQuery.isError ? () => usersQuery.refetch() : undefined}
+            style={{ marginBottom: 16 }}
+          />
         )}
 
         <div style={{

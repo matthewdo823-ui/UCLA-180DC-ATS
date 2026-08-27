@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
+import { formatResponseError } from "../../utils/errors";
 
 const TEMPLATE_VARIABLES = [
   { key: "candidateName", label: "Candidate name" },
@@ -55,7 +57,7 @@ export default function AdvanceEmailModal({
   const saveTemplate = useCallback(async () => {
     if (!roundId) return false;
     setBusy("save");
-    setError("");
+    setError(null);
     setSuccess("");
     try {
       const res = await authedFetch(`${API}/rounds/${encodeURIComponent(roundId)}/advance-notification`, {
@@ -63,15 +65,15 @@ export default function AdvanceEmailModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subject, body }),
       });
+      if (!res.ok) throw await formatResponseError(res, "saving email template");
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Could not save template");
       setSubject(data.template?.subject || subject);
       setBody(data.template?.body || body);
       setSuccess("Template saved.");
       onSaved?.(data.template);
       return true;
     } catch (err) {
-      setError(err.message || "Could not save template");
+      setError(err);
       return false;
     } finally {
       setBusy("");
@@ -81,7 +83,7 @@ export default function AdvanceEmailModal({
   const sendTest = useCallback(async () => {
     if (!roundId) return;
     setBusy("test");
-    setError("");
+    setError(null);
     setSuccess("");
     try {
       const saved = await saveTemplate();
@@ -91,11 +93,11 @@ export default function AdvanceEmailModal({
         `${API}/rounds/${encodeURIComponent(roundId)}/advance-notification/test`,
         { method: "POST" }
       );
+      if (!res.ok) throw await formatResponseError(res, "sending test email");
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Test send failed");
       setSuccess(`Test email sent to ${data.sentTo || userEmail || "your inbox"}.`);
     } catch (err) {
-      setError(err.message || "Test send failed");
+      setError(err);
     } finally {
       setBusy("");
     }
@@ -112,7 +114,7 @@ export default function AdvanceEmailModal({
     if (!confirmed) return;
 
     setBusy("send");
-    setError("");
+    setError(null);
     setSuccess("");
     try {
       const saved = await saveTemplate();
@@ -126,8 +128,8 @@ export default function AdvanceEmailModal({
           body: JSON.stringify({ allowResend }),
         }
       );
+      if (!res.ok) throw await formatResponseError(res, `${label.toLowerCase()}ing advance emails`);
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `${label} failed`);
 
       const parts = [`${data.sent} sent`];
       if (data.failed) parts.push(`${data.failed} failed`);
@@ -135,7 +137,7 @@ export default function AdvanceEmailModal({
       setSuccess(`${label} complete: ${parts.join(", ")}.`);
       onSent?.();
     } catch (err) {
-      setError(err.message || `${label} failed`);
+      setError(err);
     } finally {
       setBusy("");
     }
@@ -207,7 +209,12 @@ export default function AdvanceEmailModal({
 
         {!gmailConfigured ? (
           <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: 8, background: "rgba(239,159,39,0.12)", border: "1px solid rgba(239,159,39,0.35)", fontSize: 12, color: "#92400E" }}>
-            Gmail is not configured on the server. Set up OAuth or Workspace delegation (see server/docs/gmail-setup.md).
+            Gmail integration is not configured on the server. Contact an administrator to enable email dispatch.
+            {import.meta.env.DEV && (
+              <span style={{ display: "block", marginTop: 4, fontSize: 11, color: "#78350F" }}>
+                🛠 Local dev: see server/docs/gmail-setup.md
+              </span>
+            )}
           </div>
         ) : null}
 
@@ -265,7 +272,7 @@ export default function AdvanceEmailModal({
         </p>
 
         {error ? (
-          <p style={{ margin: "12px 0 0", fontSize: 12, color: css.red, fontWeight: 600 }}>{error}</p>
+          <ErrorBanner error={error} compact onDismiss={() => setError(null)} style={{ marginTop: 12 }} />
         ) : null}
         {success ? (
           <p style={{ margin: "12px 0 0", fontSize: 12, color: css.greenDark, fontWeight: 600 }}>{success}</p>
