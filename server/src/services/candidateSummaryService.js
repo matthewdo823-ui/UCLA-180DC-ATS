@@ -43,7 +43,7 @@ function formatFrqBlocks(candidate = {}) {
 function buildSummarySourceHash({ candidate }) {
   const payload = {
     model: getModel(),
-    promptVersion: "two-sentence-frq-v1",
+    promptVersion: "two-sentence-frq-v2",
     source: "frqs",
     frqs: Object.fromEntries(
       FRQ_FIELDS.map(([, key]) => [key, candidate?.[key] || ""])
@@ -103,43 +103,67 @@ async function generateCandidateSummary(applicationPayload) {
     };
   }
 
-  const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      systemInstruction: {
-        parts: [{
-          text: "You write clear, professional recruiting briefings for a student consulting organization. Summarize only the supplied free-response answers, never add outside context, and always return exactly two concise sentences.",
+  async function requestSummary(retry = false) {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        systemInstruction: {
+          parts: [{
+            text: "You write clear, professional recruiting briefings for a student consulting organization. Summarize only the supplied free-response answers, never add outside context, and always return exactly two concise sentences.",
+          }],
+        },
+        contents: [{
+          role: "user",
+          parts: [{ text: retry
+            ? `${prompt}\n\nYour previous response did not contain exactly two complete sentences. Return only two short, complete sentences and end both with punctuation.`
+            : prompt }],
         }],
+        generationConfig: {
+          temperature: retry ? 0.2 : 0.4,
+          maxOutputTokens: 320,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
+        },
       },
-      contents: [{
-        role: "user",
-        parts: [{ text: prompt }],
-      }],
-      generationConfig: {
-        temperature: 0.4,
-        maxOutputTokens: 220,
-      },
-    },
-    {
-      params: { key: apiKey },
-      headers: { "Content-Type": "application/json" },
-      timeout: 45000,
-    }
-  );
+      {
+        params: { key: apiKey },
+        headers: { "Content-Type": "application/json" },
+        timeout: 45000,
+      }
+    );
 
-  const summary = String(
-    response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || ""
-  ).trim();
+    const candidate = response.data?.candidates?.[0];
+    const summary = String(
+      candidate?.content?.parts?.map((part) => part.text || "").join("") || ""
+    ).trim();
+    return { summary, finishReason: candidate?.finishReason || "" };
+  }
 
-  if (!summary) {
-    throw new Error("AI returned an empty summary");
+  let result = await requestSummary(false);
+  if (result.finishReason !== "STOP" || !isCompleteTwoSentenceSummary(result.summary)) {
+    result = await requestSummary(true);
+  }
+
+  if (result.finishReason !== "STOP") {
+    throw new Error(`AI summary generation stopped before completion (${result.finishReason || "unknown reason"})`);
+  }
+  if (!isCompleteTwoSentenceSummary(result.summary)) {
+    throw new Error("AI did not return exactly two complete sentences");
   }
 
   return {
-    summary,
+    summary: result.summary,
     model,
     generatedAt: new Date().toISOString(),
   };
+}
+
+function isCompleteTwoSentenceSummary(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  const sentenceEndings = text.match(/[.!?](?=\s|$)/g) || [];
+  return sentenceEndings.length === 2 && /[.!?]$/.test(text);
 }
 
 async function resolveCandidateSummary(supabase, {
@@ -205,6 +229,7 @@ module.exports = {
   buildSummarySourceHash,
   isCacheValid,
   getCacheTtlMs,
+  isCompleteTwoSentenceSummary,
   generateCandidateSummary,
   resolveCandidateSummary,
 };
