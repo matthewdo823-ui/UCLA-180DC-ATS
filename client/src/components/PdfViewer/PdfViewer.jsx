@@ -19,16 +19,41 @@ function loadPdfjs() {
 
 function PageCanvas({ page, viewport }) {
   const canvasRef = useRef(null);
-  const rendered = useRef(false);
+  const [renderError, setRenderError] = useState(false);
 
   useEffect(() => {
-    if (!canvasRef.current || rendered.current) return;
-    rendered.current = true;
+    if (!canvasRef.current) return;
+    let cancelled = false;
     const canvas = canvasRef.current;
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    page.render({ canvasContext: canvas.getContext("2d"), viewport });
+
+    let renderTask;
+    try {
+      renderTask = page.render({ canvasContext: canvas.getContext("2d"), viewport });
+      renderTask.promise.catch((error) => {
+        if (cancelled) return;
+        console.warn("Could not render PDF page:", error);
+        setRenderError(true);
+      });
+    } catch (error) {
+      console.warn("Could not start PDF page render:", error);
+      setRenderError(true);
+    }
+
+    return () => {
+      cancelled = true;
+      renderTask?.cancel();
+    };
   }, [page, viewport]);
+
+  if (renderError) {
+    return (
+      <div style={{ color: css.textGray, fontSize: 13, padding: 20, textAlign: "center" }}>
+        This PDF page could not be rendered.
+      </div>
+    );
+  }
 
   return (
     <canvas ref={canvasRef} style={{ width: "100%", maxWidth: viewport.width }} />
