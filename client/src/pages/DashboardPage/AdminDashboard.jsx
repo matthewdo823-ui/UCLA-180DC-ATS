@@ -73,8 +73,12 @@ function getDashboardFocus({ context, pipeline, actionItems, isInterview }) {
   if ((pipeline?.awaitingReviews || 0) > 0) {
     return {
       eyebrow: `${context.activeRound.name || "Active round"}`,
-      title: `${pipeline.awaitingReviews} application${pipeline.awaitingReviews === 1 ? "" : "s"} still need review`,
-      detail: `${pipeline.reviewed || 0} of ${pipeline.applicants || 0} complete across the team.`,
+      title: isInterview
+        ? `${pipeline.awaitingReviews} candidate${pipeline.awaitingReviews === 1 ? "" : "s"} still need evaluation`
+        : `${pipeline.awaitingReviews} application${pipeline.awaitingReviews === 1 ? "" : "s"} still need complete grading`,
+      detail: isInterview
+        ? `${pipeline.reviewed || 0} of ${pipeline.applicants || 0} evaluated.`
+        : `${pipeline.resumeReviewed || 0} have a resume grade and ${pipeline.frqReviewed || 0} have a free-response grade.`,
       actionLabel: isInterview ? "Open interviews" : "Open review queue",
       path: isInterview ? "/interviews" : "/scoreboard",
     };
@@ -193,7 +197,11 @@ export default function AdminDashboard() {
               <div style={{ flexShrink: 0, minWidth: 142, textAlign: "right" }}>
                 <div style={{ fontSize: 11, color: css.textGray, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Round progress</div>
                 <div style={{ marginTop: 3, fontSize: 25, fontWeight: 700, color: css.greenDark, letterSpacing: "-0.03em" }}>{reviewPct}%</div>
-                <div style={{ marginTop: 2, marginBottom: 13, fontSize: 12, color: css.textGray }}>{pipeline?.reviewed || 0} of {pipeline?.applicants || 0} reviewed</div>
+                <div style={{ marginTop: 2, marginBottom: 13, fontSize: 12, color: css.textGray }}>
+                  {isInterview
+                    ? `${pipeline?.reviewed || 0} of ${pipeline?.applicants || 0} evaluated`
+                    : `${pipeline?.resumeReviewed || 0} resume · ${pipeline?.frqReviewed || 0} free response`}
+                </div>
                 <button
                   type="button"
                   onClick={() => navigate(focus.path)}
@@ -230,6 +238,10 @@ export default function AdminDashboard() {
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 16, paddingBottom: 14, marginBottom: 4, borderBottom: `1px solid ${css.borderLight}`, fontSize: 13 }}>
                       <span style={{ color: css.textDark, fontWeight: 700 }}>{graderSummary.activeGraders} active <span style={{ color: css.textGray, fontWeight: 500 }}>of {graderSummary.graders} graders</span></span>
                       <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} not started</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: "10px 0 12px", color: css.textGray, fontSize: 12 }}>
+                      <span><strong style={{ color: css.textDark }}>{graderSummary.totalResumeGrades}</strong> resume grades</span>
+                      <span><strong style={{ color: css.textDark }}>{graderSummary.totalFrqGrades}</strong> free-response grades</span>
                     </div>
                     {graderSummary.behindGraders?.length > 0 ? (
                       <>

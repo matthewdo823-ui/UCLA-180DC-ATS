@@ -15,6 +15,7 @@ import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatPoints, formatScore, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
 import { resolveReviewMaxScore } from "../../utils/rubric";
+import { formatGradeCounts, getFreeResponseGradeCount, getResumeGradeCount } from "../../utils/reviewCounts";
 import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
 import {
   buildDecisionPayload,
@@ -207,7 +208,7 @@ function buildActiveFilterPills(filters, deliberationMode) {
     pills.push({ key: "year", label: `Year: ${effective.year}`, clear: { year: "all" } });
   }
   if (effective.reviews !== "all") {
-    const reviewLabels = { 0: "No reviews", 1: "1 review", "1+": "Reviewed", "2+": "2+ reviews" };
+    const reviewLabels = { 0: "No resume grades", 1: "1 resume grade", "1+": "Resume graded", "2+": "2+ resume grades" };
     pills.push({ key: "reviews", label: reviewLabels[effective.reviews] || effective.reviews, clear: { reviews: "all" } });
   }
   if (effective.scoreBand !== "all") {
@@ -328,7 +329,6 @@ function ScorecardModal({
   const availableScore = candidate?.compositeMax ?? candidate?.maxScore;
   const reviews = candidate?.reviews ?? [];
   const frqReviews = candidate?.frqReviews ?? [];
-  const totalReviewCount = reviews.length + frqReviews.length;
   const latestNote = [...reviews, ...frqReviews].reverse().find(review => review.notes)?.notes;
 
   useEffect(() => {
@@ -481,7 +481,7 @@ function ScorecardModal({
               style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: 0 }}
             >
               <span style={{ fontSize: 11, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em" }}>
-                REVIEWS ({totalReviewCount})
+                GRADES ({reviews.length} resume · {frqReviews.length} free response)
               </span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <ReviewerStack reviews={reviews} />
@@ -541,8 +541,8 @@ function ScorecardModal({
                     </div>
                   );
                 })}
-                {totalReviewCount === 0 ? (
-                  <p style={{ margin: "8px 0 0", fontSize: 12, color: css.textGray }}>No reviews yet.</p>
+                {reviews.length === 0 && frqReviews.length === 0 ? (
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: css.textGray }}>No resume or free-response grades yet.</p>
                 ) : null}
               </div>
             )}
@@ -1082,7 +1082,7 @@ export default function ScoreboardPage() {
         case "REJECTED":
           setFilters(f => ({ ...f, decision: "reject" }));
           break;
-        case "REVIEWED":
+        case "RESUME GRADED":
           setFilters(f => ({ ...f, reviews: "1+" }));
           break;
         case "APPLICANTS":
@@ -1095,7 +1095,7 @@ export default function ScoreboardPage() {
       return;
     }
     switch (label) {
-      case "REVIEWED":
+      case "RESUME GRADED":
         setFilters(f => ({ ...f, reviews: "1+" }));
         break;
       case "ADVANCED":
@@ -1151,18 +1151,23 @@ export default function ScoreboardPage() {
     }
   }, [viewingHistorical, deliberationMode]);
 
+  const resumeGradedApplicants = candidates.filter((candidate) => getResumeGradeCount(candidate) > 0).length;
+  const freeResponseGradedApplicants = candidates.filter((candidate) => getFreeResponseGradeCount(candidate) > 0).length;
+
   const statRows = deliberationMode
     ? [
         { label: "PENDING", value: statCount(displayStats?.pending ?? (displayStats?.applicants != null ? displayStats?.applicants : null)), clickable: true },
         { label: "ADVANCED", value: statCount(displayStats?.advanced ?? 0), clickable: true },
         { label: "HOLD", value: statCount(displayStats?.hold ?? 0), clickable: true },
         { label: "REJECTED", value: statCount(displayStats?.rejected ?? 0), clickable: true },
-        { label: "REVIEWED", value: statCount(displayStats?.reviewed), clickable: true },
+        { label: "RESUME GRADED", value: statCount(resumeGradedApplicants), clickable: true },
+        { label: "FREE RESPONSE GRADED", value: statCount(freeResponseGradedApplicants), clickable: false },
         { label: "APPLICANTS", value: statCount(displayStats?.applicants), clickable: true },
       ]
     : [
         { label: "APPLICANTS", value: statCount(displayStats?.applicants), clickable: true },
-        { label: "REVIEWED", value: statCount(displayStats?.reviewed), clickable: true },
+        { label: "RESUME GRADED", value: statCount(resumeGradedApplicants), clickable: true },
+        { label: "FREE RESPONSE GRADED", value: statCount(freeResponseGradedApplicants), clickable: false },
         { label: "ADVANCED", value: statCount(displayStats?.advanced), clickable: true },
         { label: "AVG SCORE", value: formatPoints(displayStats?.avgScore, displayStats?.avgMaxScore), clickable: false },
       ];
@@ -1227,7 +1232,7 @@ export default function ScoreboardPage() {
                     ? "Click a row to focus, then choose Advance, Hold, or Reject."
                     : `Viewing ${activeRound?.name || "this round"} — updates every few seconds.`
               ) : (
-                "Browse candidates by score, major, and review status."
+                "Browse candidates by score, major, and resume/free-response grade status."
               )}
               {hasActiveNarrowing ? (
                 <span style={{ display: "block", marginTop: 6, fontSize: 13, color: t.titleAccent, fontWeight: 600 }}>
@@ -1539,7 +1544,7 @@ export default function ScoreboardPage() {
             {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </FilterField>
-        <FilterField label="Reviews" theme={t}>
+        <FilterField label="Resume grades" theme={t}>
           <select value={filters.reviews} onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))} style={barSelectStyle}>
             <option value="all">Any count</option>
             <option value="0">None yet (0)</option>
@@ -1744,7 +1749,6 @@ export default function ScoreboardPage() {
           const decisionStyle = DECISION_STYLE[decisionStatus];
           const isFocused = deliberationMode && focusedCandidateId != null && String(focusedCandidateId) === String(c.id);
           const rowSaving = savingDecisionId === c.id;
-          const reviewCount = c.numReviews ?? c.reviews?.length ?? 0;
           const headlineScore = getHeadlineScore(c);
           const rowBg = isFocused
             ? t.rowFocus
@@ -1825,7 +1829,7 @@ export default function ScoreboardPage() {
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, lineHeight: 1.35 }}>
                 {equalizeActive ? "Equalized points" : "Average points"}
                 <br />
-                {reviewCount} {reviewCount === 1 ? "review" : "reviews"}
+                {formatGradeCounts(c, { compact: true })}
               </div>
             </div>
 

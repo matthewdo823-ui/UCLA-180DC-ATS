@@ -40,6 +40,10 @@ const SCOREBOARD_MODES = [
     headingAccent: "scoreboard",
     description: "Round 1 grading progress — search by name or email, or use the status chips to focus on who is done, in progress, or not started yet.",
     columnLabel: "RESUMES GRADED",
+    totalLabel: "TOTAL RESUME GRADES",
+    gradedLabel: "RESUME GRADES",
+    recentLabel: "RECENT RESUME GRADES",
+    noGradesLabel: "No resume grades submitted yet.",
     badge: "ROUND 1 · GRADER",
     emptyLabel: "No graders yet.",
   },
@@ -52,6 +56,10 @@ const SCOREBOARD_MODES = [
     headingAccent: "scoreboard",
     description: "FRQ grading progress — search by name or email, or use the status chips to focus on who is done, in progress, or not started yet.",
     columnLabel: "FRQ GRADED",
+    totalLabel: "TOTAL FREE-RESPONSE GRADES",
+    gradedLabel: "FREE-RESPONSE GRADES",
+    recentLabel: "RECENT FREE-RESPONSE GRADES",
+    noGradesLabel: "No free-response grades submitted yet.",
     badge: "FRQ · GRADER",
     emptyLabel: "No FRQ graders yet.",
   },
@@ -127,7 +135,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4 }) {
   );
 }
 
-function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge = "ROUND 1 · GRADER" }) {
+function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge = "ROUND 1 · GRADER", gradedLabel = "RESUME GRADES", recentLabel = "RECENT RESUME GRADES", noGradesLabel = "No resume grades submitted yet." }) {
   useEffect(() => {
     function onKeyDown(event) {
       if (event.key === "Escape") onClose();
@@ -214,7 +222,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
 
           <div style={{ background: cardPale, padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #DCE7D2" }}>
             <div>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>REVIEWS GRADED</p>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>{gradedLabel}</p>
               <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
                 {grader.reviewCount} <span style={{ fontSize: 14, color: "#3B6D11" }}>/ {grader.expectedReviews}</span>
               </p>
@@ -243,7 +251,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
 
           <div style={{ padding: "12px 18px 18px", borderTop: "1px solid #EAEAEA", marginTop: 12 }}>
             <p style={{ fontSize: 11, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em", margin: "0 0 8px" }}>
-              RECENT REVIEWS ({grader.reviews?.length ?? 0})
+              {recentLabel} ({grader.reviews?.length ?? 0})
             </p>
             {(grader.reviews ?? []).slice(0, 5).map(review => (
               <div key={review.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
@@ -255,7 +263,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
               </div>
             ))}
             {grader.reviews?.length === 0 && (
-              <div style={{ fontSize: 12, color: css.textGray, padding: "8px 0" }}>No reviews submitted yet.</div>
+              <div style={{ fontSize: 12, color: css.textGray, padding: "8px 0" }}>{noGradesLabel}</div>
             )}
           </div>
         </div>
@@ -476,7 +484,7 @@ export default function GraderScoreboardPage() {
         {[
           ["GRADERS", data.stats?.graders ?? "—"],
           ["ACTIVE", data.stats?.activeGraders ?? "—"],
-          ["TOTAL REVIEWS", data.stats?.totalReviews ?? "—"],
+          [activeMode.totalLabel, data.stats?.totalReviews ?? "—"],
           ["GOAL", data.stats?.expectedReviews ?? "—"],
         ].map(([label, value], index) => (
           <div key={label} style={{ borderRight: index < 3 ? `1px solid ${css.borderLight}` : "none", padding: index ? "4px 0 4px 24px" : "4px 0" }}>
@@ -578,6 +586,9 @@ export default function GraderScoreboardPage() {
           metrics={metrics}
           maxPerCategory={maxPerCategory}
           badge={activeMode.badge}
+          gradedLabel={activeMode.gradedLabel}
+          recentLabel={activeMode.recentLabel}
+          noGradesLabel={activeMode.noGradesLabel}
           onClose={() => setSelectedGrader(null)}
         />
       )}

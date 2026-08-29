@@ -102,7 +102,7 @@ export default function GraderDashboard() {
             <div>
               <span style={{ fontSize: 13, color: css.textGray, fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
                 <span>{isInterview ? "📅" : "⭐"}</span>
-                {isInterview ? "Your interview progress" : "Your grading goal"}
+                {isInterview ? "Your interview progress" : "Your resume-grading goal"}
               </span>
               <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>
                 {loading ? "Loading…" : activeRound ? goalLabel : "No active round"}
@@ -119,7 +119,7 @@ export default function GraderDashboard() {
               ) : null}
             </div>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 12, color: css.textGray, fontWeight: 500 }}>Progress</div>
+              <div style={{ fontSize: 12, color: css.textGray, fontWeight: 500 }}>{isInterview ? "Progress" : "Resume grades"}</div>
               <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>
                 {loading ? "—" : goal > 0 ? `${count}/${goal}` : count}
               </div>
@@ -159,7 +159,7 @@ export default function GraderDashboard() {
         <Panel title="Quick links">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
             {[
-              { label: "Past reviews", path: gradingPath, icon: "📋", desc: "View and edit your submissions", state: { openPastQueue: true } },
+              { label: "Past resume grades", path: gradingPath, icon: "📋", desc: "View and edit your resume grades", state: { openPastQueue: true } },
               { label: "Scoreboard", path: "/scoreboard", icon: "📊", desc: "See ranked candidates" },
               { label: "Demographics", path: "/demographics", icon: "📈", desc: "Pipeline diversity overview" },
             ].map((link) => (

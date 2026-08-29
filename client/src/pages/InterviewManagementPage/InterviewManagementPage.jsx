@@ -74,7 +74,7 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
             </p>
             {candidate.avgResumeScore != null ? (
               <p style={{ margin: "6px 0 0", fontSize: 12, color: css.greenDark, fontWeight: 600 }}>
-                Resume screen avg: {formatPoints(candidate.avgResumeScore, candidate.avgResumeMaxScore)} · {candidate.resumeReviewCount} review{candidate.resumeReviewCount === 1 ? "" : "s"}
+                Resume screen avg: {formatPoints(candidate.avgResumeScore, candidate.avgResumeMaxScore)} · {candidate.resumeReviewCount} resume grade{candidate.resumeReviewCount === 1 ? "" : "s"}
               </p>
             ) : null}
           </div>

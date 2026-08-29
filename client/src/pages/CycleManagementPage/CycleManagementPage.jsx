@@ -704,7 +704,7 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
               Slug: {cycle.slug} · Created {formatDate(cycle.createdAt, { style: "short" })}
             </p>
             <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
-              {cycle.counts?.candidates ?? 0} candidates · {cycle.counts?.resumes ?? 0} resumes · {cycle.counts?.reviews ?? 0} reviews
+              {cycle.counts?.candidates ?? 0} candidates · {cycle.counts?.resumes ?? 0} resumes · {cycle.counts?.resumeReviews ?? 0} resume grades · {cycle.counts?.frqReviews ?? 0} free-response grades
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>

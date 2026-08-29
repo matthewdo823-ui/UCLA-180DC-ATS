@@ -2,14 +2,15 @@ import { css } from "../../theme/colors";
 import { formatPoints, getInitials, hasNumericScore } from "../../utils/format";
 import { formatRoundKind } from "../../constants/rounds";
 import { passesDecisionFilter } from "./decisionUtils";
+import { getResumeGradeCount } from "../../utils/reviewCounts";
 
 export const defaultFilters = { major: "all", year: "all", reviews: "all", scoreBand: "all", decision: "all", signals: "all" };
 export const SORT_TABS = [
   { id: "performance_desc", label: "Score · high to low" }, { id: "performance_asc", label: "Score · low to high" },
   { id: "referrals_desc", label: "Referrals · most" }, { id: "last_review_desc", label: "Last grade · newest" },
   { id: "last_review_asc", label: "Last grade · oldest" }, { id: "name_asc", label: "Name · A–Z" },
-  { id: "name_desc", label: "Name · Z–A" }, { id: "reviews_desc", label: "Reviews · most" },
-  { id: "reviews_asc", label: "Reviews · fewest" }, { id: "created_desc", label: "Applied · newest" },
+  { id: "name_desc", label: "Name · Z–A" }, { id: "reviews_desc", label: "Resume grades · most" },
+  { id: "reviews_asc", label: "Resume grades · fewest" }, { id: "created_desc", label: "Applied · newest" },
   { id: "created_asc", label: "Applied · oldest" },
 ];
 
@@ -31,7 +32,7 @@ export function sortYears(items) {
     .sort((a, b) => yearRank(a) - yearRank(b) || a.localeCompare(b, undefined, { sensitivity: "base" }));
 }
 export function countActiveFilters(filters) { return Object.keys(defaultFilters).filter((key) => filters[key] !== defaultFilters[key]).length; }
-export function getNumReviews(candidate) { return candidate?.numReviews ?? candidate?.reviews?.length ?? 0; }
+export function getNumReviews(candidate) { return getResumeGradeCount(candidate); }
 export function getNormalizedScore(candidate) { return hasNumericScore(candidate?.normalizedScore) ? Number(candidate.normalizedScore) : null; }
 export function getAggregateScore(candidate) { return hasNumericScore(candidate?.aggregateScore) ? Number(candidate.aggregateScore) : null; }
 export function getPerformanceSortScore(candidate) { return getAggregateScore(candidate); }

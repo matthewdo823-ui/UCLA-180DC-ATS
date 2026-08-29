@@ -293,7 +293,8 @@ export default function AssignmentsPage() {
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                            <span style={metaPillStyle}>{candidate.reviewCount} reviews</span>
+                            <span style={metaPillStyle}>{candidate.reviewCount} resume grades</span>
+                            <span style={metaPillStyle}>{candidate.frqReviewCount || 0} free-response grades</span>
                             {candidate.assignedCount > 0 && (
                               <span style={{ ...metaPillStyle, ...assignedPillStyle }}>
                                 {candidate.pendingCount > 0

@@ -127,10 +127,12 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>
-            {isInterview ? "Evaluation progress" : "Review progress"}
+            {isInterview ? "Evaluation progress" : "Complete grading progress"}
           </span>
           <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>
-            {reviewed} / {applicants} ({reviewPct}%)
+            {isInterview
+              ? `${reviewed} / ${applicants} (${reviewPct}%)`
+              : `${pipeline.resumeReviewed || 0}/${applicants} resume · ${pipeline.frqReviewed || 0}/${applicants} free response`}
           </span>
         </div>
         <ProgressBar pct={reviewPct} />
@@ -516,7 +518,7 @@ export function GraderProgressRows({ graders, expectedReviews }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: css.textDark }}>{grader.name}</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: css.greenDark }}>
-                {grader.reviewCount} / {expectedReviews}
+                {grader.resumeReviewCount ?? grader.reviewCount} / {expectedReviews} resume · {grader.frqReviewCount || 0} free response
               </span>
             </div>
             <ProgressBar pct={pct} />

@@ -516,33 +516,22 @@ export default function ScreenerPage() {
   }
 
   const screeningBlocked = !cycleLoading && (!activeRound || cycleError || !isResumeRound);
-  const doneCount = isFrqMode ? myFrqReviews.length : myReviews.length;
-
   const topbarRightSlot = (
     <>
-      <button type="button" onClick={() => setDrawerOpen(true)} style={topbarGhostButtonStyle}>
-        📋 {isFrqMode ? "Past FRQ Grades" : "Past Reviews"}
+      <button type="button" onClick={() => { setGradingMode(GRADING_MODES.RESUME); setDrawerOpen(true); }} style={topbarGhostButtonStyle}>
+        📋 Resume grades
         <span style={{ background: css.greenDark, color: css.cardWhite, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: "2px 7px" }}>
-          {doneCount}
+          {myReviews.length}
         </span>
       </button>
-      <div style={{
-        width: 40,
-        height: 40,
-        borderRadius: "50%",
-        border: `1px solid ${css.greenDark}`,
-        background: "rgba(40, 98, 65, 0.08)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        marginLeft: 8,
-      }}
-      >
-        <span style={{ fontSize: 14, fontWeight: 700, color: css.greenDark, lineHeight: 1 }}>{doneCount}</span>
-        <span style={{ fontSize: 7, fontWeight: 700, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.02em", marginTop: 1 }}>done</span>
-      </div>
+      {isAdmin ? (
+        <button type="button" onClick={() => { setGradingMode(GRADING_MODES.FRQ); setDrawerOpen(true); }} style={topbarGhostButtonStyle}>
+          📝 Free-response grades
+          <span style={{ background: css.greenDark, color: css.cardWhite, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: "2px 7px" }}>
+            {myFrqReviews.length}
+          </span>
+        </button>
+      ) : null}
     </>
   );
 

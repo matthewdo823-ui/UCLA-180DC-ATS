@@ -103,7 +103,8 @@ export default function ApplicationEvaluationsSection({ candidate, scoring }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
         <StatTile label="Average score" value={formatPoints(averageScore, averageMaxScore)} detail={hasNumericScore(averageScore) ? "Average points earned per resume review" : "No score submitted yet"} accent />
-        <StatTile label="Times graded" value={reviews.length} detail={`${reviews.length} completed ${reviews.length === 1 ? "review" : "reviews"}`} />
+        <StatTile label="Resume grades" value={reviews.length} detail={`${reviews.length} completed resume ${reviews.length === 1 ? "grade" : "grades"}`} />
+        <StatTile label="Free-response grades" value={frqReviews.length} detail={`${frqReviews.length} completed free-response ${frqReviews.length === 1 ? "grade" : "grades"}`} />
         <StatTile label="Distinct graders" value={distinctGraders} detail="People who submitted a resume score" />
       </div>
 
@@ -119,7 +120,7 @@ export default function ApplicationEvaluationsSection({ candidate, scoring }) {
       <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${css.borderLight}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
           <h3 style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>Previous grades</h3>
-          <span style={{ color: css.textGray, fontSize: 12 }}>{reviews.length} total</span>
+          <span style={{ color: css.textGray, fontSize: 12 }}>{reviews.length} resume · {frqReviews.length} free response</span>
         </div>
 
         {reviews.length > 0 ? (
@@ -133,7 +134,7 @@ export default function ApplicationEvaluationsSection({ candidate, scoring }) {
 
       {frqReviews.length > 0 && (
         <details style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${css.borderLight}` }}>
-          <summary style={{ color: cardGreen, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Application-response grades ({frqReviews.length})</summary>
+          <summary style={{ color: cardGreen, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Free-response grades ({frqReviews.length})</summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8, marginTop: 10 }}>
             {frqReviews.map((review, index) => (
               <div key={review.id} style={{ padding: "11px 12px", borderRadius: 8, background: "#F8FAF6", border: `1px solid ${css.borderLight}` }}>
