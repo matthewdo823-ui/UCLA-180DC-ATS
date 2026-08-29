@@ -1,4 +1,6 @@
 import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
+import { RESUME_MAX_SCORE } from "../../constants/config";
+import { scaleRubricScoreToResumeScore } from "../../utils/rubric";
 
 function getGraderKey(review) {
   if (review?.gradedBy != null) return String(review.gradedBy);
@@ -128,7 +130,7 @@ function computeNormalizedPercent(scores, review, maxPerCategory) {
   const metrics = Object.keys(scores || {});
   if (!metrics.length) return null;
 
-  const maxScore = Number(review?.maxScore) || metrics.length * maxPerCategory;
+  const maxScore = Number(review?.rubricMaxScore) || metrics.length * maxPerCategory;
   if (!Number.isFinite(maxScore) || maxScore <= 0) return null;
 
   const raw = computeRawScore(scores, metrics);
@@ -166,7 +168,7 @@ function averageFrqScore(frqReviews = []) {
 function applyCompositeFromParts(candidate, resumeAggregateScore, resumeNormalizedScore, frqReviews) {
   const frqAvg = averageFrqScore(frqReviews);
   const frqPending = !frqReviews.length;
-  const resumeMax = Number(candidate.compositeMax) - (frqPending ? 0 : FRQ_MAX_SCORE);
+  const resumeMax = RESUME_MAX_SCORE;
   const compositeMax = frqPending ? resumeMax : resumeMax + FRQ_MAX_SCORE;
 
   let aggregateScore = resumeAggregateScore;
@@ -248,9 +250,12 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
       equalizedReviews = reviews.map(review => {
         const adjustedScores = equalizeReviewScores(review, resumeGraderStats, resumeGlobalStats);
         const rawScore = computeRawScore(adjustedScores, Object.keys(adjustedScores));
+        const rubricMaxScore = Number(review?.rubricMaxScore)
+          || Object.keys(adjustedScores).length * maxPerCategory;
+        const resumeScore = scaleRubricScoreToResumeScore(rawScore, rubricMaxScore);
 
-        if (Number.isFinite(rawScore)) {
-          totalRaw += rawScore;
+        if (Number.isFinite(resumeScore)) {
+          totalRaw += resumeScore;
           reviewCount += 1;
         }
 
@@ -259,15 +264,16 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
         return {
           ...review,
           scores: adjustedScores,
-          score: rawScore,
+          score: resumeScore,
+          rubricScore: rawScore,
+          rubricMaxScore,
           normalizedScore,
           equalized: true,
         };
       });
 
       resumeAggregateScore = reviewCount > 0 ? Number((totalRaw / reviewCount).toFixed(1)) : null;
-      const resumeMax = Number(candidate.compositeMax) - (frqReviews.length ? FRQ_MAX_SCORE : 0)
-        || resumeMetrics.length * maxPerCategory;
+      const resumeMax = RESUME_MAX_SCORE;
       resumeNormalizedScore = resumeAggregateScore != null && resumeMax > 0
         ? Number(((resumeAggregateScore / resumeMax) * 100).toFixed(1))
         : null;

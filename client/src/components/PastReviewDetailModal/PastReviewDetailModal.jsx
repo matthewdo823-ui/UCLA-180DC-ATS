@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
-import { BUBBLE_COLORS, API, RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
-import { resolveReviewMaxScore, rubricFromSnapshot } from "../../utils/rubric";
+import { BUBBLE_COLORS, API, RESUME_MAX_SCORE, RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
+import { rubricFromSnapshot, scaleRubricScoreToResumeScore } from "../../utils/rubric";
 import { css } from "../../theme/colors";
 import { formatScore, getInitials, titleCase } from "../../utils/format";
 
@@ -119,7 +119,10 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
   );
   const metrics = rubric.metrics || [];
   const maxPerCategory = rubric.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
-  const maxScore = resolveReviewMaxScore(review, { metrics, maxPerCategory });
+  const rubricMaxScore = Number(review?.rubricMaxScore)
+    || Number(rubric.maxScore)
+    || metrics.length * maxPerCategory;
+  const maxScore = RESUME_MAX_SCORE;
 
   useEffect(() => {
     if (!review) return;
@@ -173,7 +176,8 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
     [scores, metrics, maxPerCategory]
   );
 
-  const total = useMemo(() => aggregateFromScores(scores, metrics), [scores, metrics]);
+  const rawTotal = useMemo(() => aggregateFromScores(scores, metrics), [scores, metrics]);
+  const total = scaleRubricScoreToResumeScore(rawTotal, rubricMaxScore);
 
   const handleSave = useCallback(async () => {
     if (!review?.reviewId || !scoringComplete) return;

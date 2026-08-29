@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { css } from "../../theme/colors";
+import { RESUME_MAX_SCORE } from "../../constants/config";
 import { formatScore } from "../../utils/format";
-import { resolveReviewMaxScore } from "../../utils/rubric";
+import { resolveReviewMaxScore, scaleRubricScoreToResumeScore } from "../../utils/rubric";
 import useReviewOverrides from "./useReviewOverrides";
 
 const cardGreen = "#085041";
@@ -25,14 +26,28 @@ function getReviewScoreLabel(review, maxScore) {
   return `${formatScore(total)}/${max} pts`;
 }
 
+function getRubricMaximum(review) {
+  const snapshot = review?.rubricSnapshot || review?.rubric_snapshot;
+  return Number(review?.rubricMaxScore)
+    || Number(snapshot?.maxScore)
+    || Object.keys(review?.scores || {}).length * (Number(snapshot?.maxPerCategory) || 4);
+}
+
 function getBaselineTotal(review) {
+  if (Number.isFinite(Number(review?.sourceScore))) return Number(review.sourceScore);
   const sourceScores = review?.sourceScores || review?.scores || {};
-  return Object.values(sourceScores).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  const raw = Object.values(sourceScores).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  return scaleRubricScoreToResumeScore(raw, getRubricMaximum(review)) ?? 0;
 }
 
 function getEffectiveOverrideScore(review, override) {
-  if (override?.overrideScore != null) return Number(override.overrideScore);
-  if (review?.adminOverride?.overrideScore != null) return Number(review.adminOverride.overrideScore);
+  const activeOverride = override?.overrideScore != null ? override : review?.adminOverride;
+  if (activeOverride?.overrideScore != null) {
+    const stored = Number(activeOverride.overrideScore);
+    return Number(activeOverride.scoreScale) === RESUME_MAX_SCORE
+      ? stored
+      : scaleRubricScoreToResumeScore(stored, getRubricMaximum(review));
+  }
   return getBaselineTotal(review);
 }
 
@@ -62,7 +77,7 @@ export default function ReviewOverrideSection({
       const hasOverride = override?.overrideScore != null;
       const maxScore = resolveReviewMaxScore(review, { metrics, maxPerCategory });
       const displayReview = hasOverride
-        ? { ...review, score: override.overrideScore }
+        ? { ...review, score: getEffectiveOverrideScore(review, override) }
         : review;
 
       return {

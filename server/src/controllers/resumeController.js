@@ -10,6 +10,7 @@ const {
     requireActiveResumeScreening,
 } = require('../utils/cycleContext');
 const {
+    RESUME_MAX_SCORE,
     getRubricForYear,
     normalizeScreeningScoresInput,
     buildRubricSnapshot,
@@ -297,6 +298,8 @@ function mapMyReviewRow(row, rubricConfig = null) {
         metrics: scoring.metrics,
         total: scoring.score,
         maxScore: scoring.maxScore,
+        rubricScore: scoring.rubricScore,
+        rubricMaxScore: scoring.rubricMaxScore,
         normalizedScore: scoring.normalizedScore ?? resolveReviewNormalizedValue(row, {
             rubricConfig,
             candidateYear: cand?.year,
@@ -351,7 +354,7 @@ async function fetchAssignedResumesForGrader({ gradedBy, cycleId, reviewedResume
     const { data, error } = await supabase
         .from('resumes')
         .select(`*,
-            candidates(year, major)
+            candidates(year, major, name, why_consulting, why_180dc, why_social_impact)
         `)
         .eq('cycle_id', cycleId)
         .in('id', pendingIds);
@@ -412,7 +415,7 @@ exports.getNextResume = async (req, res) => {
     let query = supabase
         .from('resumes')
         .select(`*,
-            candidates(year, major)
+            candidates(year, major, name, why_consulting, why_180dc, why_social_impact)
         `)
         .eq('cycle_id', screening.cycle.id)
         .order('review_count', { ascending: true })
@@ -594,11 +597,52 @@ exports.getReviewResume = async (req, res) => {
     });
 };
 
+async function upsertFrqReviewForGrader({ resumeId, score, notes, gradedBy, screening }) {
+    const numericScore = Number(score);
+    if (!Number.isFinite(numericScore) || numericScore < 0 || numericScore > FRQ_MAX_SCORE) {
+        const error = new Error(`Free-response score must be between 0 and ${FRQ_MAX_SCORE}`);
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const roundedScore = Math.round(numericScore);
+    const { data: existingReview, error: existingError } = await supabase
+        .from('frq_reviews')
+        .select('id')
+        .eq('resume_id', resumeId)
+        .eq('graded_by', gradedBy)
+        .eq('cycle_id', screening.cycle.id)
+        .maybeSingle();
+
+    if (existingError) throw existingError;
+    if (existingReview) {
+        const { error: updateError } = await supabase
+            .from('frq_reviews')
+            .update({ score: roundedScore, notes: notes ?? '' })
+            .eq('id', existingReview.id)
+            .eq('graded_by', gradedBy);
+        if (updateError) throw updateError;
+        return { reviewId: existingReview.id, updated: true };
+    }
+
+    const { error: saveError } = await supabase.rpc('save_frq_review', {
+        resume_id_input: resumeId,
+        score_input: roundedScore,
+        notes_input: notes ?? '',
+        graded_by_input: gradedBy,
+        cycle_id_input: screening.cycle.id,
+        round_id_input: screening.round.id,
+    });
+    if (saveError) throw saveError;
+    return { reviewId: null, updated: false };
+}
+
 // Saves review 
 exports.saveReview = async (req, res) => {
-    const { resume_id, scores, notes, decision } = req.body;
+    const { resume_id, scores, notes, decision, frq_score, frq_notes } = req.body;
     const gradedBy = req.user?.user_id;
     const normalizedDecision = VALID_REVIEW_DECISIONS.has(decision) ? decision : "pass";
+    const requiresCombinedGrade = req.user?.role === 'admin';
 
     if (!gradedBy) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -606,6 +650,12 @@ exports.saveReview = async (req, res) => {
 
     if (!resume_id) {
         return res.status(400).json({ error: "resume_id is required" });
+    }
+    if (requiresCombinedGrade) {
+        const numericFrqScore = Number(frq_score);
+        if (!Number.isFinite(numericFrqScore) || numericFrqScore < 0 || numericFrqScore > FRQ_MAX_SCORE) {
+            return res.status(400).json({ error: `Complete the free-response grade from 0 to ${FRQ_MAX_SCORE} before submitting` });
+        }
     }
 
     const screening = await requireActiveResumeScreening();
@@ -683,6 +733,20 @@ exports.saveReview = async (req, res) => {
             }
         }
 
+        if (requiresCombinedGrade) {
+            try {
+                await upsertFrqReviewForGrader({
+                    resumeId: resume_id,
+                    score: frq_score,
+                    notes: frq_notes,
+                    gradedBy,
+                    screening,
+                });
+            } catch (frqError) {
+                return respondWithServerError(res, frqError, 'saveReview paired FRQ update');
+            }
+        }
+
         return res.json({ success: true, updated: true, reviewId: existingReview.id });
     }
 
@@ -704,6 +768,20 @@ exports.saveReview = async (req, res) => {
             return res.status(409).json({ error: "You have already reviewed this resume" });
         }
         return respondWithServerError(res, saveError, 'saveReview rpc');
+    }
+
+    if (requiresCombinedGrade) {
+        try {
+            await upsertFrqReviewForGrader({
+                resumeId: resume_id,
+                score: frq_score,
+                notes: frq_notes,
+                gradedBy,
+                screening,
+            });
+        } catch (frqError) {
+            return respondWithServerError(res, frqError, 'saveReview paired FRQ insert');
+        }
     }
 
     return res.json({ success: true });
@@ -1987,6 +2065,8 @@ exports.getScoreboard = async (req, res) => {
                 score: reviewScore,
                 normalizedScore: reviewNormalized,
                 maxScore: scoring.maxScore,
+                rubricScore: scoring.rubricScore,
+                rubricMaxScore: scoring.rubricMaxScore,
                 legacy: scoring.legacy,
                 gradedBy: review.graded_by ?? null,
                 reviewerName: graderFromUsers?.name || null,
@@ -2504,6 +2584,8 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             score: reviewScore,
             normalizedScore: reviewNormalized,
             maxScore: scoring.maxScore,
+            rubricScore: scoring.rubricScore,
+            rubricMaxScore: scoring.rubricMaxScore,
             legacy: scoring.legacy,
             decision: review.decision || 'pass',
             reviewerName: graderFromUsers?.name || null,
@@ -2926,18 +3008,8 @@ exports.upsertReviewOverride = async (req, res) => {
             return res.status(404).json({ error: 'Candidate is not in the active cycle' });
         }
 
-        const candidateYear = firstRel(resume?.candidates)?.year;
-        const snapshot = reviewRow.rubric_snapshot || null;
-        const rubricForYear = snapshot
-            ? {
-                metrics: snapshot.metrics || Object.keys(reviewRow.scores || {}),
-                maxPerCategory: snapshot.maxPerCategory || 4,
-                maxScore: snapshot.maxScore,
-            }
-            : getRubricForYear(resumeRound.rubric_config, candidateYear);
-
         let overrideScore = null;
-        const maxAllowed = rubricForYear.maxScore || getRubricMaxScore(rubricForYear);
+        const maxAllowed = RESUME_MAX_SCORE;
         if (hasScore) {
             overrideScore = Number(rawScore);
             if (!Number.isFinite(overrideScore) || overrideScore < 0 || overrideScore > maxAllowed) {
@@ -2966,7 +3038,7 @@ exports.upsertReviewOverride = async (req, res) => {
             review_id: reviewId,
             admin_notes: adminNotes || null,
             override_score: overrideScore,
-            override_scores: null,
+            override_scores: { scoreScale: RESUME_MAX_SCORE },
             admin_user_id: adminUserId ?? null,
             updated_at: new Date().toISOString(),
         };
@@ -3088,6 +3160,8 @@ exports.getGraderScoreboard = async (req, res) => {
                 score: reviewScore,
                 normalizedScore: reviewNormalized,
                 maxScore: scoring.maxScore,
+                rubricScore: scoring.rubricScore,
+                rubricMaxScore: scoring.rubricMaxScore,
                 notes: review.notes || '',
                 submittedAt: review.submitted_at,
             });
