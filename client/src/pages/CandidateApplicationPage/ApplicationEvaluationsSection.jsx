@@ -5,7 +5,7 @@ import { formatReviewCount, formatReviewCountPair } from "../../utils/reviewCoun
 import { hasText } from "./applicationUtils";
 import CategoryRow from "./components/CategoryRow";
 import SectionCard from "./components/SectionCard";
-import { cardGreen, cardMint, cardPale } from "./constants";
+import { cardGreen, cardPale } from "./constants";
 
 function StatTile({ label, value, detail, accent = false }) {
   return (
@@ -49,7 +49,10 @@ function ResumeReviewCard({ review, index, metrics, maxPerCategory }) {
             {getInitials(reviewerName)}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>{reviewerName}</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+              <p style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>{reviewerName}</p>
+              <span style={{ padding: "3px 7px", borderRadius: 20, background: cardPale, color: cardGreen, fontSize: 9, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Resume</span>
+            </div>
             <p style={{ margin: "3px 0 0", color: css.textGray, fontSize: 11 }}>
               {[review.reviewerEmail && review.reviewerEmail !== reviewerName ? review.reviewerEmail : null, formatDate(review.submittedAt, { style: "datetime" })].filter(Boolean).join(" · ")}
             </p>
@@ -78,16 +81,59 @@ function ResumeReviewCard({ review, index, metrics, maxPerCategory }) {
   );
 }
 
+function FrqReviewCard({ review, index }) {
+  const reviewerName = review.reviewerName || review.reviewerEmail || `Free-response grader ${index + 1}`;
+
+  return (
+    <article style={{ padding: "16px 18px", background: "#F8FAF6", borderRadius: 10, border: `1px solid ${css.borderLight}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+          <div style={{ width: 36, height: 36, flexShrink: 0, display: "grid", placeItems: "center", borderRadius: "50%", background: cardGreen, color: "#FFF", fontSize: 11, fontWeight: 700 }}>
+            {getInitials(reviewerName)}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+              <p style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>{reviewerName}</p>
+              <span style={{ padding: "3px 7px", borderRadius: 20, background: cardPale, color: cardGreen, fontSize: 9, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Free response</span>
+            </div>
+            <p style={{ margin: "3px 0 0", color: css.textGray, fontSize: 11 }}>
+              {[review.reviewerEmail && review.reviewerEmail !== reviewerName ? review.reviewerEmail : null, formatDate(review.submittedAt, { style: "datetime" })].filter(Boolean).join(" · ")}
+            </p>
+          </div>
+        </div>
+
+        <p style={{ margin: 0, color: cardGreen, fontSize: 17, fontWeight: 700 }}>
+          {formatScore(review.score)}/4 <span style={{ color: css.textGray, fontSize: 12, fontWeight: 500 }}>points</span>
+        </p>
+      </div>
+
+      {hasText(review.notes) && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${css.borderLight}` }}>
+          <p style={{ margin: "0 0 5px", color: css.textGray, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Grader notes</p>
+          <p style={{ margin: 0, color: css.textDark, fontSize: 13, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{review.notes.trim()}</p>
+        </div>
+      )}
+    </article>
+  );
+}
+
 export default function ApplicationEvaluationsSection({ scoring }) {
   const reviews = scoring?.reviews || [];
   const frqReviews = scoring?.frqReviews || [];
+  const allMetrics = (scoring?.metrics || []).filter(
+    (metric) => hasNumericScore(scoring?.categoryScores?.[metric])
+  );
   const resumeMetrics = (scoring?.metrics || []).filter(
     (metric) => metric !== FRQ_METRIC && hasNumericScore(scoring?.categoryScores?.[metric])
   );
   const averageScore = scoring?.resumeNormalizedScore ?? scoring?.normalizedScore;
   const averageRawScore = scoring?.resumeAggregateScore ?? scoring?.aggregateScore;
+  const frqAverage = scoring?.frqScore;
   const maxPerCategory = scoring?.maxPerCategory || 4;
-  const distinctGraders = new Set(reviews.map((review) => review.reviewerEmail || review.reviewerName || review.id).filter(Boolean)).size;
+  const previousGrades = [
+    ...reviews.map((review, index) => ({ type: "resume", review, index })),
+    ...frqReviews.map((review, index) => ({ type: "frq", review, index })),
+  ].sort((a, b) => new Date(b.review.submittedAt || 0) - new Date(a.review.submittedAt || 0));
 
   return (
     <SectionCard title="Admin grading overview">
@@ -100,51 +146,48 @@ export default function ApplicationEvaluationsSection({ scoring }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
-        <StatTile label="Average score" value={hasNumericScore(averageScore) ? `${formatScore(averageScore)}%` : "—"} detail={hasNumericScore(averageRawScore) ? `${formatScore(averageRawScore)} average raw points` : "No score submitted yet"} accent />
+        <StatTile label="Overall score" value={hasNumericScore(scoring?.normalizedScore) ? `${formatScore(scoring.normalizedScore)}%` : "—"} detail="Normalized across submitted grading sections" accent />
+        <StatTile label="Average resume" value={hasNumericScore(averageScore) ? `${formatScore(averageScore)}%` : "—"} detail={hasNumericScore(averageRawScore) ? `${formatScore(averageRawScore)} average raw points` : "No resume score submitted yet"} />
+        <StatTile label="Average free response" value={hasNumericScore(frqAverage) ? `${formatScore(frqAverage)}/4` : "—"} detail={`${formatReviewCount(frqReviews.length, "free response")} completed`} />
         <StatTile label="Resume reviews" value={reviews.length} detail={`${formatReviewCount(reviews.length, "resume")} completed`} />
         <StatTile label="Free response reviews" value={frqReviews.length} detail={`${formatReviewCount(frqReviews.length, "free response")} completed`} />
-        <StatTile label="Distinct graders" value={distinctGraders} detail="People who submitted a resume score" />
       </div>
 
-      {reviews.length > 0 && resumeMetrics.length > 0 && (
+      {allMetrics.length > 0 && (
         <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${css.borderLight}` }}>
           <h3 style={{ margin: "0 0 12px", color: css.textDark, fontSize: 14, fontWeight: 700 }}>Average by category</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", columnGap: 24 }}>
-            {resumeMetrics.map((metric) => <CategoryRow key={metric} metric={metric} value={scoring.categoryScores?.[metric]} maxPerCategory={maxPerCategory} />)}
+            {allMetrics.map((metric) => (
+              <CategoryRow
+                key={metric}
+                metric={metric}
+                label={metric === FRQ_METRIC ? "Free response" : undefined}
+                value={scoring.categoryScores?.[metric]}
+                maxPerCategory={metric === FRQ_METRIC ? 4 : maxPerCategory}
+              />
+            ))}
           </div>
         </div>
       )}
 
       <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${css.borderLight}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
-          <h3 style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>Previous reviews</h3>
+          <h3 style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>Previous grades</h3>
           <span style={{ color: css.textGray, fontSize: 12 }}>{formatReviewCountPair(reviews.length, frqReviews.length)}</span>
         </div>
 
-        {reviews.length > 0 ? (
+        {previousGrades.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {reviews.map((review, index) => <ResumeReviewCard key={review.id} review={review} index={index} metrics={resumeMetrics} maxPerCategory={maxPerCategory} />)}
-          </div>
-        ) : (
-          <div style={{ padding: "22px", borderRadius: 9, background: "#F8FAF6", border: `1px dashed ${css.borderLight}`, color: css.textGray, fontSize: 13, textAlign: "center" }}>No resume reviews have been submitted for this candidate.</div>
-        )}
-      </div>
-
-      {frqReviews.length > 0 && (
-        <details style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${css.borderLight}` }}>
-          <summary style={{ color: cardGreen, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{formatReviewCount(frqReviews.length, "free response")}</summary>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8, marginTop: 10 }}>
-            {frqReviews.map((review, index) => (
-              <div key={review.id} style={{ padding: "11px 12px", borderRadius: 8, background: "#F8FAF6", border: `1px solid ${css.borderLight}` }}>
-                <p style={{ margin: 0, color: css.textDark, fontSize: 12, fontWeight: 700 }}>{review.reviewerName || review.reviewerEmail || `FRQ grader ${index + 1}`}</p>
-                <p style={{ margin: "4px 0 0", color: cardMint, fontSize: 12, fontWeight: 700 }}>
-                  {formatScore(review.score)}/4 <span style={{ color: css.textGray, fontWeight: 400 }}>· {formatDate(review.submittedAt, { style: "short" })}</span>
-                </p>
-              </div>
+            {previousGrades.map(({ type, review, index }) => (
+              type === "resume"
+                ? <ResumeReviewCard key={`resume-${review.id}`} review={review} index={index} metrics={resumeMetrics} maxPerCategory={maxPerCategory} />
+                : <FrqReviewCard key={`frq-${review.id}`} review={review} index={index} />
             ))}
           </div>
-        </details>
-      )}
+        ) : (
+          <div style={{ padding: "22px", borderRadius: 9, background: "#F8FAF6", border: `1px dashed ${css.borderLight}`, color: css.textGray, fontSize: 13, textAlign: "center" }}>No grades have been submitted for this candidate.</div>
+        )}
+      </div>
     </SectionCard>
   );
 }
