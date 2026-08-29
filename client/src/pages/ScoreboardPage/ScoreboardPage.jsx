@@ -1793,7 +1793,11 @@ export default function ScoreboardPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); setSelectedCandidate(c); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isAdmin) navigate(`/scoreboard/${c.id}/application`);
+                    else setSelectedCandidate(c);
+                  }}
                   style={{
                     border: "none",
                     background: "none",
@@ -1869,22 +1873,28 @@ export default function ScoreboardPage() {
               />
               <button
                 type="button"
-                title="View scorecard"
-                aria-label={`View details for ${c.name}`}
-                onClick={(e) => { e.stopPropagation(); setSelectedCandidate(c); }}
+                title={isAdmin ? "Open candidate workspace" : "View scorecard"}
+                aria-label={`${isAdmin ? "Open candidate workspace" : "View details"} for ${c.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isAdmin) navigate(`/scoreboard/${c.id}/application`);
+                  else setSelectedCandidate(c);
+                }}
                 style={rowIconBtnStyle(t, true)}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
               </button>
-              <button
-                type="button"
-                title="View application"
-                aria-label={`View application for ${c.name}`}
-                onClick={(e) => { e.stopPropagation(); navigate(`/scoreboard/${c.id}/application`); }}
-                style={rowIconBtnStyle(t, false)}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  title="Open full application"
+                  aria-label={`Open full application for ${c.name}`}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/scoreboard/${c.id}/application`); }}
+                  style={rowIconBtnStyle(t, false)}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+                </button>
+              )}
             </div>
           </div>
           );
