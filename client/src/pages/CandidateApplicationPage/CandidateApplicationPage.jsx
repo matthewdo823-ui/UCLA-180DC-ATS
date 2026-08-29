@@ -8,7 +8,6 @@ import AdminOverridesSection from "./AdminOverridesSection";
 import ApplicationContactSection from "./ApplicationContactSection";
 import ApplicationEvaluationsSection from "./ApplicationEvaluationsSection";
 import ApplicationProfileSidebar from "./ApplicationProfileSidebar";
-import ApplicationResumeSection from "./ApplicationResumeSection";
 import ApplicationSignalsSection from "./ApplicationSignalsSection";
 import ApplicationSummarySection from "./ApplicationSummarySection";
 import useCandidateApplication from "./useCandidateApplication";
@@ -58,7 +57,7 @@ export default function CandidateApplicationPage() {
 
         {!loading && !error && candidate && (
           <div className="candidate-application-grid" style={{ display: "grid", gridTemplateColumns: "minmax(250px, 280px) minmax(0, 1fr)", gap: 18, alignItems: "start" }}>
-            <ApplicationProfileSidebar candidate={candidate} resume={resume} scoring={scoring} />
+            <ApplicationProfileSidebar candidate={candidate} resume={resume} scoring={scoring} authToken={token} />
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
               <ApplicationEvaluationsSection scoring={scoring} />
@@ -72,7 +71,6 @@ export default function CandidateApplicationPage() {
                   onOverrideSaved={() => refresh()}
                 />
               )}
-              <ApplicationResumeSection candidate={candidate} resume={resume} authToken={token} />
             </div>
           </div>
         )}

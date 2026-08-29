@@ -5,8 +5,9 @@ import { formatScore, hasNumericScore } from "../../utils/format";
 import { formatReviewCounts } from "../../utils/reviewCounts";
 import { hasText } from "./applicationUtils";
 import { cardGreen, cardMint, cardPale, ROUND_1_LABEL, UPCOMING_EVALUATION_ROUNDS } from "./constants";
+import ApplicationResumeSection from "./ApplicationResumeSection";
 
-export default function ApplicationProfileSidebar({ candidate, resume, scoring }) {
+export default function ApplicationProfileSidebar({ candidate, resume, scoring, authToken }) {
   return (
     <aside style={{ position: "sticky", top: 16 }}>
       <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
@@ -31,14 +32,24 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring }
         </div>
 
         <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {[candidate.year, candidate.major, candidate.gpa ? `GPA ${candidate.gpa}` : ""].filter(Boolean).map(tag => (
-            <span
-              key={tag}
-              style={{ display: "inline-block", alignSelf: "flex-start", background: cardPale, color: cardGreen, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 20 }}
-            >
-              {tag}
-            </span>
-          ))}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, alignItems: "start" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+              {[candidate.year, candidate.major, candidate.gpa ? `GPA ${candidate.gpa}` : ""].filter(Boolean).map(tag => (
+                <span
+                  key={tag}
+                  style={{ display: "inline-block", alignSelf: "flex-start", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", background: cardPale, color: cardGreen, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 20, boxSizing: "border-box" }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+            <ApplicationResumeSection
+              candidate={candidate}
+              resume={resume}
+              authToken={authToken}
+              compact
+            />
+          </div>
           <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${css.borderLight}`, display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
               <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
