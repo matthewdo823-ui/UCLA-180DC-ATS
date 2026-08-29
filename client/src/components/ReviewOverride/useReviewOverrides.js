@@ -10,14 +10,16 @@ function buildOverrideMap(overrides) {
   return map;
 }
 
-export default function useReviewOverrides(resumeId, enabled = true) {
+export default function useReviewOverrides(resumeId, enabled = true, options = {}) {
   const authedFetch = useAuthedFetch();
   const fetchRef = useRef(authedFetch);
   fetchRef.current = authedFetch;
 
   const id = String(resumeId || "").trim();
 
-  const [overrideByReviewId, setOverrideByReviewId] = useState({});
+  const initialOverrides = options.initialOverrides || {};
+  const skipInitialLoad = options.skipInitialLoad === true;
+  const [overrideByReviewId, setOverrideByReviewId] = useState(initialOverrides);
   const [loading, setLoading] = useState(Boolean(enabled && id));
   const [error, setError] = useState("");
   const [savingReviewId, setSavingReviewId] = useState(null);
@@ -57,6 +59,13 @@ export default function useReviewOverrides(resumeId, enabled = true) {
       return undefined;
     }
 
+    if (skipInitialLoad) {
+      setOverrideByReviewId(initialOverrides);
+      setLoading(false);
+      setError("");
+      return undefined;
+    }
+
     let cancelled = false;
     (async () => {
       await load();
@@ -64,7 +73,7 @@ export default function useReviewOverrides(resumeId, enabled = true) {
     })();
 
     return () => { cancelled = true; };
-  }, [enabled, id, load]);
+  }, [enabled, id, initialOverrides, load, skipInitialLoad]);
 
   const save = useCallback(
     async ({ reviewId, adminNotes, overrideScore }) => {
