@@ -9,7 +9,7 @@
     "gmail-oauth-setup": "node scripts/gmail-oauth-setup.js",
     "gmail-test-send": "node scripts/test-gmail-send.js",
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "node --watch index.js"
   },
   "keywords": [],
   "author": "",
