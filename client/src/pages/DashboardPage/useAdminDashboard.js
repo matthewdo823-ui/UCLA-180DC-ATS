@@ -87,7 +87,7 @@ export default function useAdminDashboard(enabled = true) {
     queryKey: qk.adminDashboard(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/dashboard/admin`);
-      return readJsonOrThrow(res, "Could not load admin dashboard");
+      return readJsonOrThrow(res, "loading the admin dashboard", "Check GET /dashboard/admin in server/src/routes/dashboardRoutes.js");
     },
     enabled,
     staleTime: STALE.dashboard,
@@ -97,7 +97,7 @@ export default function useAdminDashboard(enabled = true) {
     queryKey: qk.graderScoreboard(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/grader-scoreboard`);
-      return readJsonOrThrow(res, "Could not load grader coverage");
+      return readJsonOrThrow(res, "loading grader coverage", "Check GET /grader-scoreboard in server/src/routes/resumeRoutes.js");
     },
     enabled,
     staleTime: STALE.dashboard,
@@ -114,7 +114,7 @@ export default function useAdminDashboard(enabled = true) {
     queryKey: qk.interviewCandidates(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/interviews/candidates`);
-      return readJsonOrThrow(res, "Interview stats unavailable");
+      return readJsonOrThrow(res, "loading interview statistics", "Check GET /interviews/candidates in server/src/routes/interviewRoutes.js");
     },
     enabled: enabled && isInterview,
     staleTime: STALE.dashboard,

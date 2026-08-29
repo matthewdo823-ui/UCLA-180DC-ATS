@@ -7,6 +7,8 @@ import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
+import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle } from "../../theme/typography";
 
 const CANDIDATE_FILTERS = [
@@ -61,7 +63,7 @@ export default function AssignmentsPage() {
   const authedFetch = useAuthedFetch();
   const queryClient = useQueryClient();
   // Separate from the query's load error so a failed assign doesn't wipe the board.
-  const [mutationError, setMutationError] = useState("");
+  const [mutationError, setMutationError] = useState(null);
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
@@ -74,15 +76,14 @@ export default function AssignmentsPage() {
     queryKey: qk.assignments(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/assignments`);
-      return readJsonOrThrow(res, "Failed to load assignments");
+      return readJsonOrThrow(res, "loading assignments", "Check GET /assignments in server/src/routes/userRoutes.js");
     },
     staleTime: STALE.dashboard,
   });
 
   const board = boardQuery.data ?? null;
   const loading = boardQuery.isPending;
-  const error = mutationError
-    || (boardQuery.error ? (boardQuery.error.message || "Failed to load assignments") : "");
+  const error = mutationError || boardQuery.error;
 
   // Mutations refetch by expiring the cache entry rather than hand-rolling a reload.
   const reloadBoard = useCallback(
@@ -116,7 +117,7 @@ export default function AssignmentsPage() {
 
     try {
       setSaving(true);
-      setMutationError("");
+      setMutationError(null);
       setNotice("");
 
       const res = await authedFetch(`${API}/assignments`, {
@@ -125,8 +126,8 @@ export default function AssignmentsPage() {
         body: JSON.stringify({ resumeIds: selectedCandidateIds, graderIds: selectedGraderIds }),
       });
 
+      if (!res.ok) throw await formatResponseError(res, "updating assignments");
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Failed to update assignments");
 
       if (method === "POST") {
         const skipped = data.skipped ? ` (${data.skipped} already assigned)` : "";
@@ -139,7 +140,7 @@ export default function AssignmentsPage() {
       graderSelection.clear();
       await reloadBoard();
     } catch (err) {
-      setMutationError(err.message || "Failed to update assignments");
+      setMutationError(err);
     } finally {
       setSaving(false);
     }
@@ -147,18 +148,17 @@ export default function AssignmentsPage() {
 
   async function removeAssignment(assignmentId) {
     try {
-      setMutationError("");
+      setMutationError(null);
       setNotice("");
       const res = await authedFetch(`${API}/assignments/${encodeURIComponent(assignmentId)}`, {
         method: "DELETE",
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to remove assignment");
+        throw await formatResponseError(res, "removing assignment");
       }
       await reloadBoard();
     } catch (err) {
-      setMutationError(err.message || "Failed to remove assignment");
+      setMutationError(err);
     }
   }
 
@@ -189,7 +189,13 @@ export default function AssignmentsPage() {
           <StatCard label="Pending" value={board?.stats?.pendingAssignments ?? 0} />
         </div>
 
-        {error && <Banner tone="error">{error}</Banner>}
+        {error && (
+          <ErrorBanner
+            error={error}
+            onDismiss={mutationError ? () => setMutationError(null) : undefined}
+            onRetry={boardQuery.isError ? () => boardQuery.refetch() : undefined}
+          />
+        )}
         {notice && <Banner tone="success">{notice}</Banner>}
 
         {loading ? (

@@ -9,6 +9,8 @@ import { css } from "../../theme/colors";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
+import { UserFriendlyError, formatResponseError } from "../../utils/errors";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatScore, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
@@ -47,6 +49,7 @@ import {
   scoreColor,
   SORT_TABS,
   uniqueSortedStrings,
+  sortYears,
 } from "./scoreboardViewModel";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
@@ -308,7 +311,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4, equalized = false }) {
         </span>
       </div>
       <div style={{ height: 5, background: "#EEF1EC", borderRadius: 3, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${pct}%`, background: cardMint, borderRadius: 3, transition: "width 0.35s ease" }} />
+        <div style={{ height: "100%", width: "100%", background: cardMint, transformOrigin: "left", transform: `scaleX(${Math.max(0, Math.min(100, pct)) / 100})`, transition: "transform 0.35s ease" }} />
       </div>
     </div>
   );
@@ -632,7 +635,7 @@ function rowIconBtnStyle(theme, primary) {
     padding: 0,
     borderRadius: 6,
     background: primary ? theme.accent : theme.btnGhostBg,
-    color: primary ? "#0B1628" : theme.text,
+    color: primary ? "#FFFFFF" : theme.text,
     border: primary ? "none" : `1px solid ${theme.border}`,
     cursor: "pointer",
     flexShrink: 0,
@@ -652,7 +655,6 @@ export default function ScoreboardPage() {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [filters, setFilters] = useState(() => ({ ...defaultFilters }));
   const [sortBy, setSortBy] = useState("performance_desc");
-  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [deliberationMode, setDeliberationMode] = useState(false);
   const [equalizeActive, setEqualizeActive] = useState(false);
@@ -728,16 +730,8 @@ export default function ScoreboardPage() {
   }, [queryClient, scoreboardKey]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setSearchQuery(searchInput), 300);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
-
-  useEffect(() => {
     if (scoreboardQuery.error) {
-      setDecisionError(
-        scoreboardQuery.error.message
-        || "Could not reach the API — check that the server is running on port 3000."
-      );
+      setDecisionError(scoreboardQuery.error);
     }
   }, [scoreboardQuery.error]);
 
@@ -748,7 +742,12 @@ export default function ScoreboardPage() {
       || Object.prototype.hasOwnProperty.call(candidates[0], "decision");
     if (!hasDecisionSupport) {
       setDecisionError(
-        "Deliberation API is missing on the server — restart it with the latest code (cd server && node index.js) or redeploy Render."
+        new UserFriendlyError({
+          title: "Deliberation Unavailable",
+          explanation: "Deliberation decision support is not enabled for this dataset.",
+          action: "Please refresh the page or contact an administrator.",
+          devDetails: "Candidates array is missing the 'decision' field.",
+        })
       );
     }
   }, [scoreboardQuery.data]);
@@ -821,7 +820,7 @@ export default function ScoreboardPage() {
   );
 
   const yearOptions = useMemo(
-    () => uniqueSortedStrings(candidates.map(c => c.year).filter(Boolean)),
+    () => sortYears(candidates.map(c => c.year)),
     [candidates]
   );
 
@@ -857,11 +856,11 @@ export default function ScoreboardPage() {
         }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        if (res.status === 404) {
-          throw new Error("Decision API not found — restart the local server or redeploy Render with the latest code.");
-        }
-        throw new Error(body.error || "Could not save decision");
+        throw await formatResponseError(
+          res,
+          "saving candidate decision",
+          "Check POST /scoreboard/decisions endpoint in server/src/routes/dashboardRoutes.js"
+        );
       }
       const { decision: savedDecision } = await res.json();
       const confirmed = { ...savedDecision, provisional: true };
@@ -872,7 +871,7 @@ export default function ScoreboardPage() {
       setSelectedCandidate(prev => (
         prev?.id === candidate.id ? { ...prev, decision: previousDecision || buildDecisionPayload("pending") } : prev
       ));
-      setDecisionError(err.message || "Could not save decision");
+      setDecisionError(err);
     } finally {
       pendingDecisionIdsRef.current.delete(candidate.id);
       setSavingDecisionId(null);
@@ -965,12 +964,11 @@ export default function ScoreboardPage() {
     if (!confirmed) return;
 
     setAdvanceRoundBusy(true);
-    setDecisionError("");
+    setDecisionError(null);
     try {
       const res = await authedFetch(`${API}/rounds/${activeRound.id}/advance-to-next`, { method: "POST" });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Could not advance to next round");
+        throw await formatResponseError(res, "advancing to the next round");
       }
       setViewingRoundId(null);
       setDeliberationMode(false);
@@ -979,7 +977,7 @@ export default function ScoreboardPage() {
       await queryClient.invalidateQueries({ queryKey: qk.scoreboardRoot() });
       queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() });
     } catch (err) {
-      setDecisionError(err.message || "Could not advance to next round");
+      setDecisionError(err);
     } finally {
       setAdvanceRoundBusy(false);
     }
@@ -987,11 +985,11 @@ export default function ScoreboardPage() {
 
   const handleExport = useCallback((decision) => {
     setExportBusy(true);
-    setDecisionError("");
+    setDecisionError(null);
     try {
       exportCandidatesDecisionCsv(candidates, decision);
     } catch (err) {
-      setDecisionError(err.message || "Export failed");
+      setDecisionError(err);
     } finally {
       setExportBusy(false);
     }
@@ -1063,7 +1061,7 @@ export default function ScoreboardPage() {
   const activeFilterCount = countActiveFilters(
     deliberationMode ? filters : { ...filters, decision: "all" }
   );
-  const hasActiveSearch = searchInput.trim().length > 0;
+  const hasActiveSearch = searchQuery.trim().length > 0;
   const hasActiveNarrowing = activeFilterCount > 0 || hasActiveSearch;
   const activeFilterPills = useMemo(
     () => buildActiveFilterPills(filters, deliberationMode),
@@ -1071,7 +1069,7 @@ export default function ScoreboardPage() {
   );
   const t = deliberationMode ? PAGE_THEME.dark : PAGE_THEME.light;
   const gridColumns = deliberationMode
-    ? "4px 36px minmax(180px, 2.2fr) 100px minmax(196px, 0.9fr) minmax(108px, auto)"
+    ? "16px 36px minmax(180px, 2.2fr) 100px minmax(196px, 0.9fr) minmax(108px, auto)"
     : "48px minmax(220px, 2.2fr) 108px minmax(100px, auto)";
 
   function statCount(value) {
@@ -1099,7 +1097,7 @@ export default function ScoreboardPage() {
           break;
         case "APPLICANTS":
           setFilters({ ...defaultFilters });
-          setSearchInput("");
+          setSearchQuery("");
           break;
         default:
           break;
@@ -1115,7 +1113,7 @@ export default function ScoreboardPage() {
         break;
       case "APPLICANTS":
         setFilters({ ...defaultFilters });
-        setSearchInput("");
+        setSearchQuery("");
         break;
       default:
         break;
@@ -1320,7 +1318,7 @@ export default function ScoreboardPage() {
                   padding: "8px 14px",
                   borderRadius: 8,
                   background: equalizeActive ? t.accent : t.btnGhostBg,
-                  color: equalizeActive ? "#0B1628" : t.btnGhostText,
+                  color: equalizeActive ? "#FFFFFF" : t.btnGhostText,
                   border: `1px solid ${equalizeActive ? t.accent : t.border}`,
                   fontSize: 12,
                   fontWeight: 600,
@@ -1466,8 +1464,12 @@ export default function ScoreboardPage() {
       ) : null}
 
       {decisionError ? (
-        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "0 0 8px", color: css.red, fontSize: 13, fontWeight: 600 }}>
-          {decisionError}
+        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "0 0 8px" }}>
+          <ErrorBanner
+            error={decisionError}
+            onDismiss={() => setDecisionError(null)}
+            onRetry={decisionError === scoreboardQuery.error ? () => scoreboardQuery.refetch() : undefined}
+          />
         </div>
       ) : null}
 
@@ -1489,8 +1491,8 @@ export default function ScoreboardPage() {
         </svg>
         <input
           type="search"
-          value={searchInput}
-          onChange={e => setSearchInput(e.target.value)}
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
           placeholder="Search by name, email, or phone…"
           aria-label="Search candidates"
           style={{
@@ -1510,7 +1512,7 @@ export default function ScoreboardPage() {
           <button
             type="button"
             aria-label="Clear search"
-            onClick={() => { setSearchInput(""); setSearchQuery(""); }}
+            onClick={() => setSearchQuery("")}
             style={{
               position: "absolute",
               right: 10,
@@ -1620,7 +1622,7 @@ export default function ScoreboardPage() {
               Search: “{searchQuery.trim()}”
               <button
                 type="button"
-                onClick={() => { setSearchInput(""); setSearchQuery(""); }}
+                onClick={() => setSearchQuery("")}
                 aria-label="Clear search filter"
                 style={{ border: "none", background: "none", color: t.textMuted, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}
               >
@@ -1646,7 +1648,7 @@ export default function ScoreboardPage() {
           ))}
           <button
             type="button"
-            onClick={() => { setFilters({ ...defaultFilters }); setSearchInput(""); setSearchQuery(""); }}
+            onClick={() => { setFilters({ ...defaultFilters }); setSearchQuery(""); }}
             style={{ border: "none", background: "none", color: t.accent, fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "4px 0" }}
           >
             Clear all
@@ -1655,8 +1657,8 @@ export default function ScoreboardPage() {
       ) : null}
 
       {equalizeActive ? (
-        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.infoBorder}`, background: t.infoBg, fontSize: 13, color: t.text, lineHeight: 1.45 }}>
-          <strong style={{ color: t.accent }}>Equalized scores</strong> — adjusted by grader z-scores per rubric category. Toggle “Raw scores” to compare.
+        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${deliberationMode ? t.infoBorder : css.greenDark}`, background: deliberationMode ? t.infoBg : css.greenDark, fontSize: 13, color: deliberationMode ? t.text : "#FFFFFF", lineHeight: 1.45 }}>
+          <strong style={{ color: deliberationMode ? t.accent : "#FFFFFF" }}>Equalized scores</strong> — adjusted by grader z-scores per rubric category. Toggle “Raw scores” to compare.
         </div>
       ) : null}
 
@@ -1704,7 +1706,7 @@ export default function ScoreboardPage() {
               <span style={{ fontWeight: 600, color: t.text }}>{decidedCount} / {totalApplicants} decided ({decisionProgress}%)</span>
             </div>
             <div style={{ height: 6, borderRadius: 999, background: t.btnGhostBg, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${decisionProgress}%`, background: t.accent, borderRadius: 999, transition: "width 0.3s ease" }} />
+              <div style={{ height: "100%", width: "100%", background: t.accent, transformOrigin: "left", transform: `scaleX(${Math.max(0, Math.min(100, decisionProgress)) / 100})`, transition: "transform 0.3s ease" }} />
             </div>
           </div>
         ) : null}

@@ -11,7 +11,7 @@ export default function useGraderDashboard(enabled = true) {
     queryKey: qk.graderDashboard(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/dashboard/grader`);
-      return readJsonOrThrow(res, "Could not load dashboard");
+      return readJsonOrThrow(res, "loading your grader dashboard", "Check GET /dashboard/grader in server/src/routes/dashboardRoutes.js");
     },
     enabled,
     staleTime: STALE.dashboard,

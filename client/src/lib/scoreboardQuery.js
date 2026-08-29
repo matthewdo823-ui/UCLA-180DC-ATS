@@ -22,7 +22,8 @@ export function scoreboardQueryOptions(authedFetch, { roundId = null, mergeWithC
       const res = await authedFetch(`${API}/scoreboard${query}`);
       const json = await readJsonOrThrow(
         res,
-        "Could not load scoreboard — is the API server running?"
+        "loading the candidate scoreboard",
+        "Check /scoreboard endpoint in server/src/routes/dashboardRoutes.js"
       );
       return mergeWithCached ? mergeWithCached(json) : json;
     },

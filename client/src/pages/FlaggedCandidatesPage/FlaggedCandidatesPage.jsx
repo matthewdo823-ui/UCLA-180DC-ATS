@@ -5,6 +5,8 @@ import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
+import { formatResponseError } from "../../utils/errors";
 import { API } from "../../constants/config";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatDate, getInitials } from "../../utils/format";
@@ -208,7 +210,7 @@ export default function FlaggedCandidatesPage() {
   const [mode, setMode] = useState(SIGNAL_MODES[0].id);
   // Kept apart from the query's own error so a failed resolve doesn't clobber the
   // loaded list (or get wiped by a background refetch).
-  const [resolveError, setResolveError] = useState("");
+  const [resolveError, setResolveError] = useState(null);
   const [resolvingId, setResolvingId] = useState(null);
 
   const activeMode = useMemo(
@@ -222,7 +224,11 @@ export default function FlaggedCandidatesPage() {
     queryKey: qk.candidateSignals(activeMode.endpoint),
     queryFn: async () => {
       const res = await authedFetch(`${API}/${activeMode.endpoint}`);
-      const json = await readJsonOrThrow(res, `Failed to load ${activeMode.label.toLowerCase()}`);
+      const json = await readJsonOrThrow(
+        res,
+        `loading ${activeMode.label.toLowerCase()}`,
+        `Check GET /${activeMode.endpoint} in server/src/routes/candidateRoutes.js`
+      );
       return json[activeMode.dataKey] || [];
     },
     staleTime: STALE.dashboard,
@@ -231,13 +237,12 @@ export default function FlaggedCandidatesPage() {
   const items = useMemo(() => signalsQuery.data ?? [], [signalsQuery.data]);
   const loading = signalsQuery.isPending;
   const refreshing = signalsQuery.isFetching;
-  const error = resolveError
-    || (signalsQuery.error ? (signalsQuery.error.message || `Failed to load ${activeMode.label.toLowerCase()}`) : "");
+  const error = resolveError || signalsQuery.error;
 
   function handleModeChange(nextMode) {
     if (nextMode === mode) return;
     setMode(nextMode);
-    setResolveError("");
+    setResolveError(null);
   }
 
   const uniqueCandidateCount = useMemo(
@@ -248,14 +253,13 @@ export default function FlaggedCandidatesPage() {
   async function resolveFlag(flagId) {
     try {
       setResolvingId(flagId);
-      setResolveError("");
+      setResolveError(null);
       const res = await authedFetch(`${API}/candidate-flags/${flagId}/resolve`, {
         method: "PATCH",
       });
-      const json = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(json.error || "Failed to resolve flag");
+        throw await formatResponseError(res, "resolving candidate flag");
       }
 
       // Drop the resolved flag from the cached flags list — snappy, no refetch.
@@ -265,7 +269,7 @@ export default function FlaggedCandidatesPage() {
       );
     } catch (err) {
       console.error("Failed to resolve candidate flag:", err);
-      setResolveError(err.message);
+      setResolveError(err);
     } finally {
       setResolvingId(null);
     }
@@ -370,9 +374,11 @@ export default function FlaggedCandidatesPage() {
         {loading && <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>Loading {activeMode.label.toLowerCase()}...</div>}
 
         {!loading && error && (
-          <div style={{ padding: 16, border: `1px solid rgba(226,75,74,0.24)`, background: "rgba(226,75,74,0.08)", color: css.red, borderRadius: 10, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
-            {error}
-          </div>
+          <ErrorBanner
+            error={error}
+            onDismiss={resolveError ? () => setResolveError(null) : undefined}
+            onRetry={signalsQuery.isError ? () => signalsQuery.refetch() : undefined}
+          />
         )}
 
         {!loading && !error && items.length === 0 && (

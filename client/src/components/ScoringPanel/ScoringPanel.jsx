@@ -11,6 +11,7 @@ export default function ScoringPanel({
   notes,
   onNotes,
   onAction,
+  onReset,
   scoringComplete = true,
   submitError = "",
 }) {
@@ -26,8 +27,8 @@ export default function ScoringPanel({
   const maxScore = getRubricMaxScore(rubric);
   const total = rubric.metrics.reduce((sum, m) => sum + (Number(scores[m]) || 0), 0);
   const scoredCount = rubric.metrics.filter((m) => {
-    const v = Number(scores[m]);
-    return Number.isFinite(v) && v >= 1 && v <= maxPerCategory;
+    const v = scores[m];
+    return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= maxPerCategory;
   }).length;
   const scoreColor = total >= maxScore * 0.75 ? css.greenDark : total >= maxScore * 0.5 ? css.amber : css.red;
 
@@ -60,7 +61,7 @@ export default function ScoringPanel({
             <span style={{ fontSize: 14 }}>⚖️</span>
             SCORING RUBRIC
           </div>
-          <span style={{ fontSize: 11, color: css.textGray, fontWeight: 500 }}>Rate 1–{maxPerCategory} per category</span>
+          <span style={{ fontSize: 11, color: css.textGray, fontWeight: 500 }}>Rate 0–{maxPerCategory} per category</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {rubric.metrics.map(m => (
@@ -82,7 +83,7 @@ export default function ScoringPanel({
         <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 4 }}>Aggregate Score</div>
 
         <div style={{ height: 6, background: css.bgLight, borderRadius: 3, overflow: "hidden", marginTop: 12 }}>
-          <div style={{ height: "100%", width: `${maxScore ? (total / maxScore) * 100 : 0}%`, background: scoreColor, borderRadius: 3, transition: "width 0.3s ease" }} />
+          <div style={{ height: "100%", width: "100%", background: scoreColor, transformOrigin: "left", transform: `scaleX(${maxScore ? total / maxScore : 0})`, transition: "transform 0.3s ease" }} />
         </div>
       </div>
 
@@ -109,6 +110,15 @@ export default function ScoringPanel({
       ) : null}
 
       <div style={{ display: "flex", gap: 12 }}>
+        {onReset ? (
+          <ActionBtn
+            label="↺ Reset"
+            style={{ borderColor: css.borderLight, color: css.textGray, bg: css.cardWhite, hoverBg: css.bgLight }}
+            disabled={scoredCount === 0 && notes.length === 0}
+            title="Clear all scores and notes for this resume"
+            onClick={onReset}
+          />
+        ) : null}
         {[
           { type: "flag",   label: "⚑ Flag",    style: { borderColor: css.amber, color: css.amber, bg: css.cardWhite, hoverBg: "rgba(239,159,39,0.05)" } },
           { type: "pass",   label: "✓ Complete", style: { borderColor: css.greenDark, color: css.cardWhite, bg: css.greenDark, hoverBg: "#1F4E33" } },
@@ -118,7 +128,7 @@ export default function ScoringPanel({
             label={label}
             style={style}
             disabled={!scoringComplete}
-            title={!scoringComplete ? `Rate each rubric category from 1 to ${maxPerCategory} first` : undefined}
+            title={!scoringComplete ? `Rate each rubric category from 0 to ${maxPerCategory} first` : undefined}
             onClick={() => onAction(type)}
           />
         ))}

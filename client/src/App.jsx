@@ -4,6 +4,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import Sidebar from "./components/Sidebar/Sidebar";
 import { ThemeProvider } from "./theme/ThemeContext";
+import ErrorBoundary from "./components/ErrorBoundary/ErrorBoundary";
 
 // Lazy Loading as Vite can handle the chunking for diff elements
 const DashboardPage = lazy(() => import("./pages/DashboardPage/DashboardPage"));
@@ -36,6 +37,9 @@ function AppShell() {
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       {!hideSidebar && <Sidebar />}
       <div style={{ flex: 1, overflowY: "auto" }}>
+        {/* Page-level boundary: a render crash in one page keeps the sidebar,
+            and re-keying on pathname clears the error automatically on nav. */}
+        <ErrorBoundary key={location.pathname}>
         {/* 3. Wrap only the Routes inside Suspense */}
         <Suspense fallback={<PageLoader />}>
           <Routes>
@@ -149,6 +153,7 @@ function AppShell() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
+        </ErrorBoundary>
       </div>
     </div>
   );
@@ -157,11 +162,13 @@ function AppShell() {
 export default function App() {
   return (
     <Router>
-      <ThemeProvider>
-        <AuthProvider>
-          <AppShell />
-        </AuthProvider>
-      </ThemeProvider>
+      <ErrorBoundary>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppShell />
+          </AuthProvider>
+        </ThemeProvider>
+      </ErrorBoundary>
     </Router>
   );
 }
