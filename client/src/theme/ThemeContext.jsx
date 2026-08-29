@@ -1,7 +1,9 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 const ThemeContext = createContext(null);
-const storageKey = "resume-screener-theme";
+const storageKey = "resume-screener-theme-v2";
+const lightOnlyPaths = new Set(["/login", "/forgot-password", "/reset-password"]);
 
 function getInitialTheme() {
   const savedTheme = localStorage.getItem(storageKey);
@@ -11,10 +13,16 @@ function getInitialTheme() {
 }
 
 export function ThemeProvider({ children }) {
+  const location = useLocation();
   const [theme, setTheme] = useState(getInitialTheme);
+  const appliedTheme = lightOnlyPaths.has(location.pathname) ? "light" : theme;
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = appliedTheme;
+    document.documentElement.style.colorScheme = appliedTheme;
+  }, [appliedTheme]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
     localStorage.setItem(storageKey, theme);
   }, [theme]);
 
