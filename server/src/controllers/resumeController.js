@@ -1776,7 +1776,7 @@ exports.getScoreboard = async (req, res) => {
                 },
                 metrics: [],
                 maxPerCategory: 4,
-                stats: { applicants: 0, reviewed: 0, advanced: 0, hold: 0, rejected: 0, pending: 0, avgScore: 0 },
+                stats: { applicants: 0, reviewed: 0, advanced: 0, hold: 0, rejected: 0, pending: 0, avgScore: 0, avgMaxScore: 0 },
                 candidates: [],
             });
         }
@@ -1883,7 +1883,8 @@ exports.getScoreboard = async (req, res) => {
         const gradedByUserLookup = await getGradedByUserLookup((reviews || []).map(review => review.graded_by));
 
         const candidateMap = {};
-        let totalNormalizedSum = 0;
+        let totalRawScoreSum = 0;
+        let totalAvailableScoreSum = 0;
         let reviewCount = 0;
         const metricSet = new Set(getMetricsFromRubricConfig(resumeRound.rubric_config));
 
@@ -1933,7 +1934,8 @@ exports.getScoreboard = async (req, res) => {
                 candidateYear,
             });
 
-            totalNormalizedSum += reviewNormalized;
+            totalRawScoreSum += reviewScore;
+            totalAvailableScoreSum += Number(scoring.maxScore) || 0;
             reviewCount++;
 
             if (!candidateMap[resumeId]) {
@@ -2092,7 +2094,8 @@ exports.getScoreboard = async (req, res) => {
         candidatesWithSignals.forEach((c, index) => { c.rank = index + 1; });
 
         const totalReviewed = candidatesWithSignals.filter(c => c.numReviews > 0).length;
-        const avgScore = reviewCount > 0 ? (totalNormalizedSum / reviewCount).toFixed(1) : 0;
+        const avgScore = reviewCount > 0 ? Number((totalRawScoreSum / reviewCount).toFixed(1)) : 0;
+        const avgMaxScore = reviewCount > 0 ? Number((totalAvailableScoreSum / reviewCount).toFixed(1)) : 0;
         const decisionCounts = countDecisions(candidatesWithSignals);
         const incompleteSummary = summarizeIncompleteDeliberation(candidatesWithSignals);
         const undecidedCount = decisionCounts.pending + decisionCounts.hold;
@@ -2140,6 +2143,7 @@ exports.getScoreboard = async (req, res) => {
                 rejected: decisionCounts.reject,
                 pending: decisionCounts.pending,
                 avgScore: avgScore,
+                avgMaxScore,
             },
             candidates: candidatesWithSignals
         });
@@ -2526,6 +2530,8 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             reviews: mappedReviews,
             aggregateScore,
             normalizedScore,
+            resumeMax,
+            maxScore: resumeMax,
             score: normalizedScore === null ? null : Math.round(normalizedScore),
             numReviews,
             year: candidate.year,
@@ -2533,7 +2539,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
         },
         reviewOverrideLookup,
-        { rubricConfig: resumeRound.rubric_config, candidateYear: candidate.year, metrics: [...metricSet] }
+        { rubricConfig: resumeRound.rubric_config, candidateYear: candidate.year, metrics: [...metricSet], resumeMaxScore: resumeMax }
     );
 
     const { data: frqRows, error: frqError } = await supabase
@@ -2585,6 +2591,8 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             score: compositeCandidate.score,
             resumeAggregateScore: compositeCandidate.resumeAggregateScore,
             resumeNormalizedScore: compositeCandidate.resumeNormalizedScore,
+            resumeMaxScore: compositeCandidate.resumeMax,
+            maxScore: compositeCandidate.compositeMax,
             frqScore: compositeCandidate.frqScore,
             frqPending: compositeCandidate.frqPending,
             numFrqReviews: compositeCandidate.numFrqReviews,
@@ -2747,16 +2755,13 @@ function mapAdminOverride(row) {
     };
 }
 
-/** Apply admin score override to scoring object (mutates in place). */
+/** Preserve legacy candidate-level override metadata without replacing point totals. */
 function applyAdminOverrideToScoring(scoring, adminOverride) {
     if (!adminOverride || adminOverride.overrideScore == null) {
         scoring.adminOverride = adminOverride ? { adminNotes: adminOverride.adminNotes, overrideScore: null, updatedAt: adminOverride.updatedAt } : null;
         return;
     }
-    // Cosmetic-only: replaces display % without changing underlying raw rubric data.
     const overridden = Number(adminOverride.overrideScore);
-    scoring.normalizedScore = overridden;
-    scoring.score = Math.round(overridden);
     scoring.adminOverride = {
         adminNotes: adminOverride.adminNotes || '',
         overrideScore: overridden,
@@ -3041,6 +3046,7 @@ exports.getGraderScoreboard = async (req, res) => {
                 reviewCount: 0,
                 totalScore: 0,
                 totalNormalized: 0,
+                totalMaxScore: 0,
                 categoryTotals: {},
                 categoryCounts: {},
                 reviews: [],
@@ -3066,6 +3072,7 @@ exports.getGraderScoreboard = async (req, res) => {
             grader.reviewCount++;
             grader.totalScore += reviewScore;
             grader.totalNormalized += reviewNormalized;
+            grader.totalMaxScore += Number(scoring.maxScore) || 0;
 
             Object.entries(review.scores || {}).forEach(([metric, value]) => {
                 const numericValue = Number(value) || 0;
@@ -3096,6 +3103,9 @@ exports.getGraderScoreboard = async (req, res) => {
             const averageNormalizedScore = grader.reviewCount > 0
                 ? grader.totalNormalized / grader.reviewCount
                 : null;
+            const averageMaxScore = grader.reviewCount > 0
+                ? grader.totalMaxScore / grader.reviewCount
+                : null;
             const categoryScores = buildCategoryScores(grader.categoryTotals, grader.categoryCounts);
 
             const sortedReviews = grader.reviews.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
@@ -3114,7 +3124,8 @@ exports.getGraderScoreboard = async (req, res) => {
                 averageNormalizedScore: averageNormalizedScore === null
                     ? null
                     : Number(averageNormalizedScore.toFixed(1)),
-                maxScore: 100,
+                averageMaxScore: averageMaxScore === null ? null : Number(averageMaxScore.toFixed(1)),
+                maxScore: averageMaxScore === null ? null : Number(averageMaxScore.toFixed(1)),
                 categoryScores,
                 latestReviewAt: sortedReviews[0]?.submittedAt || null,
                 reviews: sortedReviews,
@@ -3203,6 +3214,7 @@ exports.getFrqGraderScoreboard = async (req, res) => {
                 reviewCount: 0,
                 totalScore: 0,
                 totalNormalized: 0,
+                totalMaxScore: 0,
                 categoryTotals: {},
                 categoryCounts: {},
                 reviews: [],
@@ -3219,6 +3231,7 @@ exports.getFrqGraderScoreboard = async (req, res) => {
             grader.reviewCount++;
             grader.totalScore += reviewScore;
             grader.totalNormalized += reviewNormalized;
+            grader.totalMaxScore += FRQ_MAX_SCORE;
             grader.categoryTotals[FRQ_METRIC] = (grader.categoryTotals[FRQ_METRIC] || 0) + reviewScore;
             grader.categoryCounts[FRQ_METRIC] = (grader.categoryCounts[FRQ_METRIC] || 0) + 1;
 
@@ -3240,6 +3253,9 @@ exports.getFrqGraderScoreboard = async (req, res) => {
             const averageNormalizedScore = grader.reviewCount > 0
                 ? grader.totalNormalized / grader.reviewCount
                 : null;
+            const averageMaxScore = grader.reviewCount > 0
+                ? grader.totalMaxScore / grader.reviewCount
+                : null;
             const categoryScores = buildCategoryScores(grader.categoryTotals, grader.categoryCounts);
 
             const sortedReviews = grader.reviews.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
@@ -3258,7 +3274,8 @@ exports.getFrqGraderScoreboard = async (req, res) => {
                 averageNormalizedScore: averageNormalizedScore === null
                     ? null
                     : Number(averageNormalizedScore.toFixed(1)),
-                maxScore: 100,
+                averageMaxScore: averageMaxScore === null ? null : Number(averageMaxScore.toFixed(1)),
+                maxScore: averageMaxScore === null ? null : Number(averageMaxScore.toFixed(1)),
                 categoryScores,
                 latestReviewAt: sortedReviews[0]?.submittedAt || null,
                 reviews: sortedReviews,

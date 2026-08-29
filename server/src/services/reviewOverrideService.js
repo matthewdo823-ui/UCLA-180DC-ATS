@@ -134,19 +134,39 @@ function applyReviewOverrideToReview(review, override, options = {}) {
 function recomputeCandidateScoresFromReviews(candidate, metrics = [], options = {}) {
   const reviews = candidate.reviews || [];
   let totalScore = 0;
+  let totalNormalized = 0;
+  let totalMaxScore = 0;
   let count = 0;
+  let normalizedCount = 0;
+  let maxScoreCount = 0;
 
   reviews.forEach((review) => {
     const raw = Number(review.score);
     if (!Number.isFinite(raw)) return;
     totalScore += raw;
     count += 1;
+
+    const reviewMax = resolveReviewMaxScore(review, options);
+    if (Number.isFinite(reviewMax) && reviewMax > 0) {
+      totalMaxScore += reviewMax;
+      maxScoreCount += 1;
+    }
+
+    const normalized = Number.isFinite(Number(review.normalizedScore))
+      ? Number(review.normalizedScore)
+      : computeNormalizedFromAggregate(raw, reviewMax);
+    if (Number.isFinite(normalized)) {
+      totalNormalized += normalized;
+      normalizedCount += 1;
+    }
   });
 
   const aggregateScore = count > 0 ? Number((totalScore / count).toFixed(1)) : null;
-  const resumeMax = resolveResumeMaxScore(options, candidate.year);
-  const normalizedScore = resumeMax
-    ? computeNormalizedFromAggregate(aggregateScore, resumeMax)
+  const resumeMax = maxScoreCount > 0
+    ? Number((totalMaxScore / maxScoreCount).toFixed(1))
+    : resolveResumeMaxScore(options, candidate.year);
+  const normalizedScore = normalizedCount > 0
+    ? Number((totalNormalized / normalizedCount).toFixed(1))
     : null;
 
   const metricList = metrics.length ? metrics : candidate.metrics || [];
@@ -155,6 +175,8 @@ function recomputeCandidateScoresFromReviews(candidate, metrics = [], options = 
     ...candidate,
     aggregateScore,
     normalizedScore,
+    resumeMax,
+    maxScore: resumeMax,
     // Cosmetic display alias — sorting/ranking should use aggregateScore.
     score: normalizedScore == null ? null : Math.round(normalizedScore),
     categoryScores: buildCategoryScoresFromReviews(reviews, metricList),

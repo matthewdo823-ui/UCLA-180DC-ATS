@@ -22,6 +22,12 @@ export function formatNumber(value, options = {}) {
   return formatScore(value, options);
 }
 
+export function formatPoints(score, maxScore, { fallback = "—", suffix = false } = {}) {
+  if (!hasNumericScore(score) || !hasNumericScore(maxScore)) return fallback;
+  const label = `${formatScore(score)} / ${formatScore(maxScore)}`;
+  return suffix ? `${label} pts` : label;
+}
+
 export function formatDate(value, { fallback = "—", style = "locale" } = {}) {
   if (!value) return fallback;
   const date = new Date(value);

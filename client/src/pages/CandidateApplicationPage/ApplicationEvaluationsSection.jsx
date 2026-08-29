@@ -1,6 +1,6 @@
 import { FRQ_METRIC } from "../../constants/frq";
 import { css } from "../../theme/colors";
-import { formatDate, formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
+import { formatDate, formatPoints, formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 import { hasText } from "./applicationUtils";
 import CategoryRow from "./components/CategoryRow";
 import SectionCard from "./components/SectionCard";
@@ -57,7 +57,7 @@ function ResumeReviewCard({ review, index, metrics, maxPerCategory }) {
 
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <p style={{ margin: 0, color: reviewOverridden ? "#E24B4A" : cardGreen, fontSize: 17, fontWeight: 700 }}>
-            {formatScore(review.normalizedScore)}% <span style={{ color: css.textGray, fontSize: 12, fontWeight: 500 }}>· {formatScore(review.score)} raw</span>
+            {formatPoints(review.score, review.maxScore)} <span style={{ color: css.textGray, fontSize: 12, fontWeight: 500 }}>points</span>
           </p>
           <p style={{ margin: "3px 0 0", color: css.textGray, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
             {review.decision && review.decision !== "pass" ? titleCase(review.decision) : "Submitted"}{reviewOverridden ? " · overridden" : ""}
@@ -83,8 +83,8 @@ export default function ApplicationEvaluationsSection({ scoring }) {
   const resumeMetrics = (scoring?.metrics || []).filter(
     (metric) => metric !== FRQ_METRIC && hasNumericScore(scoring?.categoryScores?.[metric])
   );
-  const averageScore = scoring?.resumeNormalizedScore ?? scoring?.normalizedScore;
-  const averageRawScore = scoring?.resumeAggregateScore ?? scoring?.aggregateScore;
+  const averageScore = scoring?.resumeAggregateScore ?? scoring?.aggregateScore;
+  const averageMaxScore = scoring?.resumeMaxScore ?? scoring?.maxScore;
   const maxPerCategory = scoring?.maxPerCategory || 4;
   const distinctGraders = new Set(reviews.map((review) => review.reviewerEmail || review.reviewerName || review.id).filter(Boolean)).size;
 
@@ -99,7 +99,7 @@ export default function ApplicationEvaluationsSection({ scoring }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
-        <StatTile label="Average score" value={hasNumericScore(averageScore) ? `${formatScore(averageScore)}%` : "—"} detail={hasNumericScore(averageRawScore) ? `${formatScore(averageRawScore)} average raw points` : "No score submitted yet"} accent />
+        <StatTile label="Average score" value={formatPoints(averageScore, averageMaxScore)} detail={hasNumericScore(averageScore) ? "Average points earned per resume review" : "No score submitted yet"} accent />
         <StatTile label="Times graded" value={reviews.length} detail={`${reviews.length} completed ${reviews.length === 1 ? "review" : "reviews"}`} />
         <StatTile label="Distinct graders" value={distinctGraders} detail="People who submitted a resume score" />
       </div>
