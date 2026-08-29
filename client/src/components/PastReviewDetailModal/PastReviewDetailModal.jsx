@@ -70,7 +70,8 @@ function CategoryRowEdit({ metric, value, onScore, maxPerCategory = RUBRIC_MAX_P
             <button
               key={n}
               type="button"
-              onClick={() => onScore(metric, n)}
+              aria-pressed={sel}
+              onClick={() => onScore(metric, sel ? null : n)}
               style={{
                 width: 30,
                 height: 30,
