@@ -20,8 +20,7 @@ Internal ATS for UCLA 180 Degrees Consulting — resume screening, interview man
 │   ├── sql/         # Database migrations (run in order)
 │   ├── scripts/     # Utility scripts (e.g. Google Form field discovery)
 │   └── gcp/         # Google service account key (gitignored)
-├── images/          # Static assets
-└── max notes.md     # UI/product improvement backlog
+└── images/          # Static assets
 ```
 
 ## Prerequisites
