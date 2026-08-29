@@ -36,7 +36,7 @@ GCP Console → **APIs & Services → Library** → enable **Gmail API**.
 
 ```bash
 GMAIL_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GMAIL_CLIENT_SECRET=your-client-secret
+GMAIL_CLIENT_SECRET=<your-client-secret>
 GMAIL_OAUTH_REDIRECT_URI=http://localhost:3000/oauth2callback
 GMAIL_SEND_AS=matthewdo823@gmail.com
 GMAIL_FROM_NAME=180DC Recruiting
