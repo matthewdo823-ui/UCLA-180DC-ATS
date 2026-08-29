@@ -7,7 +7,7 @@ import { hasText } from "./applicationUtils";
 import { cardGreen, cardMint, cardPale, ROUND_1_LABEL, UPCOMING_EVALUATION_ROUNDS } from "./constants";
 import ApplicationResumeSection from "./ApplicationResumeSection";
 
-export default function ApplicationProfileSidebar({ candidate, resume, scoring, authToken }) {
+export default function ApplicationProfileSidebar({ candidate, resume, scoring, authToken, candidateRank, candidateCount }) {
   return (
     <aside style={{ position: "sticky", top: 16 }}>
       <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
@@ -57,27 +57,21 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring, 
               </p>
               {hasNumericScore(scoring?.normalizedScore) ? (
                 <>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                    <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: scoring?.adminOverride?.overrideScore != null ? "#E24B4A" : cardGreen, lineHeight: 1 }}>
-                      {formatScore(scoring.normalizedScore)}<span style={{ fontSize: 14 }}>%</span>
-                    </p>
-                    {scoring?.adminOverride?.overrideScore != null && (
-                      <span
-                        style={{
-                          fontSize: 9,
-                          fontWeight: 700,
-                          letterSpacing: "0.05em",
-                          textTransform: "uppercase",
-                          padding: "3px 8px",
-                          borderRadius: 20,
-                          background: "rgba(226,75,74,0.12)",
-                          color: "#E24B4A",
-                          border: "1px solid rgba(226,75,74,0.28)",
-                        }}
-                      >
-                        Overridden
-                      </span>
-                    )}
+                  <div style={{ display: "flex", alignItems: "stretch", gap: 13 }}>
+                    <div style={{ minWidth: 48, paddingRight: 13, borderRight: `1px solid ${css.borderLight}` }}>
+                      <p style={{ margin: 0, fontSize: 25, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>
+                        {candidateRank ? `#${candidateRank}` : "—"}
+                      </p>
+                      <p style={{ margin: "5px 0 0", fontSize: 10, color: css.textGray }}>
+                        Rank{candidateCount ? ` of ${candidateCount}` : ""}
+                      </p>
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: scoring?.adminOverride?.overrideScore != null ? "#E24B4A" : cardGreen, lineHeight: 1 }}>
+                        {formatScore(scoring.normalizedScore)}<span style={{ fontSize: 14 }}>%</span>
+                      </p>
+                      <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>Average resume score</p>
+                    </div>
                   </div>
                   <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
                     {scoring?.adminOverride?.overrideScore != null
