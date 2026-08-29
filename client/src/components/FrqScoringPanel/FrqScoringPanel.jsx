@@ -85,7 +85,8 @@ export default function FrqScoringPanel({
                 <button
                   key={n}
                   type="button"
-                  onClick={() => onScore(n)}
+                  aria-pressed={sel}
+                  onClick={() => onScore(sel ? null : n)}
                   style={{
                     width: 32,
                     height: 32,
