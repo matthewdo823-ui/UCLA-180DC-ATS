@@ -160,6 +160,9 @@ export default function Sidebar() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const isAdmin = isAdminRole(user?.role);
+  const themeActionLabel = theme === "dark"
+    ? "Switch to light mode"
+    : "Switch to dark mode";
   const menuLinks = baseMenuLinks.map((link) => (
     link.path === "/" && isAdmin
       ? { ...link, label: "Admin Home" }
@@ -210,7 +213,7 @@ export default function Sidebar() {
           <button
             type="button"
             onClick={toggleTheme}
-            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            aria-label={themeActionLabel}
             style={{
               border: `1px solid ${css.borderLight}`,
               background: "var(--color-surface-muted)",
@@ -223,7 +226,7 @@ export default function Sidebar() {
               letterSpacing: "0.01em",
             }}
           >
-            Vishnu Mode {theme === "dark" ? "Dark" : "Light"}
+            {themeActionLabel}
           </button>
         </div>
         <div style={{ padding: 16, borderTop: `1px solid ${css.borderLight}`, display: "flex", flexDirection: "column", gap: 10 }}>
