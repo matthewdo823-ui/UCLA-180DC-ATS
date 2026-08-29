@@ -59,13 +59,25 @@ export default function ReviewOverrideSection({
   onOverrideSaved,
   embedded = false,
 }) {
+  const embeddedOverrides = useMemo(() => {
+    if (!embedded) return {};
+    return Object.fromEntries(
+      (reviews || [])
+        .filter((review) => review?.id && review?.adminOverride)
+        .map((review) => [review.id, review.adminOverride])
+    );
+  }, [embedded, reviews]);
+
   const {
     overrideByReviewId,
     loading,
     savingReviewId,
     saveError,
     save,
-  } = useReviewOverrides(resumeId);
+  } = useReviewOverrides(resumeId, true, {
+    initialOverrides: embeddedOverrides,
+    skipInitialLoad: embedded,
+  });
 
   const [selectedReviewId, setSelectedReviewId] = useState("");
   const [overrideScore, setOverrideScore] = useState("");
