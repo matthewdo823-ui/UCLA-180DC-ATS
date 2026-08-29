@@ -15,17 +15,21 @@ function parseAllowedOrigins() {
   return raw.split(',').map((origin) => origin.trim()).filter(Boolean);
 }
 
+function isLocalDevelopmentOrigin(origin) {
+  return /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d+$/.test(origin);
+}
+
 app.use(express.json());
 app.use(cors({
-    origin(origin, callback) {
-      const allowed = parseAllowedOrigins();
-      if (!origin || allowed.includes(origin) || /^http:\/\/localhost:\d+$/.test(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-  }));
+  origin(origin, callback) {
+    const allowed = parseAllowedOrigins();
+    if (!origin || allowed.includes(origin) || isLocalDevelopmentOrigin(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+}));
 
 // Liveness probe — intentionally cheap: no auth, no DB. Mounted synchronously
 // (not inside app.listen's callback) so an external keep-alive pinger can hit it
