@@ -1,4 +1,5 @@
 import { css } from "../../theme/colors";
+import { formatReviewCount } from "../../utils/reviewCounts";
 import { FRQ_MAX_SCORE } from "../../constants/frq";
 import { YEAR_CFG } from "../../constants/config";
 
@@ -55,8 +56,8 @@ export default function FrqDrawer({ open, onClose, reviews, loading = false, onR
           }}
         >
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: css.textDark }}>Past Free-Response Grades</div>
-            <div style={{ fontSize: 10, color: css.textGray, marginTop: 2 }}>Edit or review past application response grades</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: css.textDark }}>Past Free Response Reviews</div>
+            <div style={{ fontSize: 10, color: css.textGray, marginTop: 2 }}>Edit or review past application response reviews</div>
           </div>
           <button
             type="button"
@@ -87,7 +88,7 @@ export default function FrqDrawer({ open, onClose, reviews, loading = false, onR
           ) : reviews.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px 20px", color: css.textGray, fontSize: 12, lineHeight: 1.7 }}>
               <span style={{ fontSize: 28, display: "block", marginBottom: 10, opacity: 0.6 }}>📝</span>
-              No free-response grades yet.
+              No free response reviews yet.
             </div>
           ) : (
             <>
@@ -101,7 +102,7 @@ export default function FrqDrawer({ open, onClose, reviews, loading = false, onR
                   padding: "6px 0 8px",
                 }}
               >
-                All Free-Response Grades ({reviews.length})
+                {formatReviewCount(reviews.length, "free response")}
               </div>
               {reviews.map((r) => {
                 const yr = yearBadgeConfig(r.year);

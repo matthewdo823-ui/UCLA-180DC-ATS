@@ -408,7 +408,7 @@ async function loadActionItems({
     items.push({
       id: "graders-not-started",
       label: "Graders haven't started",
-      detail: "Team members with zero resume grades submitted.",
+      detail: "Team members with zero resume reviews submitted.",
       count: graderSummary.notStarted,
       severity: "info",
       path: "/grader-scoreboard",
@@ -419,8 +419,8 @@ async function loadActionItems({
     const behindCount = graderSummary.behindCount;
     items.push({
       id: "graders-behind",
-      label: "Graders behind on resume grades",
-      detail: `${behindCount} grader${behindCount === 1 ? "" : "s"} below the ${GRADER_REVIEW_GOAL}-resume-grade goal.`,
+      label: "Graders behind on resume reviews",
+      detail: `${behindCount} grader${behindCount === 1 ? "" : "s"} below the ${GRADER_REVIEW_GOAL}-resume-review goal.`,
       count: behindCount,
       severity: "info",
       path: "/grader-scoreboard",
@@ -431,7 +431,7 @@ async function loadActionItems({
     items.push({
       id: "awaiting-reviews",
       label: "Resumes awaiting first grade",
-      detail: "Candidates with no resume grades yet.",
+      detail: "Candidates with no resume reviews yet.",
       count: pipeline.awaitingReviews,
       severity: "info",
       path: "/scoreboard",

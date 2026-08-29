@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { css } from "../../theme/colors";
 import { formatRoundKind } from "../../constants/rounds";
+import { formatReviewCountPair } from "../../utils/reviewCounts";
 
 export const pageStyle = {
   minHeight: "100%",
@@ -144,14 +145,14 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
         <div style={{ display: "grid", gap: 14, marginBottom: 20 }}>
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Resume grading</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Resume review coverage</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>{resumeReviewed} / {applicants} ({resumeReviewPct}%) · {resumeLeft} left</span>
             </div>
             <ProgressBar pct={resumeReviewPct} />
           </div>
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Free-response grading</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Free response review coverage</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: "#1D9E75" }}>{frqReviewed} / {applicants} ({frqReviewPct}%) · {frqLeft} left</span>
             </div>
             <ProgressBar pct={frqReviewPct} color="#1D9E75" />
@@ -558,11 +559,12 @@ export function GraderProgressRows({ graders, expectedReviews, expectedFrqReview
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: css.textDark }}>{grader.name}</span>
+              <span style={{ fontSize: 11, color: css.textGray }}>{formatReviewCountPair(resumeCount, frqCount)}</span>
             </div>
             <div style={{ display: "grid", gap: 8 }}>
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
-                  <span style={{ color: css.textGray }}>Resume grades</span>
+                  <span style={{ color: css.textGray }}>Resume reviews</span>
                   <strong style={{ color: css.greenDark }}>{resumeCount} / {expectedReviews}</strong>
                 </div>
                 <ProgressBar pct={resumePct} />
@@ -570,7 +572,7 @@ export function GraderProgressRows({ graders, expectedReviews, expectedFrqReview
               {showFrqProgress ? (
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
-                    <span style={{ color: css.textGray }}>Free-response grades</span>
+                    <span style={{ color: css.textGray }}>Free response reviews</span>
                     <strong style={{ color: "#1D9E75" }}>{frqCount} / {expectedFrqReviews}</strong>
                   </div>
                   <ProgressBar pct={frqPct} color="#1D9E75" />

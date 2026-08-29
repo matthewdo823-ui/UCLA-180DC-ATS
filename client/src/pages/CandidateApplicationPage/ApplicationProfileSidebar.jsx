@@ -3,7 +3,7 @@ import { css } from "../../theme/colors";
 import { sansFont } from "../../theme/typography";
 import { formatPoints, hasNumericScore } from "../../utils/format";
 import { getCurrentResumeMaxScore } from "../../utils/rubric";
-import { formatGradeCounts } from "../../utils/reviewCounts";
+import { formatReviewCounts } from "../../utils/reviewCounts";
 import { hasText } from "./applicationUtils";
 import { cardGreen, cardMint, cardPale, ROUND_1_LABEL, UPCOMING_EVALUATION_ROUNDS } from "./constants";
 
@@ -58,7 +58,7 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring }
                     </p>
                   </div>
                   <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
-                    Average points · {formatGradeCounts(scoring, { compact: true })}
+                    Average points · {formatReviewCounts(scoring)}
                   </p>
                 </>
               ) : (

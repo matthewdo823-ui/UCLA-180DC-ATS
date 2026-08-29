@@ -3,6 +3,7 @@ import logo180 from "@images/180logo.webp";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { css } from "../../theme/colors";
 import { formatDate } from "../../utils/format";
+import { formatReviewCount } from "../../utils/reviewCounts";
 import useGraderDashboard from "./useGraderDashboard";
 import {
   pageStyle,
@@ -46,7 +47,7 @@ export default function GraderDashboard() {
     ? goal > 0
       ? `Evaluate ${goal} candidate${goal === 1 ? "" : "s"} in ${activeRound?.name || "this round"}`
       : "No candidates in your interview queue"
-    : `Grade ${goal} resume${goal === 1 ? "" : "s"}`;
+    : `Complete ${formatReviewCount(goal, "resume")}`;
 
   const statusMessage = goalComplete
     ? "Goal complete — thank you!"
@@ -102,7 +103,7 @@ export default function GraderDashboard() {
             <div>
               <span style={{ fontSize: 13, color: css.textGray, fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
                 <span>{isInterview ? "📅" : "⭐"}</span>
-                {isInterview ? "Your interview progress" : "Your resume-grading goal"}
+                {isInterview ? "Your interview progress" : "Your resume-review goal"}
               </span>
               <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>
                 {loading ? "Loading…" : activeRound ? goalLabel : "No active round"}
@@ -119,7 +120,7 @@ export default function GraderDashboard() {
               ) : null}
             </div>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 12, color: css.textGray, fontWeight: 500 }}>{isInterview ? "Progress" : "Resume grades"}</div>
+              <div style={{ fontSize: 12, color: css.textGray, fontWeight: 500 }}>{isInterview ? "Progress" : formatReviewCount(count, "resume")}</div>
               <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>
                 {loading ? "—" : goal > 0 ? `${count}/${goal}` : count}
               </div>
@@ -159,7 +160,7 @@ export default function GraderDashboard() {
         <Panel title="Quick links">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
             {[
-              { label: "Past resume grades", path: gradingPath, icon: "📋", desc: "View and edit your resume grades", state: { openPastQueue: true } },
+              { label: "Past resume reviews", path: gradingPath, icon: "📋", desc: "View and edit your resume reviews", state: { openPastQueue: true } },
               { label: "Scoreboard", path: "/scoreboard", icon: "📊", desc: "See ranked candidates" },
               { label: "Demographics", path: "/demographics", icon: "📈", desc: "Pipeline diversity overview" },
             ].map((link) => (

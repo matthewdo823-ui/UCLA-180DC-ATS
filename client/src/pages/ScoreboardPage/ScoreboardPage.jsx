@@ -15,7 +15,7 @@ import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatPoints, formatScore, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
 import { resolveReviewMaxScore } from "../../utils/rubric";
-import { formatGradeCounts, getFreeResponseGradeCount, getResumeGradeCount } from "../../utils/reviewCounts";
+import { formatReviewCountPair, formatReviewCounts, getFreeResponseReviewCount, getResumeReviewCount } from "../../utils/reviewCounts";
 import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
 import {
   buildDecisionPayload,
@@ -208,7 +208,7 @@ function buildActiveFilterPills(filters, deliberationMode) {
     pills.push({ key: "year", label: `Year: ${effective.year}`, clear: { year: "all" } });
   }
   if (effective.reviews !== "all") {
-    const reviewLabels = { 0: "No resume grades", 1: "1 resume grade", "1+": "Resume graded", "2+": "2+ resume grades" };
+    const reviewLabels = { 0: "No resume reviews", 1: "1 resume review", "1+": "Resume reviewed", "2+": "2+ resume reviews" };
     pills.push({ key: "reviews", label: reviewLabels[effective.reviews] || effective.reviews, clear: { reviews: "all" } });
   }
   if (effective.scoreBand !== "all") {
@@ -444,7 +444,7 @@ function ScorecardModal({
                 </p>
               ) : aggregateScore != null ? (
                 <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
-                  Average across submitted grades
+                  Average across submitted reviews
                   {candidate.frqPending ? " · FRQ pending" : ""}
                 </p>
               ) : null}
@@ -481,7 +481,7 @@ function ScorecardModal({
               style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: 0 }}
             >
               <span style={{ fontSize: 11, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em" }}>
-                GRADES ({reviews.length} resume · {frqReviews.length} free response)
+                REVIEWS ({formatReviewCountPair(reviews.length, frqReviews.length)})
               </span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <ReviewerStack reviews={reviews} />
@@ -542,7 +542,7 @@ function ScorecardModal({
                   );
                 })}
                 {reviews.length === 0 && frqReviews.length === 0 ? (
-                  <p style={{ margin: "8px 0 0", fontSize: 12, color: css.textGray }}>No resume or free-response grades yet.</p>
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: css.textGray }}>No resume or free response reviews yet.</p>
                 ) : null}
               </div>
             )}
@@ -1082,7 +1082,7 @@ export default function ScoreboardPage() {
         case "REJECTED":
           setFilters(f => ({ ...f, decision: "reject" }));
           break;
-        case "RESUME GRADED":
+        case "RESUME REVIEWED":
           setFilters(f => ({ ...f, reviews: "1+" }));
           break;
         case "APPLICANTS":
@@ -1095,7 +1095,7 @@ export default function ScoreboardPage() {
       return;
     }
     switch (label) {
-      case "RESUME GRADED":
+      case "RESUME REVIEWED":
         setFilters(f => ({ ...f, reviews: "1+" }));
         break;
       case "ADVANCED":
@@ -1151,8 +1151,8 @@ export default function ScoreboardPage() {
     }
   }, [viewingHistorical, deliberationMode]);
 
-  const resumeGradedApplicants = candidates.filter((candidate) => getResumeGradeCount(candidate) > 0).length;
-  const freeResponseGradedApplicants = candidates.filter((candidate) => getFreeResponseGradeCount(candidate) > 0).length;
+  const resumeReviewedApplicants = candidates.filter((candidate) => getResumeReviewCount(candidate) > 0).length;
+  const freeResponseReviewedApplicants = candidates.filter((candidate) => getFreeResponseReviewCount(candidate) > 0).length;
 
   const statRows = deliberationMode
     ? [
@@ -1160,14 +1160,14 @@ export default function ScoreboardPage() {
         { label: "ADVANCED", value: statCount(displayStats?.advanced ?? 0), clickable: true },
         { label: "HOLD", value: statCount(displayStats?.hold ?? 0), clickable: true },
         { label: "REJECTED", value: statCount(displayStats?.rejected ?? 0), clickable: true },
-        { label: "RESUME GRADED", value: statCount(resumeGradedApplicants), clickable: true },
-        { label: "FREE RESPONSE GRADED", value: statCount(freeResponseGradedApplicants), clickable: false },
+        { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
+        { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
         { label: "APPLICANTS", value: statCount(displayStats?.applicants), clickable: true },
       ]
     : [
         { label: "APPLICANTS", value: statCount(displayStats?.applicants), clickable: true },
-        { label: "RESUME GRADED", value: statCount(resumeGradedApplicants), clickable: true },
-        { label: "FREE RESPONSE GRADED", value: statCount(freeResponseGradedApplicants), clickable: false },
+        { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
+        { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
         { label: "ADVANCED", value: statCount(displayStats?.advanced), clickable: true },
         { label: "AVG SCORE", value: formatPoints(displayStats?.avgScore, displayStats?.avgMaxScore), clickable: false },
       ];
@@ -1544,12 +1544,12 @@ export default function ScoreboardPage() {
             {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </FilterField>
-        <FilterField label="Resume grades" theme={t}>
+        <FilterField label="Resume reviews" theme={t}>
           <select value={filters.reviews} onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))} style={barSelectStyle}>
             <option value="all">Any count</option>
             <option value="0">None yet (0)</option>
             <option value="1">Exactly 1</option>
-            <option value="1+">Reviewed (1+)</option>
+            <option value="1+">At least 1 resume review</option>
             <option value="2+">2 or more</option>
           </select>
         </FilterField>
@@ -1829,7 +1829,7 @@ export default function ScoreboardPage() {
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, lineHeight: 1.35 }}>
                 {equalizeActive ? "Equalized points" : "Average points"}
                 <br />
-                {formatGradeCounts(c, { compact: true })}
+                {formatReviewCounts(c)}
               </div>
             </div>
 
