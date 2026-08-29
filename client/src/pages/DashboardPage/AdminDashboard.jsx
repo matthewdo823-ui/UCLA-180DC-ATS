@@ -71,14 +71,16 @@ function getDashboardFocus({ context, pipeline, actionItems, isInterview }) {
     };
   }
   if ((pipeline?.awaitingReviews || 0) > 0) {
+    const resumeLeft = pipeline.resumeReviewsRemaining || 0;
+    const frqLeft = pipeline.frqReviewsRemaining || 0;
     return {
       eyebrow: `${context.activeRound.name || "Active round"}`,
       title: isInterview
         ? `${pipeline.awaitingReviews} candidate${pipeline.awaitingReviews === 1 ? "" : "s"} still need evaluation`
-        : `${pipeline.awaitingReviews} application${pipeline.awaitingReviews === 1 ? "" : "s"} still need complete grading`,
+        : `${resumeLeft} resume · ${frqLeft} free-response grades left`,
       detail: isInterview
         ? `${pipeline.reviewed || 0} of ${pipeline.applicants || 0} evaluated.`
-        : `${pipeline.resumeReviewed || 0} have a resume grade and ${pipeline.frqReviewed || 0} have a free-response grade.`,
+        : `${pipeline.resumeReviewed || 0}/${pipeline.applicants || 0} candidates have a resume grade; ${pipeline.frqReviewed || 0}/${pipeline.applicants || 0} have a free-response grade.`,
       actionLabel: isInterview ? "Open interviews" : "Open review queue",
       path: isInterview ? "/interviews" : "/scoreboard",
     };
@@ -176,6 +178,21 @@ export default function AdminDashboard() {
           <PageLoader minHeight="60vh" />
         ) : (
           <>
+            <Panel
+              title={context?.cycle?.name ? `${context.cycle.name} · recruiting timeline` : "Recruiting timeline"}
+              rightSlot={(
+                <button type="button" onClick={() => navigate("/cycle-management")} style={{ border: "none", padding: 0, background: "transparent", color: css.greenDark, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  Manage cycles →
+                </button>
+              )}
+            >
+              <RoundTimeline
+                rounds={context?.allRounds}
+                activeRound={context?.activeRound}
+                nextRound={context?.nextRound}
+              />
+            </Panel>
+
             <section style={{
               background: css.cardWhite,
               border: `1px solid ${css.borderLight}`,
@@ -259,32 +276,27 @@ export default function AdminDashboard() {
                       <span><strong style={{ color: css.textDark }}>{graderSummary.totalResumeGrades}</strong> resume grades</span>
                       <span><strong style={{ color: css.textDark }}>{graderSummary.totalFrqGrades}</strong> free-response grades</span>
                     </div>
-                    {graderSummary.behindGraders?.length > 0 ? (
+                    {graderSummary.graderProgress?.length > 0 ? (
                       <>
                         <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                          Behind on resume goal
+                          Progress by grader
                         </div>
-                        <GraderProgressRows
-                          graders={graderSummary.behindGraders}
-                          expectedReviews={graderSummary.expectedReviews}
-                          expectedFrqReviews={graderSummary.expectedFrqReviews}
-                        />
+                        <div style={{ maxHeight: 430, overflowY: "auto", paddingRight: 4 }}>
+                          <GraderProgressRows
+                            graders={graderSummary.graderProgress}
+                            expectedReviews={graderSummary.expectedReviews}
+                            expectedFrqReviews={graderSummary.expectedFrqReviews}
+                          />
+                        </div>
                       </>
                     ) : (
-                      <div style={{ fontSize: 13, color: css.textGray, paddingTop: 10 }}>All active graders are on track.</div>
+                      <div style={{ fontSize: 13, color: css.textGray, paddingTop: 10 }}>No grader activity yet.</div>
                     )}
                   </div>
                 )}
               </Panel>
             </div>
 
-            <Panel title="Round timeline" style={{ marginTop: 4 }}>
-              <RoundTimeline
-                rounds={context?.allRounds}
-                activeRound={context?.activeRound}
-                nextRound={context?.nextRound}
-              />
-            </Panel>
           </>
         )}
       </div>

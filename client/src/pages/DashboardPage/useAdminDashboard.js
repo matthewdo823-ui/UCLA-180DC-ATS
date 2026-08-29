@@ -35,16 +35,19 @@ function mapScoreboardToPipeline(scoreboardData, interviewData) {
   const fullyReviewed = candidates.filter(
     (candidate) => getResumeGradeCount(candidate) > 0 && getFreeResponseGradeCount(candidate) > 0
   ).length;
+  const applicants = stats.applicants || 0;
   const undecidedCount = scoreboardData?.context?.undecidedCount
     ?? ((stats.pending || 0) + (stats.hold || 0));
 
   return {
     mode: "resume",
-    applicants: stats.applicants || 0,
+    applicants,
     reviewed: fullyReviewed,
     resumeReviewed,
     frqReviewed,
-    awaitingReviews: Math.max(0, (stats.applicants || 0) - fullyReviewed),
+    resumeReviewsRemaining: Math.max(0, applicants - resumeReviewed),
+    frqReviewsRemaining: Math.max(0, applicants - frqReviewed),
+    awaitingReviews: Math.max(0, applicants - fullyReviewed),
     advanced: stats.advanced || 0,
     hold: stats.hold || 0,
     rejected: stats.rejected || 0,
@@ -65,6 +68,13 @@ function mapGraderScoreboard(graderData, frqGraderData) {
   }));
   const expectedReviews = stats.expectedReviews || 30;
   const expectedFrqReviews = frqGraderData?.stats?.expectedReviews ?? 0;
+  const graderProgress = [...graders].sort((a, b) => {
+    const resumeDelta = (b.resumeReviewCount || 0) - (a.resumeReviewCount || 0);
+    if (resumeDelta) return resumeDelta;
+    const frqDelta = (b.frqReviewCount || 0) - (a.frqReviewCount || 0);
+    if (frqDelta) return frqDelta;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
 
   const behindGraders = graders
     .filter((g) => (g.reviewCount || 0) > 0 && (g.reviewCount || 0) < expectedReviews)
@@ -85,6 +95,7 @@ function mapGraderScoreboard(graderData, frqGraderData) {
     avgReviews: stats.avgReviews ?? 0,
     expectedReviews,
     expectedFrqReviews,
+    graderProgress,
     behindGraders,
     behindCount,
     completeCount: graders.filter((g) => (g.reviewCount || 0) >= expectedReviews).length,
@@ -184,9 +195,9 @@ export default function useAdminDashboard(enabled = true) {
         if (pipeline.mode === "interview") return { ...item, count: pipeline.awaitingReviews };
         return {
           ...item,
-          label: "Applications missing complete grading",
-          detail: `${pipeline.resumeReviewed || 0} have a resume grade; ${pipeline.frqReviewed || 0} have a free-response grade.`,
-          count: pipeline.awaitingReviews,
+          label: "Grading still left in this round",
+          detail: `${pipeline.resumeReviewsRemaining || 0} need a resume grade; ${pipeline.frqReviewsRemaining || 0} need a free-response grade.`,
+          countLabel: `${pipeline.resumeReviewsRemaining || 0} resume · ${pipeline.frqReviewsRemaining || 0} FRQ`,
         };
       }
       if (item.id === "undecided" && pipeline.undecidedCount != null) {

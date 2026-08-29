@@ -99,6 +99,8 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
   const reviewPct = applicants > 0 ? Math.round((reviewed / applicants) * 100) : 0;
   const resumeReviewed = pipeline.resumeReviewed || 0;
   const frqReviewed = pipeline.frqReviewed || 0;
+  const resumeLeft = pipeline.resumeReviewsRemaining || 0;
+  const frqLeft = pipeline.frqReviewsRemaining || 0;
   const resumeReviewPct = applicants > 0 ? Math.round((resumeReviewed / applicants) * 100) : 0;
   const frqReviewPct = applicants > 0 ? Math.round((frqReviewed / applicants) * 100) : 0;
 
@@ -143,14 +145,14 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Resume grading</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>{resumeReviewed} / {applicants} ({resumeReviewPct}%)</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>{resumeReviewed} / {applicants} ({resumeReviewPct}%) · {resumeLeft} left</span>
             </div>
             <ProgressBar pct={resumeReviewPct} />
           </div>
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Free-response grading</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#1D9E75" }}>{frqReviewed} / {applicants} ({frqReviewPct}%)</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#1D9E75" }}>{frqReviewed} / {applicants} ({frqReviewPct}%) · {frqLeft} left</span>
             </div>
             <ProgressBar pct={frqReviewPct} color="#1D9E75" />
           </div>
@@ -270,7 +272,7 @@ export function ActionItemList({ items, onNavigate, limit }) {
                 <div style={{ fontSize: 12, color: css.textGray, marginTop: 4 }}>{item.detail}</div>
               ) : null}
             </div>
-            {item.count != null ? (
+            {item.countLabel != null || item.count != null ? (
               <span style={{
                 background: style.bg,
                 color: style.color,
@@ -282,7 +284,7 @@ export function ActionItemList({ items, onNavigate, limit }) {
                 flexShrink: 0,
               }}
               >
-                {item.count}
+                {item.countLabel ?? item.count}
               </span>
             ) : (
               <span style={{ fontSize: 18, color: css.textGray, flexShrink: 0 }}>→</span>
@@ -391,11 +393,14 @@ function getRoundPhaseMessage({ rounds, activeRound, nextRound }) {
 
 export function RoundTimeline({ rounds, activeRound, nextRound }) {
   const sorted = [...(rounds || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const phase = getRoundPhaseMessage({ rounds: sorted, activeRound, nextRound });
 
   if (!sorted.length) {
-    const phase = getRoundPhaseMessage({ rounds: sorted, activeRound, nextRound });
     return (
-      <div style={{ fontSize: 13, color: css.textGray }}>{phase.detail}</div>
+      <div style={{ padding: "14px 16px", borderRadius: 10, border: `1px solid ${phase.bd || css.borderLight}`, background: phase.bg || css.cardWhite }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: phase.accent || css.textDark }}>{phase.title}</div>
+        <div style={{ marginTop: 4, fontSize: 13, color: css.textGray }}>{phase.detail}</div>
+      </div>
     );
   }
 
@@ -408,6 +413,17 @@ export function RoundTimeline({ rounds, activeRound, nextRound }) {
       boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
     }}
     >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 12, padding: "11px 13px", borderRadius: 9, border: `1px solid ${phase.bd || css.borderLight}`, background: phase.bg || css.cardWhite }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: phase.accent || css.textDark }}>{phase.title}</div>
+          <div style={{ marginTop: 3, fontSize: 12, lineHeight: 1.45, color: css.textGray }}>{phase.detail}</div>
+        </div>
+        {activeRound ? (
+          <span style={{ flexShrink: 0, padding: "5px 9px", borderRadius: 999, background: css.cardWhite, border: `1px solid ${phase.bd || css.borderLight}`, color: phase.accent || css.greenDark, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Active round
+          </span>
+        ) : null}
+      </div>
       <div style={{ display: "flex", alignItems: "stretch", gap: 6, overflowX: "auto" }}>
         {sorted.map((round, index) => {
           const status = round.status || "draft";
