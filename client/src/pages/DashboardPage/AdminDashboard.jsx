@@ -147,7 +147,10 @@ export default function AdminDashboard() {
   const sortedActionItems = [...actionItems].sort(
     (a, b) => (severityRank[a.severity] ?? 3) - (severityRank[b.severity] ?? 3)
   );
-  const reviewPct = pipeline?.applicants ? Math.round(((pipeline?.reviewed || 0) / pipeline.applicants) * 100) : 0;
+  const applicants = pipeline?.applicants || 0;
+  const reviewPct = applicants ? Math.round(((pipeline?.reviewed || 0) / applicants) * 100) : 0;
+  const resumeReviewPct = applicants ? Math.round(((pipeline?.resumeReviewed || 0) / applicants) * 100) : 0;
+  const frqReviewPct = applicants ? Math.round(((pipeline?.frqReviewed || 0) / applicants) * 100) : 0;
 
   return (
     <div style={{ ...pageStyle, padding: 0 }}>
@@ -196,12 +199,25 @@ export default function AdminDashboard() {
               </div>
               <div style={{ flexShrink: 0, minWidth: 142, textAlign: "right" }}>
                 <div style={{ fontSize: 11, color: css.textGray, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Round progress</div>
-                <div style={{ marginTop: 3, fontSize: 25, fontWeight: 700, color: css.greenDark, letterSpacing: "-0.03em" }}>{reviewPct}%</div>
-                <div style={{ marginTop: 2, marginBottom: 13, fontSize: 12, color: css.textGray }}>
-                  {isInterview
-                    ? `${pipeline?.reviewed || 0} of ${pipeline?.applicants || 0} evaluated`
-                    : `${pipeline?.resumeReviewed || 0} resume · ${pipeline?.frqReviewed || 0} free response`}
-                </div>
+                {isInterview ? (
+                  <>
+                    <div style={{ marginTop: 3, fontSize: 25, fontWeight: 700, color: css.greenDark, letterSpacing: "-0.03em" }}>{reviewPct}%</div>
+                    <div style={{ marginTop: 2, marginBottom: 13, fontSize: 12, color: css.textGray }}>
+                      {pipeline?.reviewed || 0} of {applicants} evaluated
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ margin: "7px 0 13px", display: "grid", gap: 5, minWidth: 190 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 14, fontSize: 12 }}>
+                      <span style={{ color: css.textGray }}>Resume</span>
+                      <strong style={{ color: css.greenDark }}>{pipeline?.resumeReviewed || 0}/{applicants} · {resumeReviewPct}%</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 14, fontSize: 12 }}>
+                      <span style={{ color: css.textGray }}>Free response</span>
+                      <strong style={{ color: "#1D9E75" }}>{pipeline?.frqReviewed || 0}/{applicants} · {frqReviewPct}%</strong>
+                    </div>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => navigate(focus.path)}
@@ -236,8 +252,8 @@ export default function AdminDashboard() {
                 ) : (
                   <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: "18px 20px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 16, paddingBottom: 14, marginBottom: 4, borderBottom: `1px solid ${css.borderLight}`, fontSize: 13 }}>
-                      <span style={{ color: css.textDark, fontWeight: 700 }}>{graderSummary.activeGraders} active <span style={{ color: css.textGray, fontWeight: 500 }}>of {graderSummary.graders} graders</span></span>
-                      <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} not started</span>
+                      <span style={{ color: css.textDark, fontWeight: 700 }}>{graderSummary.activeGraders} resume-active <span style={{ color: css.textGray, fontWeight: 500 }}>of {graderSummary.graders} graders</span></span>
+                      <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} with no resume grades</span>
                     </div>
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: "10px 0 12px", color: css.textGray, fontSize: 12 }}>
                       <span><strong style={{ color: css.textDark }}>{graderSummary.totalResumeGrades}</strong> resume grades</span>
@@ -246,11 +262,12 @@ export default function AdminDashboard() {
                     {graderSummary.behindGraders?.length > 0 ? (
                       <>
                         <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                          Behind on goal
+                          Behind on resume goal
                         </div>
                         <GraderProgressRows
                           graders={graderSummary.behindGraders}
                           expectedReviews={graderSummary.expectedReviews}
+                          expectedFrqReviews={graderSummary.expectedFrqReviews}
                         />
                       </>
                     ) : (

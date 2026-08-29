@@ -97,6 +97,10 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
   const applicants = pipeline.applicants || 0;
   const reviewed = pipeline.reviewed || 0;
   const reviewPct = applicants > 0 ? Math.round((reviewed / applicants) * 100) : 0;
+  const resumeReviewed = pipeline.resumeReviewed || 0;
+  const frqReviewed = pipeline.frqReviewed || 0;
+  const resumeReviewPct = applicants > 0 ? Math.round((resumeReviewed / applicants) * 100) : 0;
+  const frqReviewPct = applicants > 0 ? Math.round((frqReviewed / applicants) * 100) : 0;
 
   const segments = isInterview
     ? [
@@ -124,19 +128,34 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
       boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
     }}
     >
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>
-            {isInterview ? "Evaluation progress" : "Complete grading progress"}
-          </span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>
-            {isInterview
-              ? `${reviewed} / ${applicants} (${reviewPct}%)`
-              : `${pipeline.resumeReviewed || 0}/${applicants} resume · ${pipeline.frqReviewed || 0}/${applicants} free response`}
-          </span>
+      {isInterview ? (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Evaluation progress</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>
+              {reviewed} / {applicants} ({reviewPct}%)
+            </span>
+          </div>
+          <ProgressBar pct={reviewPct} />
         </div>
-        <ProgressBar pct={reviewPct} />
-      </div>
+      ) : (
+        <div style={{ display: "grid", gap: 14, marginBottom: 20 }}>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Resume grading</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>{resumeReviewed} / {applicants} ({resumeReviewPct}%)</span>
+            </div>
+            <ProgressBar pct={resumeReviewPct} />
+          </div>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Free-response grading</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#1D9E75" }}>{frqReviewed} / {applicants} ({frqReviewPct}%)</span>
+            </div>
+            <ProgressBar pct={frqReviewPct} color="#1D9E75" />
+          </div>
+        </div>
+      )}
 
       <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
         {breakdownTitle}
@@ -498,7 +517,7 @@ export function PrimaryButton({ label, onClick, disabled, icon }) {
   );
 }
 
-export function GraderProgressRows({ graders, expectedReviews }) {
+export function GraderProgressRows({ graders, expectedReviews, expectedFrqReviews = 0 }) {
   if (!graders?.length) {
     return <div style={{ fontSize: 13, color: css.textGray }}>No grader data yet.</div>;
   }
@@ -506,22 +525,42 @@ export function GraderProgressRows({ graders, expectedReviews }) {
   return (
     <div>
       {graders.map((grader, index) => {
-        const pct = expectedReviews > 0
-          ? Math.min(100, Math.round((grader.reviewCount / expectedReviews) * 100))
+        const resumeCount = grader.resumeReviewCount ?? grader.reviewCount ?? 0;
+        const frqCount = grader.frqReviewCount || 0;
+        const resumePct = expectedReviews > 0
+          ? Math.min(100, Math.round((resumeCount / expectedReviews) * 100))
           : 0;
+        const frqPct = expectedFrqReviews > 0
+          ? Math.min(100, Math.round((frqCount / expectedFrqReviews) * 100))
+          : 0;
+        const showFrqProgress = grader.role === "admin" && expectedFrqReviews > 0;
         return (
           <div key={grader.id} style={{
             padding: "11px 0",
             borderTop: index ? `1px solid ${css.borderLight}` : "none",
           }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: css.textDark }}>{grader.name}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: css.greenDark }}>
-                {grader.resumeReviewCount ?? grader.reviewCount} / {expectedReviews} resume · {grader.frqReviewCount || 0} free response
-              </span>
             </div>
-            <ProgressBar pct={pct} />
+            <div style={{ display: "grid", gap: 8 }}>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
+                  <span style={{ color: css.textGray }}>Resume grades</span>
+                  <strong style={{ color: css.greenDark }}>{resumeCount} / {expectedReviews}</strong>
+                </div>
+                <ProgressBar pct={resumePct} />
+              </div>
+              {showFrqProgress ? (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
+                    <span style={{ color: css.textGray }}>Free-response grades</span>
+                    <strong style={{ color: "#1D9E75" }}>{frqCount} / {expectedFrqReviews}</strong>
+                  </div>
+                  <ProgressBar pct={frqPct} color="#1D9E75" />
+                </div>
+              ) : null}
+            </div>
           </div>
         );
       })}

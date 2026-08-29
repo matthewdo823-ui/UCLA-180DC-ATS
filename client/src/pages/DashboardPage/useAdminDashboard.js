@@ -64,6 +64,7 @@ function mapGraderScoreboard(graderData, frqGraderData) {
     frqReviewCount: frqByGraderId.get(String(grader.id)) || 0,
   }));
   const expectedReviews = stats.expectedReviews || 30;
+  const expectedFrqReviews = frqGraderData?.stats?.expectedReviews ?? 0;
 
   const behindGraders = graders
     .filter((g) => (g.reviewCount || 0) > 0 && (g.reviewCount || 0) < expectedReviews)
@@ -83,6 +84,7 @@ function mapGraderScoreboard(graderData, frqGraderData) {
     totalFrqGrades: frqGraderData?.stats?.totalReviews ?? graders.reduce((sum, g) => sum + (g.frqReviewCount || 0), 0),
     avgReviews: stats.avgReviews ?? 0,
     expectedReviews,
+    expectedFrqReviews,
     behindGraders,
     behindCount,
     completeCount: graders.filter((g) => (g.reviewCount || 0) >= expectedReviews).length,
