@@ -1799,7 +1799,7 @@ export default function ScoreboardPage() {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (isAdmin) navigate(`/scoreboard/${c.id}/application`);
+                    if (isAdmin) navigate(`/scoreboard/${c.id}/application`, { state: { candidateRank: c.rank, candidateCount: data.stats?.applicants } });
                     else setSelectedCandidate(c);
                   }}
                   style={{
@@ -1881,7 +1881,7 @@ export default function ScoreboardPage() {
                 aria-label={`${isAdmin ? "Open candidate workspace" : "View details"} for ${c.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (isAdmin) navigate(`/scoreboard/${c.id}/application`);
+                  if (isAdmin) navigate(`/scoreboard/${c.id}/application`, { state: { candidateRank: c.rank, candidateCount: data.stats?.applicants } });
                   else setSelectedCandidate(c);
                 }}
                 style={rowIconBtnStyle(t, true)}
@@ -1893,7 +1893,7 @@ export default function ScoreboardPage() {
                   type="button"
                   title="Open full application"
                   aria-label={`Open full application for ${c.name}`}
-                  onClick={(e) => { e.stopPropagation(); navigate(`/scoreboard/${c.id}/application`); }}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/scoreboard/${c.id}/application`, { state: { candidateRank: c.rank, candidateCount: data.stats?.applicants } }); }}
                   style={rowIconBtnStyle(t, false)}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
