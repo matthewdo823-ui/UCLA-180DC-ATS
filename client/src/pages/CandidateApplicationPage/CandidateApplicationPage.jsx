@@ -5,7 +5,6 @@ import Topbar from "../../components/Topbar/Topbar";
 import { css } from "../../theme/colors";
 import ApplicationContactSection from "./ApplicationContactSection";
 import ApplicationProfileSidebar from "./ApplicationProfileSidebar";
-import ApplicationResumeSection from "./ApplicationResumeSection";
 import ApplicationRoundsSection from "./ApplicationRoundsSection";
 import ApplicationSignalsSection from "./ApplicationSignalsSection";
 import ApplicationSummarySection from "./ApplicationSummarySection";
@@ -55,13 +54,12 @@ export default function CandidateApplicationPage() {
 
         {!loading && !error && candidate && (
           <div className="candidate-application-grid" style={{ display: "grid", gridTemplateColumns: "minmax(250px, 280px) minmax(0, 1fr)", gap: 18, alignItems: "start" }}>
-            <ApplicationProfileSidebar candidate={candidate} resume={resume} scoring={scoring} />
+            <ApplicationProfileSidebar candidate={candidate} resume={resume} scoring={scoring} authToken={token} />
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
               <ApplicationSummarySection {...summaryState} onRefresh={summaryState.refresh} />
               <ApplicationContactSection candidate={candidate} resume={resume} />
               <ApplicationSignalsSection signals={signals} />
-              <ApplicationResumeSection candidate={candidate} resume={resume} authToken={token} />
               <ApplicationRoundsSection scoring={scoring} roundDecision={roundDecision} />
             </div>
           </div>
