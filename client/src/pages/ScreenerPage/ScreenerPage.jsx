@@ -26,7 +26,7 @@ const GRADING_MODES = {
   FRQ: "frq",
 };
 
-function GradingModeToggle({ mode, onChange, resumeComplete, frqComplete, showValidation }) {
+function GradingModeToggle({ mode, onChange, resumeComplete, frqComplete, showValidation, disabled = false }) {
   const options = [
     { id: GRADING_MODES.RESUME, label: "Resume", complete: resumeComplete, points: 8 },
     { id: GRADING_MODES.FRQ, label: "Free response", complete: frqComplete, points: 4 },
@@ -52,6 +52,7 @@ function GradingModeToggle({ mode, onChange, resumeComplete, frqComplete, showVa
           <button
             key={id}
             type="button"
+            disabled={disabled}
             onClick={() => onChange(id)}
             style={{
               ...topbarGhostButtonStyle,
@@ -63,6 +64,8 @@ function GradingModeToggle({ mode, onChange, resumeComplete, frqComplete, showVa
               fontSize: 12,
               background: active ? css.cardWhite : "transparent",
               color: incompleteError ? css.red : active ? css.greenDark : css.textGray,
+              cursor: disabled ? "not-allowed" : "pointer",
+              opacity: disabled ? 0.65 : 1,
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -104,6 +107,8 @@ export default function ScreenerPage() {
   const [pastReviewDetail, setPastReviewDetail] = useState(null);
   const [editingReviewId, setEditingReviewId] = useState(null);
   const [celebrationKey, setCelebrationKey] = useState(0);
+  const [submittingAction, setSubmittingAction] = useState(null);
+  const submittingRef = useRef(false);
   const panelRef = useRef(null);
 
   const graderName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim();
@@ -355,6 +360,8 @@ export default function ScreenerPage() {
   }, [celebrationKey, specialCelebrationName]);
 
   async function handleResumeAction(type) {
+    if (submittingRef.current) return;
+
     const requiresCombinedGrade = isAdmin && !editingReviewId;
     const missingResume = !resumeScoringComplete;
     const missingFrq = requiresCombinedGrade && !frqScoringComplete;
@@ -373,6 +380,8 @@ export default function ScreenerPage() {
 
     setShowValidationErrors(false);
     setSubmitError("");
+    submittingRef.current = true;
+    setSubmittingAction(type);
 
     const payload = { scores, notes: resumeNotes, decision: type };
 
@@ -399,6 +408,10 @@ export default function ScreenerPage() {
         throw new Error(message);
       }
 
+      // The API only responds successfully after Supabase has accepted the
+      // review (and the paired FRQ grade for admins). Celebrate that confirmed
+      // result, never the click itself.
+      setCelebrationKey((key) => key + 1);
       setEditingReviewId(null);
       await Promise.all([
         fetchMyReviews({ showLoading: false }),
@@ -408,26 +421,29 @@ export default function ScreenerPage() {
       // grader's coverage — expire them so those pages don't serve a cached
       // number that's now one review out of date.
       invalidateAfterReview(queryClient);
-      setCelebrationKey((key) => key + 1);
+
+      if (panelRef.current) panelRef.current.style.animation = "cardFlyOut 0.28s ease forwards";
+      await new Promise((r) => setTimeout(r, 280));
+      await fetchNextResume();
+      if (panelRef.current) {
+        panelRef.current.style.animation = "";
+        void panelRef.current?.offsetWidth;
+        panelRef.current.style.animation = "cardFlyIn 0.28s ease forwards";
+        setTimeout(() => {
+          if (panelRef.current) panelRef.current.style.animation = "";
+        }, 300);
+      }
     } catch (e) {
       console.warn("Could not save review:", e);
-      return;
-    }
-
-    if (panelRef.current) panelRef.current.style.animation = "cardFlyOut 0.28s ease forwards";
-    await new Promise((r) => setTimeout(r, 280));
-    await fetchNextResume();
-    if (panelRef.current) {
-      panelRef.current.style.animation = "";
-      void panelRef.current?.offsetWidth;
-      panelRef.current.style.animation = "cardFlyIn 0.28s ease forwards";
-      setTimeout(() => {
-        if (panelRef.current) panelRef.current.style.animation = "";
-      }, 300);
+    } finally {
+      submittingRef.current = false;
+      setSubmittingAction(null);
     }
   }
 
   async function handleFrqComplete() {
+    if (submittingRef.current) return;
+
     if (!editingReviewId) {
       await handleResumeAction("pass");
       return;
@@ -440,6 +456,8 @@ export default function ScreenerPage() {
     }
     setShowValidationErrors(false);
     setSubmitError("");
+    submittingRef.current = true;
+    setSubmittingAction("frq");
 
     const payload = { score: frqScore, notes: frqNotes };
 
@@ -464,21 +482,23 @@ export default function ScreenerPage() {
       setEditingReviewId(null);
       await fetchMyFrqReviews({ showLoading: false });
       invalidateAfterReview(queryClient);
+
+      if (panelRef.current) panelRef.current.style.animation = "cardFlyOut 0.28s ease forwards";
+      await new Promise((r) => setTimeout(r, 280));
+      await fetchNextFrq();
+      if (panelRef.current) {
+        panelRef.current.style.animation = "";
+        void panelRef.current?.offsetWidth;
+        panelRef.current.style.animation = "cardFlyIn 0.28s ease forwards";
+        setTimeout(() => {
+          if (panelRef.current) panelRef.current.style.animation = "";
+        }, 300);
+      }
     } catch (e) {
       console.warn("Could not save FRQ grade:", e);
-      return;
-    }
-
-    if (panelRef.current) panelRef.current.style.animation = "cardFlyOut 0.28s ease forwards";
-    await new Promise((r) => setTimeout(r, 280));
-    await fetchNextFrq();
-    if (panelRef.current) {
-      panelRef.current.style.animation = "";
-      void panelRef.current?.offsetWidth;
-      panelRef.current.style.animation = "cardFlyIn 0.28s ease forwards";
-      setTimeout(() => {
-        if (panelRef.current) panelRef.current.style.animation = "";
-      }, 300);
+    } finally {
+      submittingRef.current = false;
+      setSubmittingAction(null);
     }
   }
 
@@ -536,6 +556,7 @@ export default function ScreenerPage() {
       />
 
       <div style={{ flex: 1, overflow: "hidden", padding: "14px 22px 0", display: "flex", flexDirection: "column", gap: 12 }}>
+        <CandidateRow resume={resume} />
         {isAdmin && isResumeRound && !screeningBlocked ? (
           <GradingModeToggle
             mode={gradingMode}
@@ -543,6 +564,7 @@ export default function ScreenerPage() {
             resumeComplete={resumeScoringComplete}
             frqComplete={frqScoringComplete}
             showValidation={showValidationErrors}
+            disabled={Boolean(submittingAction)}
           />
         ) : null}
         {showValidationErrors && submitError ? (
@@ -561,7 +583,6 @@ export default function ScreenerPage() {
             {submitError}
           </div>
         ) : null}
-        <CandidateRow resume={resume} />
 
         {screeningBlocked ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -605,6 +626,7 @@ export default function ScreenerPage() {
                       onComplete={handleFrqComplete}
                       scoringComplete={isAdmin && !editingReviewId ? true : frqScoringComplete}
                       submitError={submitError}
+                      submitting={Boolean(submittingAction)}
                     />
                   ) : (
                     <ScoringPanel
@@ -617,6 +639,7 @@ export default function ScreenerPage() {
                       onReset={handleResumeReset}
                       scoringComplete={isAdmin && !editingReviewId ? true : resumeScoringComplete}
                       submitError={submitError}
+                      submittingAction={submittingAction}
                     />
                   )}
                 </div>

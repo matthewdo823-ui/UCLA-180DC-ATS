@@ -11,6 +11,7 @@ export default function FrqScoringPanel({
   onComplete,
   scoringComplete = true,
   submitError = "",
+  submitting = false,
 }) {
   const total = typeof score === "number" ? score : 0;
   const hasScore = typeof score === "number" && score >= 0 && score <= FRQ_MAX_SCORE;
@@ -212,10 +213,15 @@ export default function FrqScoringPanel({
       ) : null}
 
       <ActionBtn
-        label="✓ Complete"
+        label={submitting ? "Submitting…" : "✓ Complete"}
         style={{ borderColor: css.greenDark, color: css.cardWhite, bg: css.greenDark, hoverBg: "#1F4E33" }}
-        disabled={!scoringComplete}
-        title={!scoringComplete ? `Rate application responses from 0 to ${FRQ_MAX_SCORE} first` : undefined}
+        disabled={submitting || !scoringComplete}
+        busy={submitting}
+        title={submitting
+          ? "Waiting for the server to confirm this grade"
+          : !scoringComplete
+            ? `Rate application responses from 0 to ${FRQ_MAX_SCORE} first`
+            : undefined}
         onClick={onComplete}
       />
     </div>

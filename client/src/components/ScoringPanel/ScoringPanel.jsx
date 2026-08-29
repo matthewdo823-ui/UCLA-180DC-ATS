@@ -14,6 +14,7 @@ export default function ScoringPanel({
   onReset,
   scoringComplete = true,
   submitError = "",
+  submittingAction = null,
 }) {
   if (!rubric || !rubric.metrics?.length) {
     return (
@@ -116,7 +117,7 @@ export default function ScoringPanel({
           <ActionBtn
             label="↺ Reset"
             style={{ borderColor: css.borderLight, color: css.textGray, bg: css.cardWhite, hoverBg: css.bgLight }}
-            disabled={scoredCount === 0 && notes.length === 0}
+            disabled={Boolean(submittingAction) || (scoredCount === 0 && notes.length === 0)}
             title="Clear all scores and notes for this resume"
             onClick={onReset}
           />
@@ -127,10 +128,15 @@ export default function ScoringPanel({
         ].map(({ type, label, style }) => (
           <ActionBtn
             key={type}
-            label={label}
+            label={submittingAction === type ? "Submitting…" : label}
             style={style}
-            disabled={!scoringComplete}
-            title={!scoringComplete ? `Rate each rubric category from 0 to ${maxPerCategory} first` : undefined}
+            disabled={Boolean(submittingAction) || !scoringComplete}
+            busy={submittingAction === type}
+            title={submittingAction
+              ? "Waiting for the server to confirm this grade"
+              : !scoringComplete
+                ? `Rate each rubric category from 0 to ${maxPerCategory} first`
+                : undefined}
             onClick={() => onAction(type)}
           />
         ))}
