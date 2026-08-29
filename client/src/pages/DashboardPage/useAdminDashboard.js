@@ -6,7 +6,7 @@ import { isInterviewRoundType } from "../../constants/rounds";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
-import { getFreeResponseGradeCount, getResumeGradeCount } from "../../utils/reviewCounts";
+import { formatReviewCountPair, getFreeResponseReviewCount, getResumeReviewCount } from "../../utils/reviewCounts";
 
 function mapScoreboardToPipeline(scoreboardData, interviewData) {
   const activeRound = scoreboardData?.context?.activeRound;
@@ -30,10 +30,10 @@ function mapScoreboardToPipeline(scoreboardData, interviewData) {
 
   const stats = scoreboardData?.stats || {};
   const candidates = scoreboardData?.candidates || [];
-  const resumeReviewed = candidates.filter((candidate) => getResumeGradeCount(candidate) > 0).length;
-  const frqReviewed = candidates.filter((candidate) => getFreeResponseGradeCount(candidate) > 0).length;
+  const resumeReviewed = candidates.filter((candidate) => getResumeReviewCount(candidate) > 0).length;
+  const frqReviewed = candidates.filter((candidate) => getFreeResponseReviewCount(candidate) > 0).length;
   const fullyReviewed = candidates.filter(
-    (candidate) => getResumeGradeCount(candidate) > 0 && getFreeResponseGradeCount(candidate) > 0
+    (candidate) => getResumeReviewCount(candidate) > 0 && getFreeResponseReviewCount(candidate) > 0
   ).length;
   const applicants = stats.applicants || 0;
   const undecidedCount = scoreboardData?.context?.undecidedCount
@@ -196,8 +196,8 @@ export default function useAdminDashboard(enabled = true) {
         return {
           ...item,
           label: "Grading still left in this round",
-          detail: `${pipeline.resumeReviewsRemaining || 0} need a resume grade; ${pipeline.frqReviewsRemaining || 0} need a free-response grade.`,
-          countLabel: `${pipeline.resumeReviewsRemaining || 0} resume · ${pipeline.frqReviewsRemaining || 0} FRQ`,
+          detail: `${formatReviewCountPair(pipeline.resumeReviewsRemaining, pipeline.frqReviewsRemaining)} still needed.`,
+          countLabel: formatReviewCountPair(pipeline.resumeReviewsRemaining, pipeline.frqReviewsRemaining),
         };
       }
       if (item.id === "undecided" && pipeline.undecidedCount != null) {

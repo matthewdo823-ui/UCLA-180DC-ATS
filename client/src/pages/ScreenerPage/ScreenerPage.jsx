@@ -8,6 +8,7 @@ import { API } from "../../constants/config";
 import { invalidateAfterReview } from "../../lib/queryKeys";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { FRQ_MAX_SCORE } from "../../constants/frq";
+import { formatReviewCount } from "../../utils/reviewCounts";
 
 import Topbar, { topbarGhostButtonStyle } from "../../components/Topbar/Topbar";
 import CandidateRow from "../../components/CandidateRow/CandidateRow";
@@ -519,17 +520,11 @@ export default function ScreenerPage() {
   const topbarRightSlot = (
     <>
       <button type="button" onClick={() => { setGradingMode(GRADING_MODES.RESUME); setDrawerOpen(true); }} style={topbarGhostButtonStyle}>
-        📋 Resume grades
-        <span style={{ background: css.greenDark, color: css.cardWhite, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: "2px 7px" }}>
-          {myReviews.length}
-        </span>
+        📋 {formatReviewCount(myReviews.length, "resume")}
       </button>
       {isAdmin ? (
         <button type="button" onClick={() => { setGradingMode(GRADING_MODES.FRQ); setDrawerOpen(true); }} style={topbarGhostButtonStyle}>
-          📝 Free-response grades
-          <span style={{ background: css.greenDark, color: css.cardWhite, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: "2px 7px" }}>
-            {myFrqReviews.length}
-          </span>
+          📝 {formatReviewCount(myFrqReviews.length, "free response")}
         </button>
       ) : null}
     </>

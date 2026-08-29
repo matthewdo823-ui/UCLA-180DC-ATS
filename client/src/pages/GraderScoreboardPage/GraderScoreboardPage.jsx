@@ -11,6 +11,7 @@ import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatDate, formatNumber, formatPoints, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 import { resolveReviewMaxScore } from "../../utils/rubric";
+import { formatReviewCount } from "../../utils/reviewCounts";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
@@ -33,33 +34,35 @@ const GRADER_STATUS_FILTERS = [
 const SCOREBOARD_MODES = [
   {
     id: "resume",
+    reviewType: "resume",
     label: "Resume grading",
     endpoint: "grader-scoreboard",
     eyebrow: "Grader roster",
     heading: "Grader ",
     headingAccent: "scoreboard",
     description: "Round 1 grading progress — search by name or email, or use the status chips to focus on who is done, in progress, or not started yet.",
-    columnLabel: "RESUMES GRADED",
-    totalLabel: "TOTAL RESUME GRADES",
-    gradedLabel: "RESUME GRADES",
-    recentLabel: "RECENT RESUME GRADES",
-    noGradesLabel: "No resume grades submitted yet.",
+    columnLabel: "RESUME REVIEWS",
+    totalLabel: "TOTAL RESUME REVIEWS",
+    gradedLabel: "RESUME REVIEWS",
+    recentLabel: "RECENT RESUME REVIEWS",
+    noGradesLabel: "No resume reviews submitted yet.",
     badge: "ROUND 1 · GRADER",
     emptyLabel: "No graders yet.",
   },
   {
     id: "frq",
+    reviewType: "free response",
     label: "FRQ grading",
     endpoint: "frq-grader-scoreboard",
     eyebrow: "FRQ grader roster",
     heading: "FRQ ",
     headingAccent: "scoreboard",
     description: "FRQ grading progress — search by name or email, or use the status chips to focus on who is done, in progress, or not started yet.",
-    columnLabel: "FRQ GRADED",
-    totalLabel: "TOTAL FREE-RESPONSE GRADES",
-    gradedLabel: "FREE-RESPONSE GRADES",
-    recentLabel: "RECENT FREE-RESPONSE GRADES",
-    noGradesLabel: "No free-response grades submitted yet.",
+    columnLabel: "FREE RESPONSE REVIEWS",
+    totalLabel: "TOTAL FREE RESPONSE REVIEWS",
+    gradedLabel: "FREE RESPONSE REVIEWS",
+    recentLabel: "RECENT FREE RESPONSE REVIEWS",
+    noGradesLabel: "No free response reviews submitted yet.",
     badge: "FRQ · GRADER",
     emptyLabel: "No FRQ graders yet.",
   },
@@ -135,7 +138,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4 }) {
   );
 }
 
-function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge = "ROUND 1 · GRADER", gradedLabel = "RESUME GRADES", recentLabel = "RECENT RESUME GRADES", noGradesLabel = "No resume grades submitted yet." }) {
+function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge = "ROUND 1 · GRADER", reviewType = "resume", gradedLabel = "RESUME REVIEWS", recentLabel = "RECENT RESUME REVIEWS", noGradesLabel = "No resume reviews submitted yet." }) {
   useEffect(() => {
     function onKeyDown(event) {
       if (event.key === "Escape") onClose();
@@ -226,6 +229,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
               <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
                 {grader.reviewCount} <span style={{ fontSize: 14, color: "#3B6D11" }}>/ {grader.expectedReviews}</span>
               </p>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "4px 0 0", fontWeight: 600 }}>{formatReviewCount(grader.reviewCount, reviewType)}</p>
             </div>
             <div style={{ textAlign: "right" }}>
               <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>
@@ -552,7 +556,7 @@ export default function GraderScoreboardPage() {
                 {grader.reviewCount} / {grader.expectedReviews}
               </div>
               <div style={{ fontSize: 11, color: css.textGray }}>
-                {grader.progressScore}% complete · avg {formatPoints(grader.averageScore, grader.averageMaxScore ?? grader.maxScore)}
+                {formatReviewCount(grader.reviewCount, activeMode.reviewType)} · {grader.progressScore}% complete · avg {formatPoints(grader.averageScore, grader.averageMaxScore ?? grader.maxScore)}
               </div>
             </div>
 
@@ -586,6 +590,7 @@ export default function GraderScoreboardPage() {
           metrics={metrics}
           maxPerCategory={maxPerCategory}
           badge={activeMode.badge}
+          reviewType={activeMode.reviewType}
           gradedLabel={activeMode.gradedLabel}
           recentLabel={activeMode.recentLabel}
           noGradesLabel={activeMode.noGradesLabel}

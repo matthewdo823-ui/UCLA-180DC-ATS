@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
 import { css } from "../../theme/colors";
+import { formatReviewCountPair } from "../../utils/reviewCounts";
 import useAdminDashboard from "./useAdminDashboard";
 import {
   pageStyle,
@@ -77,10 +78,10 @@ function getDashboardFocus({ context, pipeline, actionItems, isInterview }) {
       eyebrow: `${context.activeRound.name || "Active round"}`,
       title: isInterview
         ? `${pipeline.awaitingReviews} candidate${pipeline.awaitingReviews === 1 ? "" : "s"} still need evaluation`
-        : `${resumeLeft} resume · ${frqLeft} free-response grades left`,
+        : `${formatReviewCountPair(resumeLeft, frqLeft)} left`,
       detail: isInterview
         ? `${pipeline.reviewed || 0} of ${pipeline.applicants || 0} evaluated.`
-        : `${pipeline.resumeReviewed || 0}/${pipeline.applicants || 0} candidates have a resume grade; ${pipeline.frqReviewed || 0}/${pipeline.applicants || 0} have a free-response grade.`,
+        : `${pipeline.resumeReviewed || 0}/${pipeline.applicants || 0} candidates have a resume review; ${pipeline.frqReviewed || 0}/${pipeline.applicants || 0} have a free response review.`,
       actionLabel: isInterview ? "Open interviews" : "Open review queue",
       path: isInterview ? "/interviews" : "/scoreboard",
     };
@@ -270,11 +271,10 @@ export default function AdminDashboard() {
                   <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: "18px 20px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 16, paddingBottom: 14, marginBottom: 4, borderBottom: `1px solid ${css.borderLight}`, fontSize: 13 }}>
                       <span style={{ color: css.textDark, fontWeight: 700 }}>{graderSummary.activeGraders} resume-active <span style={{ color: css.textGray, fontWeight: 500 }}>of {graderSummary.graders} graders</span></span>
-                      <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} with no resume grades</span>
+                      <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} with no resume reviews</span>
                     </div>
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: "10px 0 12px", color: css.textGray, fontSize: 12 }}>
-                      <span><strong style={{ color: css.textDark }}>{graderSummary.totalResumeGrades}</strong> resume grades</span>
-                      <span><strong style={{ color: css.textDark }}>{graderSummary.totalFrqGrades}</strong> free-response grades</span>
+                      <span>{formatReviewCountPair(graderSummary.totalResumeGrades, graderSummary.totalFrqGrades)}</span>
                     </div>
                     {graderSummary.graderProgress?.length > 0 ? (
                       <>

@@ -6,6 +6,7 @@ import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
+import { formatReviewCountPair } from "../../utils/reviewCounts";
 import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import { formatResponseError } from "../../utils/errors";
@@ -293,8 +294,7 @@ export default function AssignmentsPage() {
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                            <span style={metaPillStyle}>{candidate.reviewCount} resume grades</span>
-                            <span style={metaPillStyle}>{candidate.frqReviewCount || 0} free-response grades</span>
+                            <span style={metaPillStyle}>{formatReviewCountPair(candidate.reviewCount, candidate.frqReviewCount)}</span>
                             {candidate.assignedCount > 0 && (
                               <span style={{ ...metaPillStyle, ...assignedPillStyle }}>
                                 {candidate.pendingCount > 0
