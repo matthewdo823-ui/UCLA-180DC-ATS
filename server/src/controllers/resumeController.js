@@ -2474,40 +2474,60 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         throw err;
     }
 
-    const { data: resumeRow, error: resumeError } = await supabase
-        .from('resumes')
-        .select(`
-            id,
-            name,
-            file_url,
-            review_count,
-            created_at,
-            cycle_id,
-            candidates (
+    // These rows all share the resolved cycle/round context but do not depend on
+    // one another. Fetching them together avoids three consecutive Supabase
+    // round trips every time an admin opens a candidate profile.
+    const [resumeResult, reviewResult, frqResult] = await Promise.all([
+        supabase
+            .from('resumes')
+            .select(`
                 id,
                 name,
-                email,
-                phone_number,
-                major,
-                gpa,
-                year,
-                pronouns,
-                urm,
-                linkedin,
-                gm,
-                newbie_training,
-                why_consulting,
-                why_180dc,
-                why_social_impact,
-                extenuating_circumstances,
-                headshot,
-                resume_file_url,
+                file_url,
+                review_count,
                 created_at,
-                cycle_id
-            )
-        `)
-        .eq('id', resumeId)
-        .maybeSingle();
+                cycle_id,
+                candidates (
+                    id,
+                    name,
+                    email,
+                    phone_number,
+                    major,
+                    gpa,
+                    year,
+                    pronouns,
+                    urm,
+                    linkedin,
+                    gm,
+                    newbie_training,
+                    why_consulting,
+                    why_180dc,
+                    why_social_impact,
+                    extenuating_circumstances,
+                    headshot,
+                    resume_file_url,
+                    created_at,
+                    cycle_id
+                )
+            `)
+            .eq('id', resumeId)
+            .maybeSingle(),
+        supabase
+            .from('resume_reviews')
+            .select('id, scores, notes, submitted_at, graded_by, rubric_snapshot, decision')
+            .eq('resume_id', resumeId)
+            .eq('cycle_id', activeCycleId)
+            .eq('round_id', resumeRound.id)
+            .order('submitted_at', { ascending: true }),
+        supabase
+            .from('frq_reviews')
+            .select('id, resume_id, score, notes, graded_by, submitted_at')
+            .eq('resume_id', resumeId)
+            .eq('cycle_id', activeCycleId)
+            .eq('round_id', resumeRound.id),
+    ]);
+
+    const { data: resumeRow, error: resumeError } = resumeResult;
 
     if (resumeError) {
         const err = new Error(resumeError.message || 'Failed to load resume');
@@ -2533,13 +2553,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         throw err;
     }
 
-    const { data: reviews, error: reviewError } = await supabase
-        .from('resume_reviews')
-        .select('id, scores, notes, submitted_at, graded_by, rubric_snapshot, decision')
-        .eq('resume_id', resumeId)
-        .eq('cycle_id', activeCycleId)
-        .eq('round_id', resumeRound.id)
-        .order('submitted_at', { ascending: true });
+    const { data: reviews, error: reviewError } = reviewResult;
 
     if (reviewError) {
         const err = new Error(reviewError.message || 'Failed to load reviews');
@@ -2547,7 +2561,24 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         throw err;
     }
 
-    const gradedByUserLookup = await getGradedByUserLookup((reviews || []).map(review => review.graded_by));
+    const { data: frqRows, error: frqError } = frqResult;
+    if (frqError) {
+        const err = new Error(frqError.message || 'Failed to load FRQ reviews');
+        err.cause = frqError;
+        throw err;
+    }
+
+    // Resume and FRQ grader identities come from the same users table, and the
+    // review overrides are independent of that lookup. Run both enrichments in
+    // parallel and reuse the single user result for both review types.
+    const graderIds = [
+        ...(reviews || []).map((review) => review.graded_by),
+        ...(frqRows || []).map((row) => row.graded_by),
+    ];
+    const [gradedByUserLookup, reviewOverrideLookup] = await Promise.all([
+        getGradedByUserLookup(graderIds),
+        fetchReviewOverridesByReviewIds((reviews || []).map((review) => review.id)),
+    ]);
     const metricSet = new Set(getMetricsFromRubricConfig(resumeRound.rubric_config));
     const categoryTotals = {};
     const categoryCounts = {};
@@ -2606,7 +2637,6 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         : null;
     const resumeFileUrl = resumeRow.file_url || candidate.resume_file_url || '';
 
-    const reviewOverrideLookup = await fetchReviewOverridesByReviewIds(mappedReviews.map(r => r.id));
     const candidateWithOverrides = applyReviewOverridesToCandidate(
         {
             reviews: mappedReviews,
@@ -2624,21 +2654,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         { rubricConfig: resumeRound.rubric_config, candidateYear: candidate.year, metrics: [...metricSet], resumeMaxScore: resumeMax }
     );
 
-    const { data: frqRows, error: frqError } = await supabase
-        .from("frq_reviews")
-        .select("id, resume_id, score, notes, graded_by, submitted_at")
-        .eq("resume_id", resumeId)
-        .eq("cycle_id", activeCycleId)
-        .eq("round_id", resumeRound.id);
-
-    if (frqError) {
-        const err = new Error(frqError.message || "Failed to load FRQ reviews");
-        err.cause = frqError;
-        throw err;
-    }
-
-    const frqGraderLookup = await getGradedByUserLookup((frqRows || []).map((row) => row.graded_by));
-    const frqReviews = (frqRows || []).map((row) => mapFrqReviewRow(row, frqGraderLookup));
+    const frqReviews = (frqRows || []).map((row) => mapFrqReviewRow(row, gradedByUserLookup));
     const compositeCandidate = applyCompositeScoringToCandidate(candidateWithOverrides, {
         frqReviews,
         rubricConfig: resumeRound.rubric_config,
