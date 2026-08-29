@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { BUBBLE_COLORS, API, RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
-import { rubricFromSnapshot } from "../../utils/rubric";
+import { resolveReviewMaxScore, rubricFromSnapshot } from "../../utils/rubric";
 import { css } from "../../theme/colors";
 import { formatScore, getInitials, titleCase } from "../../utils/format";
 
@@ -119,7 +119,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
   );
   const metrics = rubric.metrics || [];
   const maxPerCategory = rubric.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
-  const maxScore = rubric.maxScore || metrics.length * maxPerCategory;
+  const maxScore = resolveReviewMaxScore(review, { metrics, maxPerCategory });
 
   useEffect(() => {
     if (!review) return;

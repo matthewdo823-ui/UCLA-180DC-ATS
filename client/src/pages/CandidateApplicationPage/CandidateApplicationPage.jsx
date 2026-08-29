@@ -61,7 +61,7 @@ export default function CandidateApplicationPage() {
             <ApplicationProfileSidebar candidate={candidate} resume={resume} scoring={scoring} />
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-              <ApplicationEvaluationsSection scoring={scoring} />
+              <ApplicationEvaluationsSection candidate={candidate} scoring={scoring} />
               <ApplicationSummarySection {...summaryState} onRefresh={summaryState.refresh} />
               <ApplicationContactSection candidate={candidate} resume={resume} />
               <ApplicationSignalsSection signals={signals} />

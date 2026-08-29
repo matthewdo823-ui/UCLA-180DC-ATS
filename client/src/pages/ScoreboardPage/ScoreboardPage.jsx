@@ -14,6 +14,7 @@ import { UserFriendlyError, formatResponseError } from "../../utils/errors";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatPoints, formatScore, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
+import { resolveReviewMaxScore } from "../../utils/rubric";
 import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
 import {
   buildDecisionPayload,
@@ -492,7 +493,7 @@ function ScorecardModal({
               <div style={{ marginTop: 10 }}>
                 {reviews.map((review, index) => {
                   const reviewOverridden = review?.adminOverride?.overrideScore != null;
-                  const displayScore = formatPoints(getReviewTotal(review), review.maxScore);
+                  const displayScore = formatPoints(getReviewTotal(review), resolveReviewMaxScore(review, { metrics, maxPerCategory }));
 
                   return (
                   <div key={review.id ?? index} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
