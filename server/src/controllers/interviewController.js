@@ -6,7 +6,7 @@ const {
   getRoundsForCycle,
   requireActiveInterviewRound,
 } = require("../utils/cycleContext");
-const { resolveReviewNormalizedValue } = require("../utils/rubric");
+const { hasReviewScoreValues, resolveReviewNormalizedValue } = require("../utils/rubric");
 const { respondWithServerError } = require("../utils/httpErrors");
 const {
   buildDecisionLookup,
@@ -183,7 +183,7 @@ exports.listInterviewCandidates = async (req, res) => {
       const resume = resumeByCandidate[candidate.id];
       if (!resume) return false;
       const resumeReviews = reviewsByResume[resume.id] || [];
-      if (!resumeReviews.length) return false;
+      if (!resumeReviews.some(hasReviewScoreValues)) return false;
       return candidatePassesPriorRoundGate(candidate.id, priorGate);
     });
 

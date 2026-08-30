@@ -2,8 +2,6 @@ const supabase = require("../config/supabase");
 const {
   computeRawScore,
   computeNormalizedFromAggregate,
-  getRubricForYear,
-  getRubricMaxScore,
   resolveReviewScoringContext,
 } = require("../utils/rubric");
 
@@ -75,16 +73,6 @@ function buildCategoryScoresFromReviews(reviews, metrics = []) {
   return categoryScores;
 }
 
-function resolveResumeMaxScore(options = {}, candidateYear) {
-  if (Number.isFinite(Number(options.resumeMaxScore)) && options.resumeMaxScore > 0) {
-    return Number(options.resumeMaxScore);
-  }
-  if (options.rubricConfig) {
-    return getRubricMaxScore(getRubricForYear(options.rubricConfig, candidateYear));
-  }
-  return null;
-}
-
 function resolveReviewMaxScore(review, options = {}) {
   if (Number.isFinite(Number(review?.maxScore)) && review.maxScore > 0) {
     return Number(review.maxScore);
@@ -142,21 +130,23 @@ function applyReviewOverrideToReview(review, override, options = {}) {
 
 function recomputeCandidateScoresFromReviews(candidate, metrics = [], options = {}) {
   const reviews = candidate.reviews || [];
-  let totalScore = 0;
-  let count = 0;
+  const scoredReviews = reviews
+    .map((review) => ({
+      review,
+      score: Number(review.score),
+      maxScore: resolveReviewMaxScore(review, {
+        ...options,
+        candidateYear: candidate.year,
+      }),
+    }))
+    .filter(({ score, maxScore }) => Number.isFinite(score) && Number.isFinite(maxScore) && maxScore > 0);
 
-  reviews.forEach((review) => {
-    const raw = Number(review.score);
-    if (!Number.isFinite(raw)) return;
-    totalScore += raw;
-    count += 1;
-  });
-
+  const count = scoredReviews.length;
+  const totalScore = scoredReviews.reduce((sum, item) => sum + item.score, 0);
+  const totalPossible = scoredReviews.reduce((sum, item) => sum + item.maxScore, 0);
   const aggregateScore = count > 0 ? Number((totalScore / count).toFixed(1)) : null;
-  const resumeMax = resolveResumeMaxScore(options, candidate.year);
-  const normalizedScore = resumeMax
-    ? computeNormalizedFromAggregate(aggregateScore, resumeMax)
-    : null;
+  const resumeMax = count > 0 ? Number((totalPossible / count).toFixed(1)) : null;
+  const normalizedScore = computeNormalizedFromAggregate(totalScore, totalPossible);
 
   const metricList = metrics.length ? metrics : candidate.metrics || [];
 
@@ -164,9 +154,13 @@ function recomputeCandidateScoresFromReviews(candidate, metrics = [], options = 
     ...candidate,
     aggregateScore,
     normalizedScore,
+    resumeMax,
+    numReviews: count,
+    resumeEarnedPoints: aggregateScore,
+    resumePossiblePoints: resumeMax,
     // Integer display alias for the normalized percentage.
     score: normalizedScore == null ? null : Math.round(normalizedScore),
-    categoryScores: buildCategoryScoresFromReviews(reviews, metricList),
+    categoryScores: buildCategoryScoresFromReviews(scoredReviews.map((item) => item.review), metricList),
   };
 }
 
