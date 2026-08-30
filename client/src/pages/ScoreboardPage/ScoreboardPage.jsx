@@ -41,6 +41,8 @@ import {
   formatRoundBanner,
   formatRoundStatus,
   getHeadlineScore,
+  getCandidateMetricMax,
+  getCandidateMetrics,
   getReviewerInitials,
   getReviewerLabel,
   getReviewTotal,
@@ -295,11 +297,12 @@ function ScoreTiles({ score, maxScore }) {
 
 function CategoryRow({ metric, value, maxPerCategory = 4, equalized = false }) {
   const pct = hasNumericScore(value) ? Math.max(0, Math.min(100, (Number(value) / maxPerCategory) * 100)) : 0;
+  const label = metric === FRQ_METRIC ? "Free Response" : titleCase(metric);
 
   return (
     <div style={{ marginBottom: 9 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
-        <span style={{ fontSize: 12, color: css.textDark }}>{titleCase(metric)}</span>
+        <span style={{ fontSize: 12, color: css.textDark }}>{label}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: cardGreen }}>
           {equalized ? (
             <>{formatScore(pct)}%</>
@@ -347,6 +350,8 @@ function ScorecardModal({
 
   const roundBanner = formatRoundBanner(round);
   const roundStatus = formatRoundStatus(round);
+  const candidateMetrics = getCandidateMetrics(candidate, metrics);
+  const resumeMetrics = candidateMetrics.filter((metric) => metric !== FRQ_METRIC);
 
   return (
     <div
@@ -453,18 +458,18 @@ function ScorecardModal({
               ) : null}
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>{metrics.length} CATEGORIES</p>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>{candidateMetrics.length} CATEGORIES</p>
               <ScoreTiles score={headlineScore} maxScore={100} />
             </div>
           </div>
 
           <div style={{ padding: "14px 18px 4px" }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 700 }}>CATEGORY BREAKDOWN</p>
-            {metrics.map(metric => (
+            {candidateMetrics.map(metric => (
               <CategoryRow
                 key={metric}
                 metric={metric}
-                maxPerCategory={metric === FRQ_METRIC ? FRQ_MAX_SCORE : maxPerCategory}
+                maxPerCategory={getCandidateMetricMax(candidate, metric, maxPerCategory)}
                 equalized={equalized}
                 value={normalizeMetricScore(candidate, metric)}
               />
@@ -567,7 +572,7 @@ function ScorecardModal({
             <ReviewOverrideSection
               resumeId={candidate.id}
               reviews={reviews}
-              metrics={metrics}
+              metrics={resumeMetrics}
               maxPerCategory={maxPerCategory}
               onOverrideSaved={onOverrideSaved}
             />

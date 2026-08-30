@@ -69,11 +69,20 @@ function applyCompositeScoringToCandidate(candidate, {
   const numFrqReviews = frqReviews.length;
 
   const categoryScores = { ...(candidate.categoryScores || {}) };
+  const categoryMaxScores = { ...(candidate.categoryMaxScores || {}) };
   if (frqAvg != null) {
     categoryScores[FRQ_METRIC] = frqAvg;
+    categoryMaxScores[FRQ_METRIC] = FRQ_MAX_SCORE;
   } else {
     categoryScores[FRQ_METRIC] = null;
   }
+  const metrics = [...new Set([
+    ...(candidate.metrics || []),
+    ...Object.keys(categoryScores),
+  ])].filter((metric) => {
+    const value = categoryScores[metric];
+    return value !== null && value !== '' && Number.isFinite(Number(value));
+  });
 
   let aggregateScore = resumeAggregateScore;
   let normalizedScore = resumeNormalizedScore;
@@ -109,6 +118,8 @@ function applyCompositeScoringToCandidate(candidate, {
     numFrqReviews,
     frqReviews,
     categoryScores,
+    categoryMaxScores,
+    metrics,
     compositeMax,
   };
 }
