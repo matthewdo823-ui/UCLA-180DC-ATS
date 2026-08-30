@@ -155,11 +155,13 @@ function DecisionButtons({ status, disabled, saving, onSelect, dark }) {
   );
 }
 
-function FilterField({ label, theme, children }) {
+function FilterField({ label, theme, fillRow = false, children }) {
   return (
     <label style={{
       display: "flex",
       flexDirection: "column",
+      flex: fillRow ? "1 1 0" : undefined,
+      minWidth: fillRow ? 0 : undefined,
       gap: 4,
       fontSize: 11,
       fontWeight: 700,
@@ -1260,13 +1262,17 @@ export default function ScoreboardPage() {
     letterSpacing: "normal",
   };
 
+  const filterSelectStyle = deliberationMode
+    ? { ...barSelectStyle, width: "100%", minWidth: 0 }
+    : barSelectStyle;
+
   // Major names can be long enough to push the bar onto a second line, so the
   // closed control is capped to the same width as the others and clips its
   // label with an ellipsis. The opened dropdown list still shows full names.
   const majorSelectStyle = {
-    ...barSelectStyle,
-    width: 132,
-    maxWidth: 132,
+    ...filterSelectStyle,
+    width: deliberationMode ? "100%" : 132,
+    maxWidth: deliberationMode ? "none" : 132,
     textOverflow: "ellipsis",
   };
 
@@ -1637,20 +1643,20 @@ export default function ScoreboardPage() {
         aria-label="Filter and sort scoreboard"
         style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}
       >
-        <FilterField label="Major" theme={t}>
+        <FilterField label="Major" theme={t} fillRow={deliberationMode}>
           <select value={filters.major} onChange={e => setFilters(f => ({ ...f, major: e.target.value }))} style={majorSelectStyle}>
             <option value="all">All majors</option>
             {majorOptions.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </FilterField>
-        <FilterField label="Year" theme={t}>
-          <select value={filters.year} onChange={e => setFilters(f => ({ ...f, year: e.target.value }))} style={barSelectStyle}>
+        <FilterField label="Year" theme={t} fillRow={deliberationMode}>
+          <select value={filters.year} onChange={e => setFilters(f => ({ ...f, year: e.target.value }))} style={filterSelectStyle}>
             <option value="all">All years</option>
             {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </FilterField>
-        <FilterField label="Resume reviews" theme={t}>
-          <select value={filters.reviews} onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))} style={barSelectStyle}>
+        <FilterField label="Resume reviews" theme={t} fillRow={deliberationMode}>
+          <select value={filters.reviews} onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))} style={filterSelectStyle}>
             <option value="all">Any count</option>
             <option value="0">None yet (0)</option>
             <option value="1">Exactly 1</option>
@@ -1658,8 +1664,8 @@ export default function ScoreboardPage() {
             <option value="2+">2 or more</option>
           </select>
         </FilterField>
-        <FilterField label="Score" theme={t}>
-          <select value={filters.scoreBand} onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))} style={barSelectStyle}>
+        <FilterField label="Score" theme={t} fillRow={deliberationMode}>
+          <select value={filters.scoreBand} onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))} style={filterSelectStyle}>
             <option value="all">All scores</option>
             <option value="top">Top 20%</option>
             <option value="strong">Top 30%</option>
@@ -1667,16 +1673,16 @@ export default function ScoreboardPage() {
             <option value="pending">No score</option>
           </select>
         </FilterField>
-        <FilterField label="Flags / referrals" theme={t}>
-          <select value={filters.signals} onChange={e => setFilters(f => ({ ...f, signals: e.target.value }))} style={barSelectStyle}>
+        <FilterField label="Flags / referrals" theme={t} fillRow={deliberationMode}>
+          <select value={filters.signals} onChange={e => setFilters(f => ({ ...f, signals: e.target.value }))} style={filterSelectStyle}>
             <option value="all">All candidates</option>
             <option value="referred">Referred only</option>
             <option value="flagged">Flagged only</option>
           </select>
         </FilterField>
         {deliberationMode ? (
-          <FilterField label="Committee decision" theme={t}>
-            <select value={filters.decision} onChange={e => setFilters(f => ({ ...f, decision: e.target.value }))} style={barSelectStyle}>
+          <FilterField label="Committee decision" theme={t} fillRow>
+            <select value={filters.decision} onChange={e => setFilters(f => ({ ...f, decision: e.target.value }))} style={filterSelectStyle}>
               <option value="all">All decisions</option>
               <option value="undecided">Undecided (pending + hold)</option>
               <option value="pending">Pending only</option>
@@ -1686,8 +1692,8 @@ export default function ScoreboardPage() {
             </select>
           </FilterField>
         ) : null}
-        <FilterField label="Sort" theme={t}>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={barSelectStyle}>
+        <FilterField label="Sort" theme={t} fillRow={deliberationMode}>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={filterSelectStyle}>
             {SORT_TABS.map(tab => (
               <option key={tab.id} value={tab.id}>{tab.label}</option>
             ))}
