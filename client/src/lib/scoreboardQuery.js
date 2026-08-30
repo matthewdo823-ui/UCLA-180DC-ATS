@@ -14,11 +14,14 @@ import { qk } from "./queryKeys";
  * decisions that are still saving from being overwritten by a background refresh
  * that hasn't seen them yet. Callers with nothing to protect omit it.
  */
-export function scoreboardQueryOptions(authedFetch, { roundId = null, mergeWithCached } = {}) {
+export function scoreboardQueryOptions(authedFetch, { roundId = null, cycleId = null, mergeWithCached } = {}) {
   return {
-    queryKey: qk.scoreboard(roundId),
+    queryKey: qk.scoreboard(roundId, cycleId),
     queryFn: async () => {
-      const query = roundId ? `?roundId=${encodeURIComponent(roundId)}` : "";
+      const params = new URLSearchParams();
+      if (roundId) params.set("roundId", roundId);
+      if (cycleId) params.set("cycleId", cycleId);
+      const query = params.size ? `?${params.toString()}` : "";
       const res = await authedFetch(`${API}/scoreboard${query}`);
       const json = await readJsonOrThrow(
         res,

@@ -12,11 +12,11 @@
 export const qk = {
   activeCycle: () => ["cycles", "active"],
 
-  scoreboard: (roundId = null) => ["scoreboard", roundId ?? "active"],
+  scoreboard: (roundId = null, cycleId = null) => ["scoreboard", cycleId ?? "active-cycle", roundId ?? "active-round"],
   scoreboardRoot: () => ["scoreboard"],
-  candidateApplication: (resumeId) => ["candidate-application", String(resumeId || "")],
+  candidateApplication: (resumeId, cycleId = null) => ["candidate-application", String(resumeId || ""), cycleId ?? "active-cycle"],
   candidateApplicationsRoot: () => ["candidate-application"],
-  candidateApplicationSummary: (resumeId) => ["candidate-application-summary", String(resumeId || "")],
+  candidateApplicationSummary: (resumeId, cycleId = null) => ["candidate-application-summary", String(resumeId || ""), cycleId ?? "active-cycle"],
 
   adminDashboard: () => ["dashboard", "admin"],
   graderDashboard: () => ["dashboard", "grader"],

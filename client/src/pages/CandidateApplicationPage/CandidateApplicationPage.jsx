@@ -16,11 +16,12 @@ import useCandidateApplicationSummary from "./useCandidateApplicationSummary";
 export default function CandidateApplicationPage() {
   const { candidateId: resumeId } = useParams();
   const location = useLocation();
+  const cycleId = new URLSearchParams(location.search).get("cycleId") || null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { token } = useAuth();
-  const { candidate, resume, scoring, signals, roundDecision, contextLabel, loading, error, refresh } = useCandidateApplication(resumeId);
-  const summaryState = useCandidateApplicationSummary(resumeId, !loading && !error && Boolean(candidate));
+  const { candidate, resume, scoring, signals, roundDecision, contextLabel, loading, error, refresh } = useCandidateApplication(resumeId, cycleId);
+  const summaryState = useCandidateApplicationSummary(resumeId, !loading && !error && Boolean(candidate), cycleId);
   const cachedScoreboard = queryClient
     .getQueriesData({ queryKey: qk.scoreboardRoot() })
     .map(([, cached]) => cached)
@@ -36,7 +37,7 @@ export default function CandidateApplicationPage() {
       <div style={{ flex: 1, padding: "18px 20px 36px", width: "100%", boxSizing: "border-box" }}>
         <button
           type="button"
-          onClick={() => navigate("/scoreboard")}
+          onClick={() => navigate(cycleId ? `/scoreboard?cycleId=${encodeURIComponent(cycleId)}` : "/scoreboard")}
           style={{
             display: "inline-flex",
             alignItems: "center",

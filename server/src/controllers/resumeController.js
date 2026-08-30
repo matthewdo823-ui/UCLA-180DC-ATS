@@ -31,9 +31,11 @@ const {
     buildDecisionLookup,
     resolveCandidateDecision,
     countDecisions,
+    deliberationHasStarted,
     summarizeIncompleteDeliberation,
     buildDecisionsCsv,
 } = require('../utils/roundDecisions');
+const { isResumeScreenType } = require('../utils/rounds');
 const {
     buildCandidateLinkLookups,
     resolveCandidateLink,
@@ -1768,8 +1770,21 @@ async function maybeBackfillResumeCandidateId(resumeId, candidateId) {
 exports.getScoreboard = async (req, res) => {
     try {
         const requestedRoundId = String(req.query?.roundId || "").trim();
-        const activeCycle = await getActiveCycleRow();
+        const requestedCycleId = String(req.query?.cycleId || "").trim();
+        const siteActiveCycle = await getActiveCycleRow();
+        let activeCycle = siteActiveCycle;
+        if (requestedCycleId && requestedCycleId !== siteActiveCycle?.id) {
+            const { data: requestedCycle, error: requestedCycleError } = await supabase
+                .from("cycles")
+                .select("*")
+                .eq("id", requestedCycleId)
+                .maybeSingle();
+            if (requestedCycleError) throw requestedCycleError;
+            if (!requestedCycle) return res.status(404).json({ error: "Cycle not found" });
+            activeCycle = requestedCycle;
+        }
         const activeCycleId = activeCycle?.id || null;
+        const viewingHistoricalCycle = Boolean(activeCycleId && activeCycleId !== siteActiveCycle?.id);
         const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
         const {
             resumeRound,
@@ -1779,7 +1794,7 @@ exports.getScoreboard = async (req, res) => {
         } = resolveDeliberationRounds(cycleRounds);
 
         let deliberationRound = activeDeliberationRound;
-        let viewingHistorical = false;
+        let viewingHistorical = viewingHistoricalCycle;
 
         if (requestedRoundId) {
             const requestedRound = cycleRounds.find((r) => r.id === requestedRoundId) || null;
@@ -1787,7 +1802,7 @@ exports.getScoreboard = async (req, res) => {
                 return res.status(404).json({ error: "Round not found in this cycle" });
             }
             deliberationRound = requestedRound;
-            viewingHistorical = requestedRound.id !== activeRound?.id;
+            viewingHistorical = viewingHistoricalCycle || requestedRound.id !== activeRound?.id;
         }
 
         const nextRound = viewingHistorical
@@ -2281,6 +2296,118 @@ exports.upsertRoundDecision = async (req, res) => {
     }
 };
 
+exports.bulkUpsertRoundDecisions = async (req, res) => {
+    const rawDecisions = Array.isArray(req.body?.decisions) ? req.body.decisions : [];
+    if (!rawDecisions.length || rawDecisions.length > 1000) {
+        return res.status(400).json({ error: "decisions must contain between 1 and 1000 candidates" });
+    }
+
+    const inputByCandidate = new Map();
+    for (const row of rawDecisions) {
+        const candidateId = String(row?.candidate_id || "").trim();
+        const resumeId = String(row?.resume_id || "").trim();
+        const decision = String(row?.decision || "").trim().toLowerCase();
+        if (!candidateId || !resumeId || !["advance", "reject"].includes(decision)) {
+            return res.status(400).json({
+                error: "Every bulk decision requires candidate_id, resume_id, and an Advance or Reject decision",
+            });
+        }
+        inputByCandidate.set(candidateId, { candidateId, resumeId, decision });
+    }
+
+    try {
+        const activeCycle = await getActiveCycleRow();
+        if (!activeCycle?.id) return res.status(503).json({ error: "No active recruiting cycle" });
+
+        const cycleRounds = await getRoundsForCycle(activeCycle.id);
+        const resumeRound = cycleRounds.find((round) => isResumeScreenType(round.type)) || null;
+        const activeRound = cycleRounds.find((round) => round.status === "active") || null;
+        if (!resumeRound || !activeRound) {
+            return res.status(503).json({ error: "An active round and resume screening round are required" });
+        }
+
+        const candidateIds = [...inputByCandidate.keys()];
+        const [candidateResult, existingResult, priorRows] = await Promise.all([
+            supabase
+                .from("candidates")
+                .select("id")
+                .eq("cycle_id", activeCycle.id)
+                .in("id", candidateIds),
+            supabase
+                .from("round_decisions")
+                .select("candidate_id, decision")
+                .eq("cycle_id", activeCycle.id)
+                .eq("round_id", activeRound.id)
+                .in("candidate_id", candidateIds),
+            loadPriorRoundDecisionRows(activeCycle.id, activeRound, cycleRounds),
+        ]);
+
+        if (candidateResult.error) throw candidateResult.error;
+        if (existingResult.error) throw existingResult.error;
+
+        const validCandidateIds = new Set((candidateResult.data || []).map((row) => row.id));
+        const existingLookup = buildDecisionLookup(existingResult.data || []);
+        const priorLookup = buildDecisionLookup(priorRows || []);
+        const priorDecisionsStarted = deliberationHasStarted(priorRows || []);
+        const skipped = [];
+        const now = new Date().toISOString();
+
+        const payloads = [...inputByCandidate.values()].flatMap((input) => {
+            if (!validCandidateIds.has(input.candidateId)) {
+                skipped.push({ ...input, reason: "Candidate is not in the active cycle" });
+                return [];
+            }
+
+            const existingStatus = normalizeRoundDecision(existingLookup[input.candidateId]?.decision);
+            if (existingLookup[input.candidateId] && existingStatus !== "pending") {
+                skipped.push({ ...input, reason: "A committee decision already exists" });
+                return [];
+            }
+
+            if (!isResumeScreenType(activeRound.type) && priorDecisionsStarted) {
+                const priorStatus = normalizeRoundDecision(priorLookup[input.candidateId]?.decision);
+                if (priorStatus !== "advance") {
+                    skipped.push({ ...input, reason: "Candidate did not advance from the prior round" });
+                    return [];
+                }
+            }
+
+            return [{
+                candidate_id: input.candidateId,
+                cycle_id: activeCycle.id,
+                round_id: activeRound.id,
+                decision: input.decision,
+                notes: "Applied from configured rank cutoffs",
+                decided_by: req.user?.user_id,
+                updated_at: now,
+            }];
+        });
+
+        if (!payloads.length) {
+            return res.json({ appliedCount: 0, skippedCount: skipped.length, decisions: [], skipped });
+        }
+
+        const { data, error } = await supabase
+            .from("round_decisions")
+            .upsert(payloads, { onConflict: "candidate_id,round_id" })
+            .select("*");
+        if (error) return respondWithServerError(res, error, "bulkUpsertRoundDecisions upsert");
+
+        return res.json({
+            appliedCount: data?.length || 0,
+            skippedCount: skipped.length,
+            decisions: (data || []).map((row) => ({
+                candidateId: row.candidate_id,
+                resumeId: inputByCandidate.get(row.candidate_id)?.resumeId || null,
+                decision: mapRoundDecision(row, { provisional: true }),
+            })),
+            skipped,
+        });
+    } catch (err) {
+        return respondWithServerError(res, err, "bulkUpsertRoundDecisions");
+    }
+};
+
 exports.exportScoreboardDecisions = async (req, res) => {
     const rawFilter = String(req.query?.decision || "all").trim().toLowerCase();
     const allowed = new Set(["all", "advance", "hold", "reject", "pending"]);
@@ -2434,15 +2561,28 @@ function mapApplicationCandidate(candidate) {
     };
 }
 
-async function fetchScoreboardApplicationPayload(resumeId) {
-    const activeCycle = await getActiveCycleRow();
+async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = null) {
+    let activeCycle = await getActiveCycleRow();
+    if (requestedCycleId && requestedCycleId !== activeCycle?.id) {
+        const { data, error } = await supabase
+            .from('cycles')
+            .select('id, name')
+            .eq('id', requestedCycleId)
+            .maybeSingle();
+        if (error) {
+            const err = new Error(error.message || 'Failed to load recruiting cycle');
+            err.cause = error;
+            throw err;
+        }
+        activeCycle = data;
+    }
     const activeCycleId = activeCycle?.id || null;
     const resumeRound = activeCycleId
         ? await getResumeScreenRoundForCycle(activeCycleId)
         : null;
 
     if (!activeCycleId || !resumeRound) {
-        const err = new Error('No active resume screening cycle');
+        const err = new Error('No recruiting cycle available');
         err.statusCode = 503;
         throw err;
     }
@@ -2513,14 +2653,14 @@ async function fetchScoreboardApplicationPayload(resumeId) {
     }
 
     if (resumeRow.cycle_id !== activeCycleId) {
-        const err = new Error('Candidate is not in the active cycle');
+        const err = new Error('Candidate is not in this cycle');
         err.statusCode = 404;
         throw err;
     }
 
     const candidate = firstRel(resumeRow.candidates);
     if (!candidate || candidate.cycle_id !== activeCycleId) {
-        const err = new Error('Candidate is not in the active cycle');
+        const err = new Error('Candidate is not in this cycle');
         err.statusCode = 404;
         throw err;
     }
@@ -2684,10 +2824,10 @@ async function fetchScoreboardApplicationPayload(resumeId) {
     };
 }
 
-async function fetchScoreboardApplicationSummarySource(resumeId) {
-    const activeCycleId = await getActiveCycleId();
+async function fetchScoreboardApplicationSummarySource(resumeId, requestedCycleId = null) {
+    const activeCycleId = requestedCycleId || await getActiveCycleId();
     if (!activeCycleId) {
-        const err = new Error('No active resume screening cycle');
+        const err = new Error('No recruiting cycle available');
         err.statusCode = 503;
         throw err;
     }
@@ -2735,7 +2875,7 @@ async function fetchScoreboardApplicationSummarySource(resumeId) {
     }
 
     if (!activeCycle || !resumeRound) {
-        const err = new Error('No active resume screening cycle');
+        const err = new Error('No resume screening round for this cycle');
         err.statusCode = 503;
         throw err;
     }
@@ -2747,7 +2887,7 @@ async function fetchScoreboardApplicationSummarySource(resumeId) {
 
     const candidate = firstRel(resumeRow.candidates);
     if (resumeRow.cycle_id !== activeCycleId || !candidate || candidate.cycle_id !== activeCycleId) {
-        const err = new Error('Candidate is not in the active cycle');
+        const err = new Error('Candidate is not in this cycle');
         err.statusCode = 404;
         throw err;
     }
@@ -2782,7 +2922,8 @@ exports.getScoreboardApplication = async (req, res) => {
             return res.status(400).json({ error: 'resumeId is required' });
         }
 
-        const payload = await fetchScoreboardApplicationPayload(resumeId);
+        const requestedCycleId = String(req.query?.cycleId || '').trim() || null;
+        const payload = await fetchScoreboardApplicationPayload(resumeId, requestedCycleId);
         const userId = req.user?.user_id ?? null;
 
         const [adminOverrideRow, signals, roundDecisionResult] = await Promise.all([
@@ -2835,7 +2976,8 @@ exports.getScoreboardApplicationSummary = async (req, res) => {
 
         const forceRefresh = String(req.query.refresh || '').trim() === '1';
 
-        const payload = await fetchScoreboardApplicationSummarySource(resumeId);
+        const requestedCycleId = String(req.query?.cycleId || '').trim() || null;
+        const payload = await fetchScoreboardApplicationSummarySource(resumeId, requestedCycleId);
 
         const summaryResult = await resolveCandidateSummary(supabase, {
             resumeId,

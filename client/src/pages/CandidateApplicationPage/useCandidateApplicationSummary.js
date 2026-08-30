@@ -7,18 +7,21 @@ import { formatResponseError, normalizeError } from "../../utils/errors";
 
 const SUMMARY_STALE_MS = 5 * 60 * 1000;
 
-export default function useCandidateApplicationSummary(resumeId, enabled = true) {
+export default function useCandidateApplicationSummary(resumeId, enabled = true, cycleId = null) {
   const authedFetch = useAuthedFetch();
   const fetchRef = useRef(authedFetch);
   fetchRef.current = authedFetch;
   const queryClient = useQueryClient();
   const id = String(resumeId || "").trim();
-  const queryKey = qk.candidateApplicationSummary(id);
+  const queryKey = qk.candidateApplicationSummary(id, cycleId);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
 
   const fetchSummary = useCallback(async (forceRefresh = false) => {
-    const suffix = forceRefresh ? "?refresh=1" : "";
+    const params = new URLSearchParams();
+    if (forceRefresh) params.set("refresh", "1");
+    if (cycleId) params.set("cycleId", cycleId);
+    const suffix = params.size ? `?${params.toString()}` : "";
     const res = await fetchRef.current(
       `${API}/scoreboard/${encodeURIComponent(id)}/application/summary${suffix}`
     );
@@ -44,7 +47,7 @@ export default function useCandidateApplicationSummary(resumeId, enabled = true)
       summary: String(json.summary || "").trim(),
       generatedAt: json.generatedAt || null,
     };
-  }, [id]);
+  }, [cycleId, id]);
 
   const query = useQuery({
     queryKey,

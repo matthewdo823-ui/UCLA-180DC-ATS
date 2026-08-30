@@ -3,10 +3,10 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { candidateApplicationQueryOptions } from "../../lib/candidateApplicationQuery";
 import { normalizeError } from "../../utils/errors";
 
-export default function useCandidateApplication(resumeId) {
+export default function useCandidateApplication(resumeId, cycleId = null) {
   const authedFetch = useAuthedFetch();
   const id = String(resumeId || "").trim();
-  const query = useQuery(candidateApplicationQueryOptions(authedFetch, id));
+  const query = useQuery(candidateApplicationQueryOptions(authedFetch, id, cycleId));
   const data = query.data;
 
   const contextLabel = data?.context?.cycle && data?.context?.round
