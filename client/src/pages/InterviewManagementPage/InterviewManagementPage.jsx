@@ -10,6 +10,7 @@ import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
+import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { getInitials } from "../../utils/format";
@@ -53,9 +54,7 @@ function CoffeeChatCandidateCard({ candidate, busy, onSave, onOpenProfile }) {
   return (
     <article style={{ background: css.cardWhite, border: `1px solid ${rating ? "rgba(29,158,117,0.28)" : css.borderLight}`, borderRadius: 12, padding: 18, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 15 }}>
-        <div style={{ width: 40, height: 40, borderRadius: "50%", background: css.greenDark, color: "#FFF", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>
-          {getInitials(candidate.name)}
-        </div>
+        <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={48} background={css.greenDark} />
         <div style={{ minWidth: 0 }}>
           <button
             type="button"
