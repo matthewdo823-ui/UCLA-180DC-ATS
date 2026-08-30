@@ -1348,7 +1348,9 @@ export default function ScoreboardPage() {
                       cursor: "pointer",
                     }}
                   >
-                    <option value="">{cycleId ? "Resume Screen overview" : "Current round"}</option>
+                    <option value="">
+                      Current round ({liveActiveRound?.name || activeRound?.name || "Unknown"})
+                    </option>
                     {pastRounds.map((round) => (
                       <option key={round.id} value={round.id}>
                         {round.name}{round.status === "closed" ? " (closed)" : ""}
