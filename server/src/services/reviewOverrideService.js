@@ -54,11 +54,12 @@ function buildCategoryScoresFromReviews(reviews, metrics = []) {
   const counts = {};
   const metricList = metrics.length
     ? metrics
-    : [...new Set((reviews || []).flatMap((review) => Object.keys(review.scores || {})))];
+    : [...new Set((reviews || []).flatMap((review) => Object.keys(review.displayScores || review.scores || {})))];
 
   (reviews || []).forEach((review) => {
+    const scores = review.displayScores || review.scores || {};
     metricList.forEach((metric) => {
-      const value = Number(review.scores?.[metric]);
+      const value = Number(scores[metric]);
       if (!Number.isFinite(value)) return;
       totals[metric] = (totals[metric] || 0) + value;
       counts[metric] = (counts[metric] || 0) + 1;

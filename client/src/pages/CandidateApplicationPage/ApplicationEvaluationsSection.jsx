@@ -18,10 +18,11 @@ function StatTile({ label, value, detail, accent = false }) {
 }
 
 function ReviewCategoryScores({ review, metrics, maxPerCategory }) {
-  const reviewMetrics = Object.keys(review.scores || {}).filter((metric) => metric !== FRQ_METRIC);
+  const displayScores = review.displayScores || review.scores || {};
+  const reviewMetrics = Object.keys(displayScores).filter((metric) => metric !== FRQ_METRIC);
   const scoredMetrics = [...new Set([...metrics, ...reviewMetrics])]
-    .filter((metric) => hasNumericScore(review.scores?.[metric]));
-  const categoryMax = review.maxPerCategory || maxPerCategory;
+    .filter((metric) => hasNumericScore(displayScores[metric]));
+  const categoryMax = review.displayMaxPerCategory || review.maxPerCategory || maxPerCategory;
   if (!scoredMetrics.length) return null;
 
   return (
@@ -32,7 +33,7 @@ function ReviewCategoryScores({ review, metrics, maxPerCategory }) {
             {titleCase(metric)}
           </span>
           <span style={{ flexShrink: 0, color: cardGreen, fontSize: 11, fontWeight: 700 }}>
-            {formatScore(review.scores[metric])}/{categoryMax}
+            {formatScore(displayScores[metric])}/{categoryMax}
           </span>
         </div>
       ))}

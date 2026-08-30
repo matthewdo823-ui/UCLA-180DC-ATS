@@ -266,6 +266,65 @@ function hasReviewScoreValues(review, metrics = null) {
   });
 }
 
+function getFiniteScore(scores, metric) {
+  const value = scores?.[metric];
+  return value !== null && value !== "" && Number.isFinite(Number(value))
+    ? Number(value)
+    : null;
+}
+
+/**
+ * Project stored review categories onto the candidate's current year rubric for
+ * display and category averages. Historical totals still use their original
+ * rubric snapshot/max; this only prevents retired legacy labels from leaking
+ * into current candidate profiles.
+ */
+function projectReviewScoresToRubric(review, options = {}) {
+  const scores = review?.scores || {};
+  const rubric = getRubricForYear(options.rubricConfig, options.candidateYear);
+  const targetMetrics = rubric.metrics || [];
+  const targetMax = rubric.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
+  const hasLegacyExclusiveMetric = ["experience", "leadership", "communication"]
+    .some((metric) => getFiniteScore(scores, metric) != null);
+
+  if (!hasLegacyExclusiveMetric) {
+    const projected = {};
+    targetMetrics.forEach((metric) => {
+      const value = getFiniteScore(scores, metric);
+      if (value != null) projected[metric] = value;
+    });
+    return { scores: projected, metrics: targetMetrics, maxPerCategory: targetMax, legacy: false };
+  }
+
+  const scaleLegacyValue = (metric) => {
+    const value = getFiniteScore(scores, metric);
+    return value == null
+      ? null
+      : Number((value / LEGACY_RUBRIC_MAX_PER_CATEGORY * targetMax).toFixed(2));
+  };
+  const averageAvailable = (...values) => {
+    const finite = values.filter((value) => Number.isFinite(value));
+    if (!finite.length) return null;
+    return Number((finite.reduce((sum, value) => sum + value, 0) / finite.length).toFixed(2));
+  };
+
+  const projected = {};
+  targetMetrics.forEach((metric) => {
+    let value = null;
+    if (metric === "work experience") value = scaleLegacyValue("experience");
+    else if (metric === "leadership experience") value = scaleLegacyValue("leadership");
+    else if (metric === "social impact") value = scaleLegacyValue("social impact");
+    else if (metric === "leadership/work experience") {
+      value = averageAvailable(scaleLegacyValue("experience"), scaleLegacyValue("leadership"));
+    } else if (metric === "business or social impact") {
+      value = scaleLegacyValue("social impact");
+    }
+    if (value != null) projected[metric] = value;
+  });
+
+  return { scores: projected, metrics: targetMetrics, maxPerCategory: targetMax, legacy: true };
+}
+
 function computeRawScore(scores = {}, metrics = []) {
   if (metrics.length) {
     return metrics.reduce((sum, metric) => sum + (Number(scores[metric]) || 0), 0);
@@ -348,6 +407,7 @@ module.exports = {
   resolveCandidateResumeMax,
   getReviewScoring,
   hasReviewScoreValues,
+  projectReviewScoresToRubric,
   computeRawScore,
   computeNormalizedScore,
   getMetricsFromRubricConfig,
