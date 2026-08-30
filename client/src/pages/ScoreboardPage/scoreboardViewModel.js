@@ -1,5 +1,5 @@
 import { css } from "../../theme/colors";
-import { formatScore, getInitials, hasNumericScore } from "../../utils/format";
+import { getInitials, hasNumericScore } from "../../utils/format";
 import { formatRoundKind } from "../../constants/rounds";
 import { passesDecisionFilter } from "./decisionUtils";
 import { getResumeReviewCount } from "../../utils/reviewCounts";
@@ -34,12 +34,9 @@ export function sortYears(items) {
 export function countActiveFilters(filters) { return Object.keys(defaultFilters).filter((key) => filters[key] !== defaultFilters[key]).length; }
 export function getNumReviews(candidate) { return getResumeReviewCount(candidate); }
 export function getNormalizedScore(candidate) { return hasNumericScore(candidate?.normalizedScore) ? Number(candidate.normalizedScore) : null; }
-export function getAggregateScore(candidate) { return hasNumericScore(candidate?.aggregateScore) ? Number(candidate.aggregateScore) : null; }
-export function getPerformanceSortScore(candidate) { return getAggregateScore(candidate); }
-export function getScoreMaxTotal(candidate) { return hasNumericScore(candidate?.compositeMax) ? Number(candidate.compositeMax) : hasNumericScore(candidate?.maxScore) ? Number(candidate.maxScore) : null; }
+export function getPerformanceSortScore(candidate) { return getNormalizedScore(candidate); }
 export function getHeadlineScore(candidate) { const score = getNormalizedScore(candidate); return score == null ? null : Math.min(100, score); }
 export function getSourceNormalizedScore(candidate) { return hasNumericScore(candidate?.sourceNormalizedScore) ? Number(candidate.sourceNormalizedScore) : getNormalizedScore(candidate); }
-export function formatScorePointsLine(candidate) { const score = getAggregateScore(candidate); const max = getScoreMaxTotal(candidate); return hasNumericScore(score) && max != null ? `${formatScore(score)} pts / ${formatScore(max)}` : null; }
 export function normalizeMetricScore(candidate, metric) { const value = candidate?.categoryScores?.[metric]; return hasNumericScore(value) ? Number(value) : null; }
 
 export function computeScoreCutoffs(candidates) {

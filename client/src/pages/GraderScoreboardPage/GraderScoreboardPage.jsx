@@ -248,7 +248,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
           <div style={{ margin: "6px 18px 0", padding: "10px 12px", background: "#F8FAF6", border: "1px solid #E3E8DD", borderRadius: 8 }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.05em", margin: "0 0 5px", fontWeight: 700 }}>SUMMARY</p>
             <p style={{ fontSize: 12, lineHeight: 1.45, color: css.textDark, margin: 0 }}>
-              Average normalized score given: {formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%. Raw avg: {formatNumber(grader.averageScore)} pts. Latest grading activity: {formatDate(grader.latestReviewAt, { fallback: "Not yet" })}.
+              Average normalized score given: {formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%. Latest grading activity: {formatDate(grader.latestReviewAt, { fallback: "Not yet" })}.
             </p>
           </div>
 

@@ -1,7 +1,7 @@
 import { FRQ_METRIC } from "../../constants/frq";
 import { css } from "../../theme/colors";
 import { formatDate, formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
-import { formatReviewCount, formatReviewCountPair } from "../../utils/reviewCounts";
+import { formatReviewCount, formatReviewCountPairStacked } from "../../utils/reviewCounts";
 import { hasText } from "./applicationUtils";
 import CategoryRow from "./components/CategoryRow";
 import SectionCard from "./components/SectionCard";
@@ -18,7 +18,10 @@ function StatTile({ label, value, detail, accent = false }) {
 }
 
 function ReviewCategoryScores({ review, metrics, maxPerCategory }) {
-  const scoredMetrics = metrics.filter((metric) => hasNumericScore(review.scores?.[metric]));
+  const reviewMetrics = Object.keys(review.scores || {}).filter((metric) => metric !== FRQ_METRIC);
+  const scoredMetrics = [...new Set([...metrics, ...reviewMetrics])]
+    .filter((metric) => hasNumericScore(review.scores?.[metric]));
+  const categoryMax = review.maxPerCategory || maxPerCategory;
   if (!scoredMetrics.length) return null;
 
   return (
@@ -29,7 +32,7 @@ function ReviewCategoryScores({ review, metrics, maxPerCategory }) {
             {titleCase(metric)}
           </span>
           <span style={{ flexShrink: 0, color: cardGreen, fontSize: 11, fontWeight: 700 }}>
-            {formatScore(review.scores[metric])}/{maxPerCategory}
+            {formatScore(review.scores[metric])}/{categoryMax}
           </span>
         </div>
       ))}
@@ -61,7 +64,7 @@ function ResumeReviewCard({ review, index, metrics, maxPerCategory }) {
 
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <p style={{ margin: 0, color: reviewOverridden ? "#E24B4A" : cardGreen, fontSize: 17, fontWeight: 700 }}>
-            {formatScore(review.normalizedScore)}% <span style={{ color: css.textGray, fontSize: 12, fontWeight: 500 }}>· {formatScore(review.score)} raw</span>
+            {formatScore(review.normalizedScore)}%
           </p>
           <p style={{ margin: "3px 0 0", color: css.textGray, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
             {review.decision && review.decision !== "pass" ? titleCase(review.decision) : "Submitted"}{reviewOverridden ? " · overridden" : ""}
@@ -103,7 +106,9 @@ function FrqReviewCard({ review, index }) {
         </div>
 
         <p style={{ margin: 0, color: cardGreen, fontSize: 17, fontWeight: 700 }}>
-          {formatScore(review.score)}/4 <span style={{ color: css.textGray, fontSize: 12, fontWeight: 500 }}>points</span>
+          {hasNumericScore(review.normalizedScore)
+            ? formatScore(review.normalizedScore)
+            : formatScore(Number(review.score) / 4 * 100)}%
         </p>
       </div>
 
@@ -120,37 +125,43 @@ function FrqReviewCard({ review, index }) {
 export default function ApplicationEvaluationsSection({ scoring }) {
   const reviews = scoring?.reviews || [];
   const frqReviews = scoring?.frqReviews || [];
-  const allMetrics = (scoring?.metrics || []).filter(
+  const allMetrics = [...new Set([
+    ...(scoring?.metrics || []),
+    ...Object.keys(scoring?.categoryScores || {}),
+  ])].filter(
     (metric) => hasNumericScore(scoring?.categoryScores?.[metric])
   );
   const resumeMetrics = (scoring?.metrics || []).filter(
     (metric) => metric !== FRQ_METRIC && hasNumericScore(scoring?.categoryScores?.[metric])
   );
   const averageScore = scoring?.resumeNormalizedScore ?? scoring?.normalizedScore;
-  const averageRawScore = scoring?.resumeAggregateScore ?? scoring?.aggregateScore;
   const frqAverage = scoring?.frqScore;
   const maxPerCategory = scoring?.maxPerCategory || 4;
+  const freeResponsePercent = hasNumericScore(frqAverage) ? Number(frqAverage) / 4 * 100 : null;
+  const overallDetail = hasNumericScore(averageScore) && hasNumericScore(freeResponsePercent)
+    ? `Resume ${formatScore(averageScore)}% + free response ${formatScore(freeResponsePercent)}% · weighted by rubric`
+    : hasNumericScore(averageScore)
+      ? `Resume ${formatScore(averageScore)}% · free response pending`
+      : "Waiting for submitted grades";
   const previousGrades = [
     ...reviews.map((review, index) => ({ type: "resume", review, index })),
     ...frqReviews.map((review, index) => ({ type: "frq", review, index })),
   ].sort((a, b) => new Date(b.review.submittedAt || 0) - new Date(a.review.submittedAt || 0));
 
   return (
-    <SectionCard title="Admin grading overview">
+    <SectionCard title="Grading overview">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
         <div>
           <h3 style={{ margin: 0, color: css.textDark, fontSize: 20, fontWeight: 700 }}>Candidate scorecard</h3>
           <p style={{ margin: "5px 0 0", color: css.textGray, fontSize: 13, lineHeight: 1.45 }}>Average rubric performance and every submitted grader score for this candidate.</p>
         </div>
-        <span style={{ padding: "5px 9px", borderRadius: 20, background: "rgba(40, 98, 65, 0.1)", color: cardGreen, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Admin only</span>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
-        <StatTile label="Overall score" value={hasNumericScore(scoring?.normalizedScore) ? `${formatScore(scoring.normalizedScore)}%` : "—"} detail="Normalized across submitted grading sections" accent />
-        <StatTile label="Average resume" value={hasNumericScore(averageScore) ? `${formatScore(averageScore)}%` : "—"} detail={hasNumericScore(averageRawScore) ? `${formatScore(averageRawScore)} average raw points` : "No resume score submitted yet"} />
-        <StatTile label="Average free response" value={hasNumericScore(frqAverage) ? `${formatScore(frqAverage)}/4` : "—"} detail={`${formatReviewCount(frqReviews.length, "free response")} completed`} />
-        <StatTile label="Resume reviews" value={reviews.length} detail={`${formatReviewCount(reviews.length, "resume")} completed`} />
-        <StatTile label="Free response reviews" value={frqReviews.length} detail={`${formatReviewCount(frqReviews.length, "free response")} completed`} />
+        <StatTile label="Overall average" value={hasNumericScore(scoring?.normalizedScore) ? `${formatScore(scoring.normalizedScore)}%` : "—"} detail={overallDetail} accent />
+        <StatTile label="Average resume" value={hasNumericScore(averageScore) ? `${formatScore(averageScore)}%` : "—"} detail={formatReviewCount(reviews.length, "resume")} />
+        <StatTile label="Average free response" value={hasNumericScore(freeResponsePercent) ? `${formatScore(freeResponsePercent)}%` : "—"} detail={formatReviewCount(frqReviews.length, "free response")} />
+        <StatTile label="Reviews" value={reviews.length + frqReviews.length} detail={<span style={{ whiteSpace: "pre-line" }}>{formatReviewCountPairStacked(reviews.length, frqReviews.length)}</span>} />
       </div>
 
       {allMetrics.length > 0 && (
@@ -163,7 +174,7 @@ export default function ApplicationEvaluationsSection({ scoring }) {
                 metric={metric}
                 label={metric === FRQ_METRIC ? "Free response" : undefined}
                 value={scoring.categoryScores?.[metric]}
-                maxPerCategory={metric === FRQ_METRIC ? 4 : maxPerCategory}
+                maxPerCategory={scoring.categoryMaxScores?.[metric] || (metric === FRQ_METRIC ? 4 : maxPerCategory)}
               />
             ))}
           </div>
@@ -173,7 +184,7 @@ export default function ApplicationEvaluationsSection({ scoring }) {
       <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${css.borderLight}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
           <h3 style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>Previous grades</h3>
-          <span style={{ color: css.textGray, fontSize: 12 }}>{formatReviewCountPair(reviews.length, frqReviews.length)}</span>
+          <span style={{ color: css.textGray, fontSize: 12, lineHeight: 1.45, textAlign: "right", whiteSpace: "pre-line" }}>{formatReviewCountPairStacked(reviews.length, frqReviews.length)}</span>
         </div>
 
         {previousGrades.length > 0 ? (
