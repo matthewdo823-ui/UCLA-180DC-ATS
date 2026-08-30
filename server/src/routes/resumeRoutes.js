@@ -17,6 +17,7 @@ router.post('/assignments', requireRoles('admin'), assignmentController.createAs
 router.delete('/assignments', requireRoles('admin'), assignmentController.deleteAssignments);
 router.delete('/assignments/:assignmentId', requireRoles('admin'), assignmentController.deleteAssignmentById);
 router.get('/next-resume', resumeController.getNextResume);
+router.get('/resume/:id/grading-context', requireRoles('admin'), resumeController.getResumeGradingContext);
 router.get('/resume/:id', resumeController.getResumeById);
 router.get('/reviews', resumeController.listMyReviews);
 router.get('/reviews/:reviewId/resume', resumeController.getReviewResume);
