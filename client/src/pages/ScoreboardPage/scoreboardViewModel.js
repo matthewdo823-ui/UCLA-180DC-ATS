@@ -3,6 +3,7 @@ import { getInitials, hasNumericScore } from "../../utils/format";
 import { formatRoundKind } from "../../constants/rounds";
 import { passesDecisionFilter } from "./decisionUtils";
 import { getResumeReviewCount } from "../../utils/reviewCounts";
+import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
 
 export const defaultFilters = { major: "all", year: "all", reviews: "all", scoreBand: "all", decision: "all", signals: "all" };
 export const SORT_TABS = [
@@ -38,6 +39,23 @@ export function getPerformanceSortScore(candidate) { return getNormalizedScore(c
 export function getHeadlineScore(candidate) { const score = getNormalizedScore(candidate); return score == null ? null : Math.min(100, score); }
 export function getSourceNormalizedScore(candidate) { return hasNumericScore(candidate?.sourceNormalizedScore) ? Number(candidate.sourceNormalizedScore) : getNormalizedScore(candidate); }
 export function normalizeMetricScore(candidate, metric) { const value = candidate?.categoryScores?.[metric]; return hasNumericScore(value) ? Number(value) : null; }
+export function getCandidateMetrics(candidate, fallbackMetrics = []) {
+  const reviewMetrics = (candidate?.reviews || []).flatMap((review) => Object.keys(review?.scores || {}));
+  return [...new Set([
+    ...(candidate?.metrics || []),
+    ...reviewMetrics,
+    ...Object.keys(candidate?.categoryScores || {}),
+    ...fallbackMetrics,
+  ])].filter((metric) => hasNumericScore(candidate?.categoryScores?.[metric]));
+}
+export function getCandidateMetricMax(candidate, metric, fallbackMax = 4) {
+  const explicit = Number(candidate?.categoryMaxScores?.[metric]);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  if (metric === FRQ_METRIC) return FRQ_MAX_SCORE;
+  const review = (candidate?.reviews || []).find((item) => hasNumericScore(item?.scores?.[metric]));
+  const reviewMax = Number(review?.maxPerCategory);
+  return Number.isFinite(reviewMax) && reviewMax > 0 ? reviewMax : fallbackMax;
+}
 
 export function computeScoreCutoffs(candidates) {
   const scores = (candidates || []).map(getPerformanceSortScore).filter(hasNumericScore).map(Number).sort((a, b) => b - a);
