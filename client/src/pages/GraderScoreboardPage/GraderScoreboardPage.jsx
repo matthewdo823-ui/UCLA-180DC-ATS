@@ -10,7 +10,6 @@ import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatDate, formatNumber, formatPoints, getInitials, hasNumericScore, titleCase } from "../../utils/format";
-import { resolveReviewMaxScore } from "../../utils/rubric";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
@@ -251,7 +250,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
                   <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{review.resumeName}</p>
                   <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>{formatDate(review.submittedAt, { fallback: "Not yet" })}</p>
                 </div>
-                <div style={{ fontSize: 12, color: cardGreen, fontWeight: 700 }}>{formatPoints(review.score, resolveReviewMaxScore(review))}</div>
+                <div style={{ fontSize: 12, color: cardGreen, fontWeight: 700 }}>{formatPoints(review.score, review.maxScore)}</div>
               </div>
             ))}
             {grader.reviews?.length === 0 && (

@@ -1,7 +1,6 @@
 import { FRQ_METRIC } from "../../constants/frq";
 import { css } from "../../theme/colors";
 import { formatDate, formatPoints, formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
-import { getCurrentResumeMaxScore, resolveReviewMaxScore } from "../../utils/rubric";
 import { hasText } from "./applicationUtils";
 import CategoryRow from "./components/CategoryRow";
 import SectionCard from "./components/SectionCard";
@@ -58,7 +57,7 @@ function ResumeReviewCard({ review, index, metrics, maxPerCategory }) {
 
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <p style={{ margin: 0, color: reviewOverridden ? "#E24B4A" : cardGreen, fontSize: 17, fontWeight: 700 }}>
-            {formatPoints(review.score, resolveReviewMaxScore(review, { metrics, maxPerCategory }))} <span style={{ color: css.textGray, fontSize: 12, fontWeight: 500 }}>points</span>
+            {formatPoints(review.score, review.maxScore)} <span style={{ color: css.textGray, fontSize: 12, fontWeight: 500 }}>points</span>
           </p>
           <p style={{ margin: "3px 0 0", color: css.textGray, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
             {review.decision && review.decision !== "pass" ? titleCase(review.decision) : "Submitted"}{reviewOverridden ? " · overridden" : ""}
@@ -78,16 +77,14 @@ function ResumeReviewCard({ review, index, metrics, maxPerCategory }) {
   );
 }
 
-export default function ApplicationEvaluationsSection({ candidate, scoring }) {
+export default function ApplicationEvaluationsSection({ scoring }) {
   const reviews = scoring?.reviews || [];
   const frqReviews = scoring?.frqReviews || [];
   const resumeMetrics = (scoring?.metrics || []).filter(
     (metric) => metric !== FRQ_METRIC && hasNumericScore(scoring?.categoryScores?.[metric])
   );
   const averageScore = scoring?.resumeAggregateScore ?? scoring?.aggregateScore;
-  const averageMaxScore = scoring?.resumeMaxScore
-    ?? scoring?.maxScore
-    ?? getCurrentResumeMaxScore(candidate?.year);
+  const averageMaxScore = scoring?.resumeMaxScore ?? scoring?.maxScore;
   const maxPerCategory = scoring?.maxPerCategory || 4;
   const distinctGraders = new Set(reviews.map((review) => review.reviewerEmail || review.reviewerName || review.id).filter(Boolean)).size;
 

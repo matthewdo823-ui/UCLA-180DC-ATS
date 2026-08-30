@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { css } from "../../theme/colors";
 import { formatScore } from "../../utils/format";
-import { resolveReviewMaxScore } from "../../utils/rubric";
 import useReviewOverrides from "./useReviewOverrides";
 
 const cardGreen = "#085041";
@@ -21,7 +20,7 @@ function getReviewRawTotal(review) {
 
 function getReviewScoreLabel(review, maxScore) {
   const total = getReviewRawTotal(review);
-  const max = maxScore || resolveReviewMaxScore(review);
+  const max = maxScore || review?.maxScore || Object.keys(review?.scores || {}).length * 4 || 24;
   return `${formatScore(total)}/${max} pts`;
 }
 
@@ -72,7 +71,7 @@ export default function ReviewOverrideSection({
     () => (reviews || []).map((review, index) => {
       const override = overrideByReviewId[review.id] || review?.adminOverride;
       const hasOverride = override?.overrideScore != null;
-      const maxScore = resolveReviewMaxScore(review, { metrics, maxPerCategory });
+      const maxScore = review?.maxScore || metrics.length * maxPerCategory;
       const displayReview = hasOverride
         ? { ...review, score: override.overrideScore }
         : review;
@@ -86,7 +85,7 @@ export default function ReviewOverrideSection({
         maxScore,
       };
     }),
-    [reviews, overrideByReviewId, metrics, maxPerCategory]
+    [reviews, overrideByReviewId, metrics.length, maxPerCategory]
   );
 
   useEffect(() => {
@@ -120,8 +119,7 @@ export default function ReviewOverrideSection({
     : null;
   const isOverridden = activeOverride?.overrideScore != null;
   const baselineTotal = selectedReview ? getBaselineTotal(selectedReview) : 0;
-  const maxScore = selectedOption?.maxScore
-    || resolveReviewMaxScore(selectedReview, { metrics, maxPerCategory });
+  const maxScore = selectedOption?.maxScore || selectedReview?.maxScore || metrics.length * maxPerCategory || 24;
   const parsedOverrideScore = Number(overrideScore);
   const effectiveOverrideScore = getEffectiveOverrideScore(selectedReview, activeOverride);
 
