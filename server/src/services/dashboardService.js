@@ -16,6 +16,7 @@ const {
   loadDeliberationPoolForRound,
 } = require("./roundDeliberationService");
 const { isInterviewRoundType, isResumeScreenType, getPriorRound } = require("../utils/rounds");
+const { hasReviewScoreValues } = require("../utils/rubric");
 
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
@@ -146,7 +147,7 @@ async function countInterviewPool(cycleId, roundId) {
 
   const { data: reviews, error: reviewError } = await supabase
     .from("resume_reviews")
-    .select("resume_id")
+    .select("resume_id, scores")
     .eq("cycle_id", cycleId)
     .eq("round_id", resumeRound.id)
     .in("resume_id", resumeIds);
@@ -159,7 +160,7 @@ async function countInterviewPool(cycleId, roundId) {
   });
 
   const reviewsByResume = {};
-  (reviews || []).forEach((review) => {
+  (reviews || []).filter(hasReviewScoreValues).forEach((review) => {
     if (!reviewsByResume[review.resume_id]) reviewsByResume[review.resume_id] = 0;
     reviewsByResume[review.resume_id] += 1;
   });
