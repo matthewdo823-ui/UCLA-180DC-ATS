@@ -3298,17 +3298,14 @@ exports.upsertReviewOverride = async (req, res) => {
         }
 
         const candidateYear = firstRel(resume?.candidates)?.year;
-        const snapshot = reviewRow.rubric_snapshot || null;
-        const rubricForYear = snapshot
-            ? {
-                metrics: snapshot.metrics || Object.keys(reviewRow.scores || {}),
-                maxPerCategory: snapshot.maxPerCategory || 4,
-                maxScore: snapshot.maxScore,
-            }
-            : getRubricForYear(resumeRound.rubric_config, candidateYear);
+        const reviewScoring = getReviewScoring(reviewRow, {
+            rubricConfig: resumeRound.rubric_config,
+            candidateYear,
+        });
 
         let overrideScore = null;
-        const maxAllowed = rubricForYear.maxScore || getRubricMaxScore(rubricForYear);
+        const maxAllowed = reviewScoring.maxScore
+            || getRubricMaxScore(getRubricForYear(resumeRound.rubric_config, candidateYear));
         if (hasScore) {
             overrideScore = Number(rawScore);
             if (!Number.isFinite(overrideScore) || overrideScore < 0 || overrideScore > maxAllowed) {
