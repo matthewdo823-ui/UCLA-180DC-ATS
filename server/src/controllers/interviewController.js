@@ -6,7 +6,7 @@ const {
   getRoundsForCycle,
   requireActiveInterviewRound,
 } = require("../utils/cycleContext");
-const { getReviewScoring } = require("../utils/rubric");
+const { resolveReviewNormalizedValue } = require("../utils/rubric");
 const { respondWithServerError } = require("../utils/httpErrors");
 const {
   buildDecisionLookup,
@@ -192,17 +192,14 @@ exports.listInterviewCandidates = async (req, res) => {
     const mapped = pool.map((candidate) => {
       const resume = resumeByCandidate[candidate.id];
       const resumeReviews = reviewsByResume[resume.id] || [];
-      const reviewScores = resumeReviews.map((review) => getReviewScoring(review, {
+      const normalizedScores = resumeReviews
+        .map((review) => resolveReviewNormalizedValue(review, {
           rubricConfig,
           candidateYear: candidate.year,
-        }));
-      const rawScores = reviewScores.map((score) => score.score).filter(Number.isFinite);
-      const maxScores = reviewScores.map((score) => score.maxScore).filter(Number.isFinite);
-      const avgResumeScore = rawScores.length
-        ? Number((rawScores.reduce((a, b) => a + b, 0) / rawScores.length).toFixed(1))
-        : null;
-      const avgResumeMaxScore = maxScores.length
-        ? Number((maxScores.reduce((a, b) => a + b, 0) / maxScores.length).toFixed(1))
+        }))
+        .filter((v) => Number.isFinite(v));
+      const avgResumeScore = normalizedScores.length
+        ? Number((normalizedScores.reduce((a, b) => a + b, 0) / normalizedScores.length).toFixed(1))
         : null;
       const evaluation = mapEvaluation(evalByCandidate[candidate.id]);
 
@@ -218,7 +215,6 @@ exports.listInterviewCandidates = async (req, res) => {
         resumeFileUrl: resume.file_url,
         resumeReviewCount: resumeReviews.length,
         avgResumeScore,
-        avgResumeMaxScore,
         evaluation: evaluation || {
           decision: "pending",
           scheduledAt: null,

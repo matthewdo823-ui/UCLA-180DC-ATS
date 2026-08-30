@@ -1,5 +1,5 @@
 import { css } from "../../theme/colors";
-import { formatPoints, getInitials, hasNumericScore } from "../../utils/format";
+import { formatScore, getInitials, hasNumericScore } from "../../utils/format";
 import { formatRoundKind } from "../../constants/rounds";
 import { passesDecisionFilter } from "./decisionUtils";
 
@@ -38,8 +38,7 @@ export function getPerformanceSortScore(candidate) { return getAggregateScore(ca
 export function getScoreMaxTotal(candidate) { return hasNumericScore(candidate?.compositeMax) ? Number(candidate.compositeMax) : hasNumericScore(candidate?.maxScore) ? Number(candidate.maxScore) : null; }
 export function getHeadlineScore(candidate) { const score = getNormalizedScore(candidate); return score == null ? null : Math.min(100, score); }
 export function getSourceNormalizedScore(candidate) { return hasNumericScore(candidate?.sourceNormalizedScore) ? Number(candidate.sourceNormalizedScore) : getNormalizedScore(candidate); }
-export function getSourceAggregateScore(candidate) { return hasNumericScore(candidate?.sourceAggregateScore) ? Number(candidate.sourceAggregateScore) : getAggregateScore(candidate); }
-export function formatScorePointsLine(candidate) { return formatPoints(getAggregateScore(candidate), getScoreMaxTotal(candidate), { fallback: null, suffix: true }); }
+export function formatScorePointsLine(candidate) { const score = getAggregateScore(candidate); const max = getScoreMaxTotal(candidate); return hasNumericScore(score) && max != null ? `${formatScore(score)} pts / ${formatScore(max)}` : null; }
 export function normalizeMetricScore(candidate, metric) { const value = candidate?.categoryScores?.[metric]; return hasNumericScore(value) ? Number(value) : null; }
 
 export function computeScoreCutoffs(candidates) {
