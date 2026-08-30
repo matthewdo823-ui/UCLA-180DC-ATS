@@ -1961,6 +1961,9 @@ exports.getScoreboard = async (req, res) => {
                 numReviews: 0,
                 categoryTotals: {},
                 categoryCounts: {},
+                categoryMaxTotals: {},
+                categoryMaxCounts: {},
+                metrics: [],
                 reviews: [],
             };
         });
@@ -2011,6 +2014,9 @@ exports.getScoreboard = async (req, res) => {
                     numReviews: 0,
                     categoryTotals: {},
                     categoryCounts: {},
+                    categoryMaxTotals: {},
+                    categoryMaxCounts: {},
+                    metrics: [],
                     reviews: [],
                 };
             }
@@ -2019,12 +2025,25 @@ exports.getScoreboard = async (req, res) => {
             candidateMap[resumeId].totalNormalized += reviewNormalized;
             candidateMap[resumeId].numReviews++;
 
+            [...scoring.metrics, ...Object.keys(review.scores || {})].forEach((metric) => {
+                const value = review.scores?.[metric];
+                if (value === null || value === '' || !Number.isFinite(Number(value))) return;
+                if (!candidateMap[resumeId].metrics.includes(metric)) {
+                    candidateMap[resumeId].metrics.push(metric);
+                }
+            });
+
             Object.entries(review.scores || {}).forEach(([metric, value]) => {
-                const numericValue = Number(value) || 0;
+                if (value === null || value === '' || !Number.isFinite(Number(value))) return;
+                const numericValue = Number(value);
                 candidateMap[resumeId].categoryTotals[metric] =
                     (candidateMap[resumeId].categoryTotals[metric] || 0) + numericValue;
                 candidateMap[resumeId].categoryCounts[metric] =
                     (candidateMap[resumeId].categoryCounts[metric] || 0) + 1;
+                candidateMap[resumeId].categoryMaxTotals[metric] =
+                    (candidateMap[resumeId].categoryMaxTotals[metric] || 0) + scoring.maxPerCategory;
+                candidateMap[resumeId].categoryMaxCounts[metric] =
+                    (candidateMap[resumeId].categoryMaxCounts[metric] || 0) + 1;
             });
 
             const graderFromUsers = review.graded_by != null ? gradedByUserLookup[review.graded_by] : null;
@@ -2080,6 +2099,8 @@ exports.getScoreboard = async (req, res) => {
                 maxScore: resumeMax,
                 resumeMax,
                 categoryScores,
+                categoryMaxScores: buildCategoryScores(c.categoryMaxTotals, c.categoryMaxCounts),
+                metrics: c.metrics,
                 numReviews: c.numReviews,
                 reviews: c.reviews.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt)),
                 score: normalizedScore == null ? null : Math.round(normalizedScore),
@@ -2100,7 +2121,7 @@ exports.getScoreboard = async (req, res) => {
         const candidatesWithOverrides = applyReviewOverridesToCandidates(
             filteredCandidates,
             reviewOverrideLookup,
-            { rubricConfig: resumeRound.rubric_config, metrics }
+            { rubricConfig: resumeRound.rubric_config }
         );
 
         const frqByResumeId = groupFrqReviewsByResumeId(frqRows, gradedByUserLookup);
@@ -2108,9 +2129,8 @@ exports.getScoreboard = async (req, res) => {
             frqByResumeId,
             rubricConfig: resumeRound.rubric_config,
         });
-        // Display only the current rubric's categories — the `metrics` union above still
-        // carries retired categories from older reviews' snapshots (needed for override/score
-        // math), but those should not surface in the scorecard breakdown.
+        // Top-level metrics describe every rubric represented in this scoreboard. Each
+        // candidate also carries its own actually-scored metric list for the scorecard.
         const currentMetrics = getMetricsFromRubricConfig(resumeRound.rubric_config);
         const metricsWithFrq = appendFrqMetric(currentMetrics.length ? currentMetrics : metrics);
 
@@ -2568,7 +2588,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         getGradedByUserLookup(graderIds),
         fetchReviewOverridesByReviewIds((reviews || []).map((review) => review.id)),
     ]);
-    const metricSet = new Set(getMetricsFromRubricConfig(resumeRound.rubric_config));
+    const candidateMetricOrder = [];
     const categoryTotals = {};
     const categoryCounts = {};
     const categoryMaxTotals = {};
@@ -2581,8 +2601,6 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             rubricConfig: resumeRound.rubric_config,
             candidateYear: candidate.year,
         });
-        scoring.metrics.forEach((metric) => metricSet.add(metric));
-
         const reviewScore = scoring.score;
         const reviewNormalized = scoring.normalizedScore ?? resolveReviewNormalizedValue(review, {
             rubricConfig: resumeRound.rubric_config,
@@ -2590,11 +2608,18 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         });
         if (!Number.isFinite(reviewScore) || !Number.isFinite(reviewNormalized)) return null;
 
+        [...scoring.metrics, ...Object.keys(review.scores || {})].forEach((metric) => {
+            const value = review.scores?.[metric];
+            if (value === null || value === '' || !Number.isFinite(Number(value))) return;
+            if (!candidateMetricOrder.includes(metric)) candidateMetricOrder.push(metric);
+        });
+
         totalScore += reviewScore;
         totalNormalized += reviewNormalized;
 
         Object.entries(review.scores || {}).forEach(([metric, value]) => {
-            const numericValue = Number(value) || 0;
+            if (value === null || value === '' || !Number.isFinite(Number(value))) return;
+            const numericValue = Number(value);
             categoryTotals[metric] = (categoryTotals[metric] || 0) + numericValue;
             categoryCounts[metric] = (categoryCounts[metric] || 0) + 1;
             categoryMaxTotals[metric] = (categoryMaxTotals[metric] || 0) + scoring.maxPerCategory;
@@ -2639,11 +2664,12 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             numReviews,
             year: candidate.year,
             resumeMax,
-            metrics: [...metricSet],
+            metrics: candidateMetricOrder,
             categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
+            categoryMaxScores: buildCategoryScores(categoryMaxTotals, categoryMaxCounts),
         },
         reviewOverrideLookup,
-        { rubricConfig: resumeRound.rubric_config, candidateYear: candidate.year, metrics: [...metricSet] }
+        { rubricConfig: resumeRound.rubric_config, candidateYear: candidate.year, metrics: candidateMetricOrder }
     );
 
     const frqReviews = (frqRows || []).map((row) => mapFrqReviewRow(row, gradedByUserLookup));
@@ -2651,10 +2677,6 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         frqReviews,
         rubricConfig: resumeRound.rubric_config,
     });
-
-    // Display only the current rubric's categories; the metricSet union carries retired
-    // categories from older reviews' snapshots (kept for override/score math above).
-    const currentMetrics = getMetricsFromRubricConfig(resumeRound.rubric_config);
 
     return {
         context: {
@@ -2673,7 +2695,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         resumeRoundId: resumeRound.id,
         activeCycleId,
         scoring: {
-            metrics: appendFrqMetric(currentMetrics.length ? currentMetrics : [...metricSet]),
+            metrics: compositeCandidate.metrics,
             maxPerCategory: resumeRound.rubric_config?.maxPerCategory || 4,
             numReviews: compositeCandidate.numReviews,
             aggregateScore: compositeCandidate.aggregateScore,
@@ -2691,10 +2713,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             earnedPoints: compositeCandidate.earnedPoints,
             possiblePoints: compositeCandidate.possiblePoints,
             categoryScores: compositeCandidate.categoryScores,
-            categoryMaxScores: {
-                ...buildCategoryScores(categoryMaxTotals, categoryMaxCounts),
-                [FRQ_METRIC]: FRQ_MAX_SCORE,
-            },
+            categoryMaxScores: compositeCandidate.categoryMaxScores,
             reviews: compositeCandidate.reviews,
             frqReviews: compositeCandidate.frqReviews,
         },
