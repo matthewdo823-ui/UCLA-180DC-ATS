@@ -70,19 +70,21 @@ function mapCycle(row, extras = {}) {
 async function fetchCycleCounts(cycleIds) {
   const counts = {};
   cycleIds.forEach((id) => {
-    counts[id] = { candidates: 0, resumes: 0, reviews: 0 };
+    counts[id] = { candidates: 0, resumes: 0, resumeReviews: 0, frqReviews: 0 };
   });
   if (!cycleIds.length) return counts;
 
-  const [candidatesRes, resumesRes, reviewsRes] = await Promise.all([
+  const [candidatesRes, resumesRes, reviewsRes, frqReviewsRes] = await Promise.all([
     supabase.from("candidates").select("cycle_id").in("cycle_id", cycleIds),
     supabase.from("resumes").select("cycle_id").in("cycle_id", cycleIds),
     supabase.from("resume_reviews").select("cycle_id").in("cycle_id", cycleIds),
+    supabase.from("frq_reviews").select("cycle_id").in("cycle_id", cycleIds),
   ]);
 
   if (candidatesRes.error) throw candidatesRes.error;
   if (resumesRes.error) throw resumesRes.error;
   if (reviewsRes.error) throw reviewsRes.error;
+  if (frqReviewsRes.error) throw frqReviewsRes.error;
 
   (candidatesRes.data || []).forEach((row) => {
     if (row.cycle_id && counts[row.cycle_id]) counts[row.cycle_id].candidates += 1;
@@ -91,7 +93,10 @@ async function fetchCycleCounts(cycleIds) {
     if (row.cycle_id && counts[row.cycle_id]) counts[row.cycle_id].resumes += 1;
   });
   (reviewsRes.data || []).forEach((row) => {
-    if (row.cycle_id && counts[row.cycle_id]) counts[row.cycle_id].reviews += 1;
+    if (row.cycle_id && counts[row.cycle_id]) counts[row.cycle_id].resumeReviews += 1;
+  });
+  (frqReviewsRes.data || []).forEach((row) => {
+    if (row.cycle_id && counts[row.cycle_id]) counts[row.cycle_id].frqReviews += 1;
   });
 
   return counts;
@@ -205,7 +210,7 @@ exports.listCycles = async (req, res) => {
       cycles: (cycles || []).map((cycle) =>
         mapCycle(cycle, {
           isActive: cycle.id === activeCycleId,
-          counts: countsByCycle[cycle.id] || { candidates: 0, resumes: 0, reviews: 0 },
+          counts: countsByCycle[cycle.id] || { candidates: 0, resumes: 0, resumeReviews: 0, frqReviews: 0 },
           rounds: roundsByCycle[cycle.id] || [],
         })
       ),
@@ -263,7 +268,7 @@ exports.createCycle = async (req, res) => {
     return res.status(201).json({
       cycle: mapCycle(cycle, {
         isActive: false,
-        counts: { candidates: 0, resumes: 0, reviews: 0 },
+        counts: { candidates: 0, resumes: 0, resumeReviews: 0, frqReviews: 0 },
         rounds: (rounds || []).map(mapRound),
       }),
     });
@@ -364,7 +369,7 @@ exports.patchCycle = async (req, res) => {
     return res.json({
       cycle: mapCycle(data, {
         isActive: data.id === activeCycleId,
-        counts: countsByCycle[cycleId] || { candidates: 0, resumes: 0, reviews: 0 },
+        counts: countsByCycle[cycleId] || { candidates: 0, resumes: 0, resumeReviews: 0, frqReviews: 0 },
         rounds: roundsByCycle[cycleId] || [],
       }),
     });
@@ -610,7 +615,7 @@ exports.syncCycleForm = async (req, res) => {
       errors: result.errors,
       cycle: mapCycle(refreshed, {
         isActive: refreshed.id === activeCycleId,
-        counts: countsByCycle[cycleId] || { candidates: 0, resumes: 0, reviews: 0 },
+        counts: countsByCycle[cycleId] || { candidates: 0, resumes: 0, resumeReviews: 0, frqReviews: 0 },
         rounds: roundsByCycle[cycleId] || [],
       }),
     });

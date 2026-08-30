@@ -1,6 +1,7 @@
 import { FRQ_METRIC } from "../../constants/frq";
 import { css } from "../../theme/colors";
 import { formatDate, formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
+import { formatReviewCount, formatReviewCountPair } from "../../utils/reviewCounts";
 import { hasText } from "./applicationUtils";
 import CategoryRow from "./components/CategoryRow";
 import SectionCard from "./components/SectionCard";
@@ -100,7 +101,8 @@ export default function ApplicationEvaluationsSection({ scoring }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
         <StatTile label="Average score" value={hasNumericScore(averageScore) ? `${formatScore(averageScore)}%` : "—"} detail={hasNumericScore(averageRawScore) ? `${formatScore(averageRawScore)} average raw points` : "No score submitted yet"} accent />
-        <StatTile label="Times graded" value={reviews.length} detail={`${reviews.length} completed ${reviews.length === 1 ? "review" : "reviews"}`} />
+        <StatTile label="Resume reviews" value={reviews.length} detail={`${formatReviewCount(reviews.length, "resume")} completed`} />
+        <StatTile label="Free response reviews" value={frqReviews.length} detail={`${formatReviewCount(frqReviews.length, "free response")} completed`} />
         <StatTile label="Distinct graders" value={distinctGraders} detail="People who submitted a resume score" />
       </div>
 
@@ -115,8 +117,8 @@ export default function ApplicationEvaluationsSection({ scoring }) {
 
       <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${css.borderLight}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
-          <h3 style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>Previous grades</h3>
-          <span style={{ color: css.textGray, fontSize: 12 }}>{reviews.length} total</span>
+          <h3 style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>Previous reviews</h3>
+          <span style={{ color: css.textGray, fontSize: 12 }}>{formatReviewCountPair(reviews.length, frqReviews.length)}</span>
         </div>
 
         {reviews.length > 0 ? (
@@ -124,13 +126,13 @@ export default function ApplicationEvaluationsSection({ scoring }) {
             {reviews.map((review, index) => <ResumeReviewCard key={review.id} review={review} index={index} metrics={resumeMetrics} maxPerCategory={maxPerCategory} />)}
           </div>
         ) : (
-          <div style={{ padding: "22px", borderRadius: 9, background: "#F8FAF6", border: `1px dashed ${css.borderLight}`, color: css.textGray, fontSize: 13, textAlign: "center" }}>No resume grades have been submitted for this candidate.</div>
+          <div style={{ padding: "22px", borderRadius: 9, background: "#F8FAF6", border: `1px dashed ${css.borderLight}`, color: css.textGray, fontSize: 13, textAlign: "center" }}>No resume reviews have been submitted for this candidate.</div>
         )}
       </div>
 
       {frqReviews.length > 0 && (
         <details style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${css.borderLight}` }}>
-          <summary style={{ color: cardGreen, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Application-response grades ({frqReviews.length})</summary>
+          <summary style={{ color: cardGreen, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{formatReviewCount(frqReviews.length, "free response")}</summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8, marginTop: 10 }}>
             {frqReviews.map((review, index) => (
               <div key={review.id} style={{ padding: "11px 12px", borderRadius: 8, background: "#F8FAF6", border: `1px solid ${css.borderLight}` }}>

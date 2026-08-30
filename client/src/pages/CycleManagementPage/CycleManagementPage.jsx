@@ -18,6 +18,7 @@ import {
 import { formatDate } from "../../utils/format";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatRoundTypeLabel, isResumeScreenType } from "../../constants/rounds";
+import { formatReviewCountPair } from "../../utils/reviewCounts";
 
 const CYCLE_STATUS_STYLE = {
   active: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
@@ -704,7 +705,7 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
               Slug: {cycle.slug} · Created {formatDate(cycle.createdAt, { style: "short" })}
             </p>
             <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
-              {cycle.counts?.candidates ?? 0} candidates · {cycle.counts?.resumes ?? 0} resumes · {cycle.counts?.reviews ?? 0} reviews
+              {cycle.counts?.candidates ?? 0} candidates · {cycle.counts?.resumes ?? 0} resumes · {formatReviewCountPair(cycle.counts?.resumeReviews, cycle.counts?.frqReviews)}
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>

@@ -424,7 +424,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
               <span style={{ fontSize: 22, lineHeight: 1 }} aria-hidden>✓</span>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>Review saved</div>
-                <div style={{ fontSize: 12, color: css.textGray, marginTop: 2, lineHeight: 1.4 }}>Your changes are updated in Past Reviews.</div>
+                <div style={{ fontSize: 12, color: css.textGray, marginTop: 2, lineHeight: 1.4 }}>Your changes are updated in Past Resume Reviews.</div>
               </div>
             </div>
           ) : null}

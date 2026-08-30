@@ -44,4 +44,5 @@ export function invalidateAfterReview(queryClient) {
   queryClient.invalidateQueries({ queryKey: qk.scoreboardRoot() });
   queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() });
   queryClient.invalidateQueries({ queryKey: qk.graderScoreboard() });
+  queryClient.invalidateQueries({ queryKey: qk.frqGraderScoreboard() });
 }
