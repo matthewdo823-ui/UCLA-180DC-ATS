@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { qk } from "../../lib/queryKeys";
@@ -661,6 +661,8 @@ const EMPTY_SCOREBOARD = { stats: null, candidates: [], metrics: [], maxPerCateg
 
 export default function ScoreboardPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const cycleId = searchParams.get("cycleId") || null;
   const { user, isStaff } = useAuth();
   const authedFetch = useAuthedFetch();
   const queryClient = useQueryClient();
@@ -673,8 +675,10 @@ export default function ScoreboardPage() {
   const [equalizeActive, setEqualizeActive] = useState(false);
   const [savingDecisionId, setSavingDecisionId] = useState(null);
   const [decisionError, setDecisionError] = useState("");
+  const [decisionNotice, setDecisionNotice] = useState("");
   const [exportBusy, setExportBusy] = useState(false);
   const [advanceRoundBusy, setAdvanceRoundBusy] = useState(false);
+  const [bulkDecisionBusy, setBulkDecisionBusy] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [viewingRoundId, setViewingRoundId] = useState(null);
   const [focusedCandidateId, setFocusedCandidateId] = useState(null);
@@ -682,9 +686,8 @@ export default function ScoreboardPage() {
   const adminMenuRef = useRef(null);
   const rowRefs = useRef({});
   const pendingDecisionIdsRef = useRef(new Set());
-  const automaticDecisionRunRef = useRef("");
 
-  const scoreboardKey = useMemo(() => qk.scoreboard(viewingRoundId), [viewingRoundId]);
+  const scoreboardKey = useMemo(() => qk.scoreboard(viewingRoundId, cycleId), [cycleId, viewingRoundId]);
 
   // A background refresh can land while a decision is still saving. Without this,
   // the server's not-yet-updated row would overwrite the optimistic one and the
@@ -712,7 +715,7 @@ export default function ScoreboardPage() {
   }, [queryClient, scoreboardKey]);
 
   const scoreboardQuery = useQuery({
-    ...scoreboardQueryOptions(authedFetch, { roundId: viewingRoundId, mergeWithCached }),
+    ...scoreboardQueryOptions(authedFetch, { roundId: viewingRoundId, cycleId, mergeWithCached }),
     // Deliberation is a live, multi-admin activity — everyone needs to see
     // decisions as they land. Outside that mode the normal staleTime applies.
     // A closed historical round can't change, so there's nothing to poll for.
@@ -743,17 +746,18 @@ export default function ScoreboardPage() {
   }, [queryClient, scoreboardKey]);
 
   const prefetchCandidateApplication = useCallback((resumeId) => {
-    queryClient.prefetchQuery(candidateApplicationQueryOptions(authedFetch, resumeId));
-  }, [authedFetch, queryClient]);
+    queryClient.prefetchQuery(candidateApplicationQueryOptions(authedFetch, resumeId, cycleId));
+  }, [authedFetch, cycleId, queryClient]);
 
   const openCandidateWorkspace = useCallback((candidate) => {
-    navigate(`/scoreboard/${candidate.id}/application`, {
+    const cycleQuery = cycleId ? `?cycleId=${encodeURIComponent(cycleId)}` : "";
+    navigate(`/scoreboard/${candidate.id}/application${cycleQuery}`, {
       state: {
         candidateRank: candidate.rank,
         candidateCount: data.stats?.applicants,
       },
     });
-  }, [data.stats?.applicants, navigate]);
+  }, [cycleId, data.stats?.applicants, navigate]);
 
   useEffect(() => {
     if (scoreboardQuery.error) {
@@ -869,6 +873,7 @@ export default function ScoreboardPage() {
     setSelectedCandidate(prev => (prev?.id === candidate.id ? { ...prev, decision: optimisticDecision } : prev));
     setSavingDecisionId(candidate.id);
     setDecisionError("");
+    setDecisionNotice("");
 
     try {
       const res = await authedFetch(`${API}/scoreboard/decisions`, {
@@ -904,12 +909,12 @@ export default function ScoreboardPage() {
     }
   }, [authedFetch, canEditDeliberations, deliberationMode, setData]);
 
-  useEffect(() => {
-    if (!deliberationMode || !canEditDeliberations || viewingHistorical) return;
-
+  const automaticDecisionPlan = useMemo(() => {
     const advancePercent = Number(activeRound?.autoAdvancePercent) || 0;
     const rejectPercent = Number(activeRound?.autoRejectPercent) || 0;
-    if (advancePercent <= 0 && rejectPercent <= 0) return;
+    if (!deliberationMode || !canEditDeliberations || viewingHistorical || (advancePercent <= 0 && rejectPercent <= 0)) {
+      return { advancePercent, rejectPercent, advanceCount: 0, rejectCount: 0, decisions: [] };
+    }
 
     const ranked = equalizedCandidates
       .filter((candidate) => canRecordCommitteeDecision(candidate) && hasNumericScore(candidate.normalizedScore ?? candidate.score))
@@ -917,7 +922,9 @@ export default function ScoreboardPage() {
         const scoreDifference = Number(b.normalizedScore ?? b.score) - Number(a.normalizedScore ?? a.score);
         return scoreDifference || String(a.id).localeCompare(String(b.id));
       });
-    if (!ranked.length) return;
+    if (!ranked.length) {
+      return { advancePercent, rejectPercent, advanceCount: 0, rejectCount: 0, decisions: [] };
+    }
 
     const advanceCount = Math.ceil((ranked.length * advancePercent) / 100);
     const rejectCount = Math.ceil((ranked.length * rejectPercent) / 100);
@@ -927,16 +934,51 @@ export default function ScoreboardPage() {
       if (!selected.has(candidate.id)) selected.set(candidate.id, { candidate, decision: "reject" });
     });
 
-    const pendingSelections = [...selected.values()]
+    const decisions = [...selected.values()]
       .filter(({ candidate }) => getCandidateDecisionStatus(candidate) === "pending");
-    const runKey = `${activeRound?.id}:${advancePercent}:${rejectPercent}:${ranked.map((c) => `${c.id}:${c.normalizedScore ?? c.score}`).join("|")}`;
-    if (!pendingSelections.length || automaticDecisionRunRef.current === runKey) return;
-    automaticDecisionRunRef.current = runKey;
+    return {
+      advancePercent,
+      rejectPercent,
+      advanceCount: decisions.filter((item) => item.decision === "advance").length,
+      rejectCount: decisions.filter((item) => item.decision === "reject").length,
+      decisions,
+    };
+  }, [activeRound?.autoAdvancePercent, activeRound?.autoRejectPercent, canEditDeliberations, deliberationMode, equalizedCandidates, viewingHistorical]);
 
-    Promise.all(pendingSelections.map(({ candidate, decision }) => saveDecision(candidate, decision)))
-      .catch(() => {})
-      .finally(() => { automaticDecisionRunRef.current = ""; });
-  }, [activeRound?.autoAdvancePercent, activeRound?.autoRejectPercent, activeRound?.id, canEditDeliberations, deliberationMode, equalizedCandidates, saveDecision, viewingHistorical]);
+  const handleApplyAutomaticDecisions = useCallback(async () => {
+    if (!isAdmin || !automaticDecisionPlan.decisions.length || bulkDecisionBusy) return;
+    const confirmed = window.confirm(
+      `Apply the configured rank cutoffs?\n\n${automaticDecisionPlan.advanceCount} pending candidate(s) will be advanced and ${automaticDecisionPlan.rejectCount} will be rejected. Existing manual decisions will not be changed.`
+    );
+    if (!confirmed) return;
+
+    setBulkDecisionBusy(true);
+    setDecisionError("");
+    setDecisionNotice("");
+    try {
+      const res = await authedFetch(`${API}/scoreboard/decisions/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decisions: automaticDecisionPlan.decisions.map(({ candidate, decision }) => ({
+            resume_id: candidate.id,
+            candidate_id: candidate.candidateId,
+            decision,
+          })),
+        }),
+      });
+      if (!res.ok) throw await formatResponseError(res, "applying rank cutoffs");
+      const body = await res.json();
+      await fetchScoreboard({ silent: true });
+      setDecisionNotice(
+        `Applied ${body.appliedCount || 0} rank-based decision(s)${body.skippedCount ? `; ${body.skippedCount} existing or ineligible decision(s) were left unchanged` : ""}.`
+      );
+    } catch (err) {
+      setDecisionError(err);
+    } finally {
+      setBulkDecisionBusy(false);
+    }
+  }, [automaticDecisionPlan, authedFetch, bulkDecisionBusy, fetchScoreboard, isAdmin]);
 
   const handleSignalUpdated = useCallback((update) => {
     setData(prev => ({
@@ -1256,7 +1298,7 @@ export default function ScoreboardPage() {
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
         <div style={{ maxWidth: 640, flex: "1 1 260px", minWidth: 0 }}>
           <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: t.titleAccent }}>
-            {deliberationMode ? "Live deliberation" : scoreboardLabel}
+            {viewingHistorical ? "Cycle history" : deliberationMode ? "Live deliberation" : scoreboardLabel}
           </p>
           <div style={{ minWidth: 0 }}>
             <h1 style={pageTitleStyle}>Candidate scoreboard</h1>
@@ -1285,7 +1327,7 @@ export default function ScoreboardPage() {
             <>
               {pastRounds.length > 0 ? (
                 <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: "0.04em" }}>Past rounds</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, letterSpacing: "0.04em" }}>{cycleId ? "Cycle rounds" : "Past rounds"}</span>
                   <select
                     value={viewingRoundId || ""}
                     onChange={(e) => {
@@ -1308,7 +1350,7 @@ export default function ScoreboardPage() {
                       cursor: "pointer",
                     }}
                   >
-                    <option value="">Current round</option>
+                    <option value="">{cycleId ? "Resume Screen overview" : "Current round"}</option>
                     {pastRounds.map((round) => (
                       <option key={round.id} value={round.id}>
                         {round.name}{round.status === "closed" ? " (closed)" : ""}
@@ -1319,7 +1361,7 @@ export default function ScoreboardPage() {
               ) : null}
               <button
                 type="button"
-                onClick={viewingHistorical ? handleReturnToCurrentRound : toggleDeliberationMode}
+                onClick={cycleId ? () => navigate("/cycle-management?view=past") : viewingHistorical ? handleReturnToCurrentRound : toggleDeliberationMode}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -1335,8 +1377,35 @@ export default function ScoreboardPage() {
                   fontFamily: "'DM Sans', sans-serif",
                 }}
               >
-                {viewingHistorical ? "Back to current" : deliberationMode ? "Exit" : "Deliberation"}
+                {cycleId ? "Back to cycles" : viewingHistorical ? "Back to current" : deliberationMode ? "Exit" : "Deliberation"}
               </button>
+              {isAdmin && deliberationMode && !viewingHistorical && (automaticDecisionPlan.advancePercent > 0 || automaticDecisionPlan.rejectPercent > 0) ? (
+                <button
+                  type="button"
+                  onClick={handleApplyAutomaticDecisions}
+                  disabled={bulkDecisionBusy || automaticDecisionPlan.decisions.length === 0}
+                  title="Apply the top/bottom percentages configured for this round. Manual decisions are preserved."
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 7,
+                    cursor: bulkDecisionBusy || automaticDecisionPlan.decisions.length === 0 ? "not-allowed" : "pointer",
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    background: t.btnGhostBg,
+                    color: t.accent,
+                    border: `1px solid ${t.accent}`,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    opacity: bulkDecisionBusy || automaticDecisionPlan.decisions.length === 0 ? 0.55 : 1,
+                    fontFamily: "'DM Sans', sans-serif",
+                  }}
+                >
+                  {bulkDecisionBusy
+                    ? "Applying cutoffs…"
+                    : `Apply cutoffs · ${automaticDecisionPlan.advanceCount} pass / ${automaticDecisionPlan.rejectCount} reject`}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setEqualizeActive(on => !on)}
@@ -1469,7 +1538,7 @@ export default function ScoreboardPage() {
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: deliberationMode ? "rgba(61,207,154,0.08)" : t.cardBg, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
             <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: t.text }}>
-              Viewing past round: {activeRound.name}
+              {cycleId ? `Viewing archived cycle: ${data.context?.cycle?.name} · ${activeRound.name}` : `Viewing past round: ${activeRound.name}`}
             </p>
             <p style={{ margin: "4px 0 0", fontSize: 12, color: t.textMuted }}>
               Committee decisions from this closed round are read-only.
@@ -1477,7 +1546,7 @@ export default function ScoreboardPage() {
           </div>
           <button
             type="button"
-            onClick={handleReturnToCurrentRound}
+            onClick={cycleId ? () => navigate("/cycle-management?view=past") : handleReturnToCurrentRound}
             style={{
               padding: "8px 12px",
               borderRadius: 8,
@@ -1489,7 +1558,7 @@ export default function ScoreboardPage() {
               cursor: "pointer",
             }}
           >
-            Back to current round
+            {cycleId ? "Back to past cycles" : "Back to current round"}
           </button>
         </div>
       ) : null}
@@ -1501,6 +1570,12 @@ export default function ScoreboardPage() {
             onDismiss={() => setDecisionError(null)}
             onRetry={decisionError === scoreboardQuery.error ? () => scoreboardQuery.refetch() : undefined}
           />
+        </div>
+      ) : null}
+
+      {decisionNotice ? (
+        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid rgba(29,158,117,0.25)", background: "rgba(29,158,117,0.08)", color: t.text, fontSize: 12 }}>
+          {decisionNotice}
         </div>
       ) : null}
 
@@ -1822,30 +1897,37 @@ export default function ScoreboardPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
               <CandidateAvatar name={c.name} headshot={c.headshot} size={40} background={deliberationMode ? t.accent : css.greenDark} />
               <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openCandidateWorkspace(c);
-                  }}
-                  style={{
-                    border: "none",
-                    background: "none",
-                    padding: 0,
-                    textAlign: "left",
-                    fontSize: 15,
-                    fontWeight: 500,
-                    fontFamily: sansFont,
-                    color: t.text,
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    maxWidth: "100%",
-                  }}
-                >
-                  {c.name}
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openCandidateWorkspace(c);
+                    }}
+                    style={{
+                      border: "none",
+                      background: "none",
+                      padding: 0,
+                      textAlign: "left",
+                      fontSize: 15,
+                      fontWeight: 500,
+                      fontFamily: sansFont,
+                      color: t.text,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: "100%",
+                    }}
+                  >
+                    {c.name}
+                  </button>
+                  {decisionStatus === "advance" ? (
+                    <span title="Advanced to the next stage" aria-label="Advanced to the next stage" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, height: 18, borderRadius: 999, flexShrink: 0, background: DECISION_STYLE.advance.bg, border: `1px solid ${DECISION_STYLE.advance.bd}`, color: DECISION_STYLE.advance.color, fontSize: 11, fontWeight: 900 }}>
+                      ✓
+                    </span>
+                  ) : null}
+                </div>
                 <span style={{ fontSize: 12, color: t.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {[c.major, c.year].filter(Boolean).join(" · ")}
                 </span>

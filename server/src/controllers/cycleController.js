@@ -121,6 +121,30 @@ async function fetchRoundsForCycles(cycleIds) {
   return grouped;
 }
 
+async function fetchRoundDecisionCounts(cycleIds) {
+  const counts = {};
+  if (!cycleIds.length) return counts;
+
+  const { data, error } = await supabase
+    .from("round_decisions")
+    .select("round_id, decision")
+    .in("cycle_id", cycleIds);
+
+  if (error) throw error;
+
+  (data || []).forEach((row) => {
+    if (!counts[row.round_id]) {
+      counts[row.round_id] = { advance: 0, hold: 0, reject: 0, pending: 0 };
+    }
+    const decision = String(row.decision || "pending").toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(counts[row.round_id], decision)) {
+      counts[row.round_id][decision] += 1;
+    }
+  });
+
+  return counts;
+}
+
 async function buildActiveCyclePayload() {
   const activeCycleId = await getActiveCycleId();
   if (!activeCycleId) {
@@ -201,9 +225,10 @@ exports.listCycles = async (req, res) => {
 
     const cycleIds = (cycles || []).map((c) => c.id);
     const activeCycleId = await getActiveCycleId();
-    const [countsByCycle, roundsByCycle] = await Promise.all([
+    const [countsByCycle, roundsByCycle, decisionCountsByRound] = await Promise.all([
       fetchCycleCounts(cycleIds),
       fetchRoundsForCycles(cycleIds),
+      fetchRoundDecisionCounts(cycleIds),
     ]);
 
     return res.json({
@@ -211,7 +236,10 @@ exports.listCycles = async (req, res) => {
         mapCycle(cycle, {
           isActive: cycle.id === activeCycleId,
           counts: countsByCycle[cycle.id] || { candidates: 0, resumes: 0, resumeReviews: 0, frqReviews: 0 },
-          rounds: roundsByCycle[cycle.id] || [],
+          rounds: (roundsByCycle[cycle.id] || []).map((round) => ({
+            ...round,
+            decisionCounts: decisionCountsByRound[round.id] || { advance: 0, hold: 0, reject: 0, pending: 0 },
+          })),
         })
       ),
       activeCycleId,
