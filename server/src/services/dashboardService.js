@@ -15,8 +15,9 @@ const {
   resolveDeliberationRounds,
   loadDeliberationPoolForRound,
 } = require("./roundDeliberationService");
-const { isInterviewRoundType, isResumeScreenType, getPriorRound } = require("../utils/rounds");
+const { ROUND_TYPES, isInterviewRoundType, isResumeScreenType, getPriorRound, normalizeRoundType } = require("../utils/rounds");
 const { hasReviewScoreValues } = require("../utils/rubric");
+const { isMissingSchemaError } = require("../utils/schemaCompatibility");
 
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
@@ -64,17 +65,17 @@ async function loadPriorRoundGate(cycleId, activeRound) {
     return { gateStarted: false, eligibleCandidateIds: null };
   }
 
-  if (isResumeScreenType(priorRound.type)) {
-    const { data: roundDecisionRows, error } = await supabase
-      .from("round_decisions")
-      .select("candidate_id, decision")
-      .eq("cycle_id", cycleId)
-      .eq("round_id", priorRound.id);
+  const { data: roundDecisionRows, error: roundDecisionError } = await supabase
+    .from("round_decisions")
+    .select("candidate_id, decision")
+    .eq("cycle_id", cycleId)
+    .eq("round_id", priorRound.id);
 
-    if (error) throw error;
+  if (roundDecisionError) throw roundDecisionError;
 
-    const gateStarted = deliberationHasStarted(roundDecisionRows);
-    const eligibleCandidateIds = gateStarted
+  const committeeGateStarted = deliberationHasStarted(roundDecisionRows);
+  if (committeeGateStarted || isResumeScreenType(priorRound.type)) {
+    const eligibleCandidateIds = committeeGateStarted
       ? new Set(
         (roundDecisionRows || [])
           .filter((row) => normalizeRoundDecision(row.decision) === "advance")
@@ -83,7 +84,7 @@ async function loadPriorRoundGate(cycleId, activeRound) {
       )
       : null;
 
-    return { gateStarted, eligibleCandidateIds };
+    return { gateStarted: committeeGateStarted, eligibleCandidateIds };
   }
 
   const { data: priorEvaluations, error } = await supabase
@@ -173,24 +174,42 @@ async function countInterviewPool(cycleId, roundId) {
   }).length;
 }
 
-async function loadPersonalInterviewProgress(userId, cycleId, roundId) {
-  const [poolTotal, evaluationsResult] = await Promise.all([
+async function loadPersonalInterviewProgress(userId, cycleId, activeRound) {
+  const roundId = activeRound.id;
+  const isCoffeeChat = normalizeRoundType(activeRound.type) === ROUND_TYPES.COFFEE_CHAT;
+  let [poolTotal, evaluationsResult] = await Promise.all([
     countInterviewPool(cycleId, roundId),
     supabase
       .from("interview_evaluations")
-      .select("decision, updated_at, evaluated_by")
+      .select("decision, rating, weighted_score, updated_at, evaluated_by")
       .eq("round_id", roundId)
       .eq("evaluated_by", userId),
   ]);
 
+  let coffeeSchemaAvailable = true;
+  if (evaluationsResult.error && isMissingSchemaError(evaluationsResult.error)) {
+    coffeeSchemaAvailable = false;
+    evaluationsResult = await supabase
+      .from("interview_evaluations")
+      .select("decision, updated_at, evaluated_by")
+      .eq("round_id", roundId)
+      .eq("evaluated_by", userId);
+  }
+
   if (evaluationsResult.error) throw evaluationsResult.error;
 
   const mine = evaluationsResult.data || [];
-  const myCompleted = mine.filter((row) => row.decision && row.decision !== "pending");
+  const myCompleted = mine.filter((row) => isCoffeeChat && coffeeSchemaAvailable
+    ? row.rating && Number.isFinite(Number(row.weighted_score))
+    : row.decision && row.decision !== "pending");
 
-  const breakdown = { pass: 0, fail: 0, hold: 0, pending: 0, total: poolTotal };
+  const breakdown = isCoffeeChat
+    ? { strongYes: 0, yes: 0, no: 0, strongNo: 0, pending: 0, total: poolTotal }
+    : { pass: 0, fail: 0, hold: 0, pending: 0, total: poolTotal };
   myCompleted.forEach((row) => {
-    const key = row.decision || "pending";
+    const key = isCoffeeChat
+      ? row.rating === "strong_yes" ? "strongYes" : row.rating === "strong_no" ? "strongNo" : row.rating
+      : row.decision || "pending";
     if (breakdown[key] !== undefined) breakdown[key] += 1;
   });
   breakdown.pending = Math.max(0, poolTotal - myCompleted.length);
@@ -212,6 +231,7 @@ async function loadPersonalInterviewProgress(userId, cycleId, roundId) {
     goalComplete: expectedReviews > 0 && count >= expectedReviews,
     lastActivityAt,
     breakdown,
+    ratingMode: isCoffeeChat ? "coffee_chat" : "decision",
   };
 }
 
@@ -300,15 +320,68 @@ async function loadResumePipelineStats(cycleId, deliberationRound, resumeRound, 
   };
 }
 
-async function loadInterviewPipelineStats(cycleId, roundId) {
+async function loadInterviewPipelineStats(cycleId, activeRound) {
+  const roundId = activeRound.id;
+  const isCoffeeChat = normalizeRoundType(activeRound.type) === ROUND_TYPES.COFFEE_CHAT;
   const poolTotal = await countInterviewPool(cycleId, roundId);
 
-  const { data: evaluations, error } = await supabase
+  let evaluationResult = await supabase
     .from("interview_evaluations")
-    .select("decision")
+    .select("candidate_id, decision, rating, weighted_score")
     .eq("round_id", roundId);
 
+  let coffeeSchemaAvailable = true;
+  if (evaluationResult.error && isMissingSchemaError(evaluationResult.error)) {
+    coffeeSchemaAvailable = false;
+    evaluationResult = await supabase
+      .from("interview_evaluations")
+      .select("candidate_id, decision")
+      .eq("round_id", roundId);
+  }
+
+  const { data: evaluations, error } = evaluationResult;
+
   if (error) throw error;
+
+  if (isCoffeeChat) {
+    if (!coffeeSchemaAvailable) {
+      return {
+        mode: "interview",
+        ratingMode: "coffee_chat",
+        applicants: poolTotal,
+        reviewed: 0,
+        awaitingReviews: poolTotal,
+        pending: poolTotal,
+        totalRatings: 0,
+        strongYes: 0,
+        yes: 0,
+        no: 0,
+        strongNo: 0,
+        undecidedCount: poolTotal,
+        incompleteCount: poolTotal,
+      };
+    }
+    const ratedRows = (evaluations || []).filter((row) => row.rating && Number.isFinite(Number(row.weighted_score)));
+    const ratedCandidates = new Set(ratedRows.map((row) => row.candidate_id).filter(Boolean));
+    const breakdown = { strongYes: 0, yes: 0, no: 0, strongNo: 0 };
+    ratedRows.forEach((row) => {
+      const key = row.rating === "strong_yes" ? "strongYes" : row.rating === "strong_no" ? "strongNo" : row.rating;
+      if (breakdown[key] !== undefined) breakdown[key] += 1;
+    });
+    const pending = Math.max(0, poolTotal - ratedCandidates.size);
+    return {
+      mode: "interview",
+      ratingMode: "coffee_chat",
+      applicants: poolTotal,
+      reviewed: ratedCandidates.size,
+      awaitingReviews: pending,
+      pending,
+      totalRatings: ratedRows.length,
+      ...breakdown,
+      undecidedCount: pending,
+      incompleteCount: pending,
+    };
+  }
 
   const stats = { total: poolTotal, pending: 0, pass: 0, fail: 0, hold: 0 };
   (evaluations || []).forEach((row) => {
@@ -534,7 +607,7 @@ async function getGraderDashboard(userId) {
 
   let personal;
   if (isInterviewRound && activeRound) {
-    personal = await loadPersonalInterviewProgress(userId, activeCycleId, activeRound.id);
+    personal = await loadPersonalInterviewProgress(userId, activeCycleId, activeRound);
   } else {
     personal = await loadPersonalResumeProgress(
       userId,
@@ -605,7 +678,7 @@ async function getAdminDashboard(_userId) {
   };
 
   if (isInterviewRound && activeRound) {
-    pipeline = await loadInterviewPipelineStats(activeCycleId, activeRound.id);
+    pipeline = await loadInterviewPipelineStats(activeCycleId, activeRound);
   } else if (activeCycleId && resumeRound && deliberationRound) {
     pipeline = await loadResumePipelineStats(
       activeCycleId,
