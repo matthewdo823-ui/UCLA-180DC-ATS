@@ -40,6 +40,7 @@ router.get('/scoreboard/:resumeId/review-overrides', requireRoles('admin'), resu
 router.patch('/scoreboard/:resumeId/review-overrides/:reviewId', requireRoles('admin'), resumeController.upsertReviewOverride);
 router.get('/scoreboard', resumeController.getScoreboard);
 router.get('/demographics', demographicsController.getDemographics);
+router.post('/scoreboard/decisions/bulk', requireRoles('admin'), resumeController.bulkUpsertRoundDecisions);
 router.post('/scoreboard/decisions', requireRoles('admin'), resumeController.upsertRoundDecision);
 router.get('/scoreboard/decisions/export', requireRoles('admin'), resumeController.exportScoreboardDecisions);
 router.get('/grader-scoreboard', requireRoles('admin'), resumeController.getGraderScoreboard);

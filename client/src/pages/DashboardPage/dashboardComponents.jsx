@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { css } from "../../theme/colors";
 import { formatRoundKind } from "../../constants/rounds";
 import { formatReviewCountPair } from "../../utils/reviewCounts";
@@ -297,195 +296,105 @@ export function ActionItemList({ items, onNavigate, limit }) {
   );
 }
 
-const ROUND_STATUS_STYLE = {
-  active: {
-    icon: "●",
-    color: css.green,
-    bg: "rgba(29,158,117,0.10)",
-    bd: "rgba(29,158,117,0.35)",
-    label: "Active",
-  },
-  closed: {
-    icon: "✓",
-    color: css.textGray,
-    bg: "rgba(107,114,128,0.08)",
-    bd: "rgba(107,114,128,0.22)",
-    label: "Closed",
-  },
-  draft: {
-    icon: "○",
-    color: css.amber,
-    bg: "rgba(239,159,39,0.08)",
-    bd: "rgba(239,159,39,0.28)",
-    label: "Draft",
-  },
-};
-
-function getRoundPhaseMessage({ rounds, activeRound, nextRound }) {
-  if (!rounds?.length) {
-    return {
-      tone: "neutral",
-      title: "No rounds configured",
-      detail: "Add rounds for this cycle in Cycle Management.",
-    };
-  }
-
-  if (activeRound) {
-    const style = ROUND_STATUS_STYLE.active;
-    return {
-      tone: "active",
-      title: `Currently in ${activeRound.name}`,
-      detail: `${formatRoundKind(activeRound.type)} is open — graders and deliberation run against this round.`,
-      accent: style.color,
-      bg: style.bg,
-      bd: style.bd,
-    };
-  }
-
-  const sorted = [...rounds].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  const lastClosed = [...sorted].reverse().find((r) => r.status === "closed");
-  const nextDraft = sorted.find((r) => r.status === "draft");
-  const allClosed = sorted.every((r) => r.status === "closed");
-  const allDraft = sorted.every((r) => r.status === "draft");
-
-  if (allDraft) {
-    return {
-      tone: "between",
-      title: "Recruiting hasn't started",
-      detail: "All rounds are still in draft. Activate Round 1 when applications are ready to review.",
-      accent: css.amber,
-      bg: "rgba(239,159,39,0.10)",
-      bd: "rgba(239,159,39,0.28)",
-    };
-  }
-
-  if (allClosed) {
-    return {
-      tone: "between",
-      title: "Cycle complete",
-      detail: "Every round is closed. Archive this cycle or start a new one when the next recruiting season begins.",
-      accent: css.textGray,
-      bg: "rgba(107,114,128,0.08)",
-      bd: "rgba(107,114,128,0.22)",
-    };
-  }
-
-  const nextName = nextRound?.name || nextDraft?.name;
-  if (lastClosed && nextName) {
-    return {
-      tone: "between",
-      title: "Between rounds",
-      detail: `${lastClosed.name} is closed. Activate ${nextName} in Cycle Management when you're ready to continue.`,
-      accent: css.amber,
-      bg: "rgba(239,159,39,0.10)",
-      bd: "rgba(239,159,39,0.28)",
-    };
-  }
-
-  return {
-    tone: "between",
-    title: "Between rounds",
-    detail: "No round is active right now. Open Cycle Management to activate the next round.",
-    accent: css.amber,
-    bg: "rgba(239,159,39,0.10)",
-    bd: "rgba(239,159,39,0.28)",
+function getRoundStageName(round) {
+  const labels = {
+    resume_screen: "Resume Screen",
+    coffee_chat: "Coffee Chat",
+    interview: "Coffee Chat",
+    final_round: "Final Round",
   };
+
+  return labels[round?.type] || round?.name || formatRoundKind(round?.type);
 }
 
-export function RoundTimeline({ rounds, activeRound, nextRound }) {
-  const sorted = [...(rounds || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  const phase = getRoundPhaseMessage({ rounds: sorted, activeRound, nextRound });
+function getCurrentStageMessage(round) {
+  const messages = {
+    resume_screen: "Applications are being reviewed for the Coffee Chat pool.",
+    coffee_chat: "Coffee Chat conversations and evaluations are underway.",
+    interview: "Coffee Chat conversations and evaluations are underway.",
+    final_round: "Finalists are being evaluated for the incoming cohort.",
+  };
 
-  if (!sorted.length) {
-    return (
-      <div style={{ padding: "14px 16px", borderRadius: 10, border: `1px solid ${phase.bd || css.borderLight}`, background: phase.bg || css.cardWhite }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: phase.accent || css.textDark }}>{phase.title}</div>
-        <div style={{ marginTop: 4, fontSize: 13, color: css.textGray }}>{phase.detail}</div>
-      </div>
-    );
-  }
+  return messages[round?.type] || "Choose an active stage in Cycle Management.";
+}
+
+export function RoundTimeline({ rounds, activeRound, onManage }) {
+  const sorted = [...(rounds || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const currentRoundName = activeRound ? getRoundStageName(activeRound) : "No active round";
 
   return (
     <div style={{
-      background: css.cardWhite,
+      marginBottom: 28,
+      background: "linear-gradient(135deg, var(--color-surface) 0%, rgba(29, 158, 117, 0.055) 100%)",
       border: `1px solid ${css.borderLight}`,
-      borderRadius: 12,
-      padding: "12px 14px",
-      boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+      borderRadius: 16,
+      padding: "28px 30px 30px",
+      boxShadow: "0 4px 18px rgba(40, 98, 65, 0.06)",
     }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 12, padding: "11px 13px", borderRadius: 9, border: `1px solid ${phase.bd || css.borderLight}`, background: phase.bg || css.cardWhite }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 24, marginBottom: 26 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: phase.accent || css.textDark }}>{phase.title}</div>
-          <div style={{ marginTop: 3, fontSize: 12, lineHeight: 1.45, color: css.textGray }}>{phase.detail}</div>
+          <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 800, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            Recruiting stages
+          </div>
+          <h2 style={{ margin: 0, fontSize: 27, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em", color: css.textDark }}>
+            Current stage: <span style={{ color: css.greenDark }}>{currentRoundName}</span>
+          </h2>
+          <p style={{ margin: "8px 0 0", fontSize: 14, lineHeight: 1.45, color: css.textGray }}>
+            {getCurrentStageMessage(activeRound)}
+          </p>
         </div>
-        {activeRound ? (
-          <span style={{ flexShrink: 0, padding: "5px 9px", borderRadius: 999, background: css.cardWhite, border: `1px solid ${phase.bd || css.borderLight}`, color: phase.accent || css.greenDark, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Active round
-          </span>
-        ) : null}
+        <button
+          type="button"
+          onClick={onManage}
+          style={{ flexShrink: 0, border: `1px solid ${css.borderLight}`, borderRadius: 9, background: css.cardWhite, color: css.greenDark, padding: "10px 13px", cursor: "pointer", fontSize: 12, fontWeight: 800, fontFamily: "'DM Sans', sans-serif" }}
+        >
+          Manage cycle →
+        </button>
       </div>
-      <div style={{ display: "flex", alignItems: "stretch", gap: 6, overflowX: "auto" }}>
-        {sorted.map((round, index) => {
-          const status = round.status || "draft";
-          const style = ROUND_STATUS_STYLE[status] || ROUND_STATUS_STYLE.draft;
+      {sorted.length ? (
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${sorted.length}, minmax(0, 1fr))`, gap: 14, overflowX: "auto" }}>
+        {sorted.map((round) => {
           const isCurrent = activeRound?.id === round.id;
+          const StageElement = isCurrent ? "button" : "div";
 
           return (
-            <Fragment key={round.id}>
-              {/* flex:1 gives every round box an equal share of the row so the
-                  three sit evenly spaced across the full width. */}
-              <div style={{
-                flex: 1,
-                minWidth: 0,
-                background: isCurrent ? style.bg : css.cardWhite,
-                border: `1px solid ${isCurrent ? style.color : style.bd}`,
-                borderRadius: 8,
-                padding: "8px 10px",
-                boxShadow: isCurrent ? `0 0 0 2px ${style.bg}` : "none",
+            <StageElement
+              key={round.id}
+              type={isCurrent ? "button" : undefined}
+              onClick={isCurrent ? onManage : undefined}
+              aria-label={isCurrent ? `${getRoundStageName(round)} is the current stage. Open cycle management.` : undefined}
+              style={{
+                minWidth: 210,
+                minHeight: 160,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
+                background: isCurrent
+                  ? "linear-gradient(145deg, var(--color-primary) 0%, #1D9E75 145%)"
+                  : "linear-gradient(145deg, var(--color-surface) 0%, rgba(29,158,117,0.07) 145%)",
+                border: `1px solid ${isCurrent ? css.greenDark : css.borderLight}`,
+                borderRadius: 25,
+                padding: "24px 24px 22px",
+                boxShadow: isCurrent ? "0 9px 24px rgba(40, 98, 65, 0.22)" : "0 1px 3px rgba(0,0,0,0.03)",
+                cursor: isCurrent ? "pointer" : "default",
+                color: isCurrent ? "#FFF" : css.textDark,
+                fontFamily: "'DM Sans', sans-serif",
               }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ color: style.color, fontSize: 11, fontWeight: 700 }}>{style.icon}</span>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: isCurrent ? 700 : 600, color: css.textDark }}>
-                      {round.name || formatRoundKind(round.type)}
-                      {isCurrent ? (
-                        <span style={{
-                          marginLeft: 8,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          color: style.color,
-                        }}
-                        >
-                          You are here
-                        </span>
-                      ) : null}
-                    </div>
-                    <div style={{ fontSize: 11, color: css.textGray, marginTop: 2 }}>
-                      {formatRoundKind(round.type)} · {style.label}
-                    </div>
-                  </div>
-                </div>
+            >
+              <div style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em" }}>
+                {getRoundStageName(round)}
               </div>
-              {index < sorted.length - 1 ? (
-                <span style={{
-                  alignSelf: "center",
-                  flexShrink: 0,
-                  color: sorted[index + 1]?.status === "draft" && status === "closed" ? css.amber : css.textGray,
-                  fontSize: 16,
-                  fontWeight: 700,
-                }}
-                >
-                  →
-                </span>
-              ) : null}
-            </Fragment>
+            </StageElement>
           );
         })}
-      </div>
+        </div>
+      ) : (
+        <div style={{ minHeight: 96, display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed ${css.borderLight}`, borderRadius: 12, color: css.textGray, fontSize: 13 }}>
+          No rounds configured
+        </div>
+      )}
     </div>
   );
 }
