@@ -8,14 +8,13 @@ export const METRIC_ICONS = {
   "business or social impact": "🤝",
 };
 export const RUBRIC_MAX_PER_CATEGORY = 4;
-export const RESUME_MAX_SCORE = 8;
 
 // Canonical maxima for the current resume rubric. These are intentionally
 // explicit so every score surface has the same denominator when API metadata
 // is unavailable.
 export const CURRENT_RESUME_MAX_SCORE_BY_YEAR = Object.freeze({
   freshman: 8,
-  sophomore: 8,
+  sophomore: 12,
   junior: 8,
   juniortransfer: 8,
   senior: 8,

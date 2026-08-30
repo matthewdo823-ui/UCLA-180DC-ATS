@@ -1,6 +1,6 @@
 import { css } from "../../theme/colors";
-import { RESUME_MAX_SCORE, RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
-import { getRubricMaxScore, scaleRubricScoreToResumeScore } from "../../utils/rubric";
+import { RUBRIC_MAX_PER_CATEGORY } from "../../constants/config";
+import { getRubricMaxScore } from "../../utils/rubric";
 import MetricRow from "./MetricRow";
 import ActionBtn from "./ActionBtn";
 
@@ -25,10 +25,8 @@ export default function ScoringPanel({
   }
 
   const maxPerCategory = rubric.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
-  const rubricMaxScore = getRubricMaxScore(rubric);
-  const rawTotal = rubric.metrics.reduce((sum, m) => sum + (Number(scores[m]) || 0), 0);
-  const maxScore = RESUME_MAX_SCORE;
-  const total = scaleRubricScoreToResumeScore(rawTotal, rubricMaxScore) ?? 0;
+  const maxScore = getRubricMaxScore(rubric);
+  const total = rubric.metrics.reduce((sum, m) => sum + (Number(scores[m]) || 0), 0);
   const scoredCount = rubric.metrics.filter((m) => {
     const v = scores[m];
     return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= maxPerCategory;

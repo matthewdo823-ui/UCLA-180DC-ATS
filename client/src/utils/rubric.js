@@ -1,10 +1,14 @@
 import {
   CURRENT_RESUME_MAX_SCORE_BY_YEAR,
-  RESUME_MAX_SCORE,
   RUBRIC_MAX_PER_CATEGORY,
 } from "../constants/config";
 
-const LEGACY_ONLY_RUBRIC_METRICS = ["experience", "leadership", "communication"];
+const LEGACY_RUBRIC_METRICS = [
+  "experience",
+  "leadership",
+  "communication",
+  "social impact",
+];
 const LEGACY_RUBRIC_MAX_SCORE = 24;
 
 export const RUBRIC_YEAR_KEYS = [
@@ -100,14 +104,7 @@ export function normalizeYearKey(yearRaw) {
 export function getCurrentResumeMaxScore(yearRaw) {
   const key = normalizeYearKey(yearRaw);
   return CURRENT_RESUME_MAX_SCORE_BY_YEAR[key]
-    ?? RESUME_MAX_SCORE;
-}
-
-export function scaleRubricScoreToResumeScore(score, rubricMaxScore) {
-  const raw = Number(score);
-  const sourceMax = Number(rubricMaxScore);
-  if (!Number.isFinite(raw) || !Number.isFinite(sourceMax) || sourceMax <= 0) return null;
-  return Number((Math.max(0, Math.min(sourceMax, raw)) / sourceMax * RESUME_MAX_SCORE).toFixed(2));
+    ?? CURRENT_RESUME_MAX_SCORE_BY_YEAR.sophomore;
 }
 
 export function getRubricForYear(rubricConfig, yearRaw) {
@@ -146,7 +143,7 @@ export function resolveReviewMaxScore(review, options = {}) {
   }
 
   const scoreMetrics = Object.keys(review?.scores || {});
-  if (scoreMetrics.some((metric) => LEGACY_ONLY_RUBRIC_METRICS.includes(metric))) {
+  if (scoreMetrics.some((metric) => LEGACY_RUBRIC_METRICS.includes(metric))) {
     return LEGACY_RUBRIC_MAX_SCORE;
   }
 
