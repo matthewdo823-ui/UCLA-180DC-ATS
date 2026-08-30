@@ -313,19 +313,13 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
 
 export function recomputeEqualizedStats(candidates) {
   const reviewed = (candidates || []).filter(c => (c.numReviews ?? c.reviews?.length ?? 0) > 0);
-  const rawValues = reviewed
-    .map(c => Number(c.aggregateScore))
-    .filter(value => Number.isFinite(value));
-  const maxValues = reviewed
-    .map(c => Number(c.compositeMax ?? c.maxScore))
+  const normalizedValues = reviewed
+    .map(c => Number(c.normalizedScore ?? c.score))
     .filter(value => Number.isFinite(value));
 
-  const avgScore = rawValues.length
-    ? Number((rawValues.reduce((sum, value) => sum + value, 0) / rawValues.length).toFixed(1))
-    : 0;
-  const avgMaxScore = maxValues.length
-    ? Number((maxValues.reduce((sum, value) => sum + value, 0) / maxValues.length).toFixed(1))
+  const avgScore = normalizedValues.length
+    ? Number((normalizedValues.reduce((sum, value) => sum + value, 0) / normalizedValues.length).toFixed(1))
     : 0;
 
-  return { avgScore, avgMaxScore };
+  return { avgScore };
 }
