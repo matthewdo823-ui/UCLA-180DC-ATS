@@ -20,6 +20,7 @@ const {
     getRubricMaxScore,
     resolveReviewNormalizedValue,
     getReviewScoring,
+    projectReviewScoresToRubric,
     resolveCandidateResumeMax,
 } = require('../utils/rubric');
 const { firstRel } = require('../utils/supabaseHelpers');
@@ -1977,6 +1978,10 @@ exports.getScoreboard = async (req, res) => {
                 rubricConfig: resumeRound.rubric_config,
                 candidateYear,
             });
+            const displayScoring = projectReviewScoresToRubric(review, {
+                rubricConfig: resumeRound.rubric_config,
+                candidateYear,
+            });
             scoring.metrics.forEach((metric) => metricSet.add(metric));
 
             const reviewScore = scoring.score;
@@ -2025,20 +2030,13 @@ exports.getScoreboard = async (req, res) => {
             candidateMap[resumeId].totalNormalized += reviewNormalized;
             candidateMap[resumeId].numReviews++;
 
-            scoring.metrics.forEach((metric) => {
-                if (!candidateMap[resumeId].metrics.includes(metric)) {
-                    candidateMap[resumeId].metrics.push(metric);
-                }
-            });
-            Object.keys(review.scores || {}).forEach((metric) => {
-                const value = review.scores?.[metric];
-                if (value === null || value === '' || !Number.isFinite(Number(value))) return;
+            displayScoring.metrics.forEach((metric) => {
                 if (!candidateMap[resumeId].metrics.includes(metric)) {
                     candidateMap[resumeId].metrics.push(metric);
                 }
             });
 
-            Object.entries(review.scores || {}).forEach(([metric, value]) => {
+            Object.entries(displayScoring.scores).forEach(([metric, value]) => {
                 if (value === null || value === '' || !Number.isFinite(Number(value))) return;
                 const numericValue = Number(value);
                 candidateMap[resumeId].categoryTotals[metric] =
@@ -2046,7 +2044,7 @@ exports.getScoreboard = async (req, res) => {
                 candidateMap[resumeId].categoryCounts[metric] =
                     (candidateMap[resumeId].categoryCounts[metric] || 0) + 1;
                 candidateMap[resumeId].categoryMaxTotals[metric] =
-                    (candidateMap[resumeId].categoryMaxTotals[metric] || 0) + scoring.maxPerCategory;
+                    (candidateMap[resumeId].categoryMaxTotals[metric] || 0) + displayScoring.maxPerCategory;
                 candidateMap[resumeId].categoryMaxCounts[metric] =
                     (candidateMap[resumeId].categoryMaxCounts[metric] || 0) + 1;
             });
@@ -2056,10 +2054,12 @@ exports.getScoreboard = async (req, res) => {
             candidateMap[resumeId].reviews.push({
                 id: review.id,
                 scores: review.scores || {},
+                displayScores: displayScoring.scores,
                 score: reviewScore,
                 normalizedScore: reviewNormalized,
                 maxScore: scoring.maxScore,
                 maxPerCategory: scoring.maxPerCategory,
+                displayMaxPerCategory: displayScoring.maxPerCategory,
                 legacy: scoring.legacy,
                 gradedBy: review.graded_by ?? null,
                 reviewerName: graderFromUsers?.name || null,
@@ -2608,6 +2608,10 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             rubricConfig: resumeRound.rubric_config,
             candidateYear: candidate.year,
         });
+        const displayScoring = projectReviewScoresToRubric(review, {
+            rubricConfig: resumeRound.rubric_config,
+            candidateYear: candidate.year,
+        });
         const reviewScore = scoring.score;
         const reviewNormalized = scoring.normalizedScore ?? resolveReviewNormalizedValue(review, {
             rubricConfig: resumeRound.rubric_config,
@@ -2615,24 +2619,19 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         });
         if (!Number.isFinite(reviewScore) || !Number.isFinite(reviewNormalized)) return null;
 
-        scoring.metrics.forEach((metric) => {
-            if (!candidateMetricOrder.includes(metric)) candidateMetricOrder.push(metric);
-        });
-        Object.keys(review.scores || {}).forEach((metric) => {
-            const value = review.scores?.[metric];
-            if (value === null || value === '' || !Number.isFinite(Number(value))) return;
+        displayScoring.metrics.forEach((metric) => {
             if (!candidateMetricOrder.includes(metric)) candidateMetricOrder.push(metric);
         });
 
         totalScore += reviewScore;
         totalNormalized += reviewNormalized;
 
-        Object.entries(review.scores || {}).forEach(([metric, value]) => {
+        Object.entries(displayScoring.scores).forEach(([metric, value]) => {
             if (value === null || value === '' || !Number.isFinite(Number(value))) return;
             const numericValue = Number(value);
             categoryTotals[metric] = (categoryTotals[metric] || 0) + numericValue;
             categoryCounts[metric] = (categoryCounts[metric] || 0) + 1;
-            categoryMaxTotals[metric] = (categoryMaxTotals[metric] || 0) + scoring.maxPerCategory;
+            categoryMaxTotals[metric] = (categoryMaxTotals[metric] || 0) + displayScoring.maxPerCategory;
             categoryMaxCounts[metric] = (categoryMaxCounts[metric] || 0) + 1;
         });
 
@@ -2641,10 +2640,12 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         return {
             id: review.id,
             scores: review.scores || {},
+            displayScores: displayScoring.scores,
             score: reviewScore,
             normalizedScore: reviewNormalized,
             maxScore: scoring.maxScore,
             maxPerCategory: scoring.maxPerCategory,
+            displayMaxPerCategory: displayScoring.maxPerCategory,
             legacy: scoring.legacy,
             decision: review.decision || 'pass',
             reviewerName: graderFromUsers?.name || null,
