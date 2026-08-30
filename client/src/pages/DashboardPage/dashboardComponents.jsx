@@ -307,17 +307,6 @@ function getRoundStageName(round) {
   return labels[round?.type] || round?.name || formatRoundKind(round?.type);
 }
 
-function getRoundStageDescription(round) {
-  const descriptions = {
-    resume_screen: "Review every application and shape the interview pool.",
-    coffee_chat: "Meet the strongest candidates and find the best fit.",
-    interview: "Meet the strongest candidates and find the best fit.",
-    final_round: "Choose the candidates who will join the incoming cohort.",
-  };
-
-  return descriptions[round?.type] || "Move candidates through the recruiting process.";
-}
-
 function getCurrentStageMessage(round) {
   const messages = {
     resume_screen: "Applications are being reviewed for the Coffee Chat pool.",
@@ -365,7 +354,7 @@ export function RoundTimeline({ rounds, activeRound, onManage }) {
       </div>
       {sorted.length ? (
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${sorted.length}, minmax(0, 1fr))`, gap: 14, overflowX: "auto" }}>
-        {sorted.map((round, index) => {
+        {sorted.map((round) => {
           const isCurrent = activeRound?.id === round.id;
           const StageElement = isCurrent ? "button" : "div";
 
@@ -377,14 +366,11 @@ export function RoundTimeline({ rounds, activeRound, onManage }) {
               aria-label={isCurrent ? `${getRoundStageName(round)} is the current stage. Open cycle management.` : undefined}
               style={{
                 minWidth: 210,
-                position: "relative",
-                minHeight: 226,
-                overflow: "hidden",
+                minHeight: 160,
                 display: "flex",
-                flexDirection: "column",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                textAlign: "left",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
                 background: isCurrent
                   ? "linear-gradient(145deg, var(--color-primary) 0%, #1D9E75 145%)"
                   : "linear-gradient(145deg, var(--color-surface) 0%, rgba(29,158,117,0.07) 145%)",
@@ -397,18 +383,8 @@ export function RoundTimeline({ rounds, activeRound, onManage }) {
                 fontFamily: "'DM Sans', sans-serif",
               }}
             >
-              <span aria-hidden="true" style={{ position: "absolute", width: 124, height: 124, right: -52, top: -55, borderRadius: "50%", background: isCurrent ? "rgba(255,255,255,0.07)" : "rgba(29,158,117,0.055)" }} />
-              <div style={{ position: "relative", zIndex: 1, maxWidth: 250 }}>
-                <div style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em" }}>
-                  {getRoundStageName(round)}
-                </div>
-                <div style={{ marginTop: 9, fontSize: 13, lineHeight: 1.45, color: isCurrent ? "rgba(255,255,255,0.78)" : css.textGray }}>
-                  {getRoundStageDescription(round)}
-                </div>
-              </div>
-              <div style={{ position: "relative", zIndex: 1, width: 72, height: 72, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderRadius: "50%", background: isCurrent ? "rgba(255,255,255,0.14)" : "rgba(29,158,117,0.09)", border: `1px solid ${isCurrent ? "rgba(255,255,255,0.24)" : "rgba(29,158,117,0.18)"}`, color: isCurrent ? "#FFF" : css.greenDark }}>
-                <span style={{ fontSize: 9, lineHeight: 1, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.78 }}>Stage</span>
-                <strong style={{ marginTop: 4, fontSize: 25, lineHeight: 1, fontWeight: 800 }}>{index + 1}</strong>
+              <div style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em" }}>
+                {getRoundStageName(round)}
               </div>
             </StageElement>
           );
