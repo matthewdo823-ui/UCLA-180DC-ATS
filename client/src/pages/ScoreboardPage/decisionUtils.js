@@ -16,10 +16,11 @@ export const DECISION_STYLE = {
     label: "Advance",
   },
   hold: {
-    bg: "rgba(239,159,39,0.14)",
-    color: "#C47D12",
-    bd: "rgba(239,159,39,0.32)",
-    row: "rgba(239,159,39,0.08)",
+    bg: "rgba(255,184,28,0.18)",
+    color: "#E5A800",
+    selectedText: "#4A3700",
+    bd: "rgba(229,168,0,0.42)",
+    row: "rgba(255,184,28,0.12)",
     label: "Hold",
   },
   reject: {
