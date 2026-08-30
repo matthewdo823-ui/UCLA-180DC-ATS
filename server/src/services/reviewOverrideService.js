@@ -99,7 +99,7 @@ function resolveReviewMaxScore(review, options = {}) {
   }
 
   const metrics = Object.keys(review?.scores || {});
-  return metrics.length > 0 ? metrics.length * 4 : 24;
+  return metrics.length > 0 ? metrics.length * 4 : null;
 }
 
 function applyReviewOverrideToReview(review, override, options = {}) {
@@ -164,7 +164,7 @@ function recomputeCandidateScoresFromReviews(candidate, metrics = [], options = 
     ...candidate,
     aggregateScore,
     normalizedScore,
-    // Cosmetic display alias — sorting/ranking should use aggregateScore.
+    // Integer display alias for the normalized percentage.
     score: normalizedScore == null ? null : Math.round(normalizedScore),
     categoryScores: buildCategoryScoresFromReviews(reviews, metricList),
   };

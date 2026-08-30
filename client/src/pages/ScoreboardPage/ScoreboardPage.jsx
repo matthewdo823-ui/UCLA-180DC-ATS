@@ -5,6 +5,7 @@ import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { qk } from "../../lib/queryKeys";
 import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
+import { candidateApplicationQueryOptions } from "../../lib/candidateApplicationQuery";
 import { css } from "../../theme/colors";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
@@ -14,7 +15,7 @@ import { UserFriendlyError, formatResponseError } from "../../utils/errors";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatScore, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
-import { formatReviewCountPair, formatReviewCounts, getFreeResponseReviewCount, getResumeReviewCount } from "../../utils/reviewCounts";
+import { formatReviewCountPairStacked, formatReviewCountsStacked, getFreeResponseReviewCount, getResumeReviewCount } from "../../utils/reviewCounts";
 import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
 import {
   buildDecisionPayload,
@@ -39,8 +40,6 @@ import {
   filterCandidates,
   formatRoundBanner,
   formatRoundStatus,
-  formatScorePointsLine,
-  getAggregateScore,
   getHeadlineScore,
   getReviewerInitials,
   getReviewerLabel,
@@ -331,7 +330,6 @@ function ScorecardModal({
   const [reviewersOpen, setReviewersOpen] = useState(false);
   const headlineScore = getHeadlineScore(candidate);
   const sourceNormalizedScore = getSourceNormalizedScore(candidate);
-  const aggregateScore = getAggregateScore(candidate);
   const reviews = candidate?.reviews ?? [];
   const frqReviews = candidate?.frqReviews ?? [];
   const latestNote = [...reviews, ...frqReviews].reverse().find(review => review.notes)?.notes;
@@ -447,7 +445,7 @@ function ScorecardModal({
                 <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
                   Unadjusted: {formatScore(sourceNormalizedScore)}%
                 </p>
-              ) : aggregateScore != null ? (
+              ) : hasNumericScore(headlineScore) ? (
                 <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
                   Average across submitted reviews
                   {candidate.frqPending ? " · FRQ pending" : ""}
@@ -487,7 +485,10 @@ function ScorecardModal({
               style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: 0 }}
             >
               <span style={{ fontSize: 11, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em" }}>
-                REVIEWS ({formatReviewCountPair(reviews.length, frqReviews.length)})
+                <span style={{ display: "block" }}>REVIEWS</span>
+                <span style={{ display: "block", marginTop: 3, fontWeight: 500, letterSpacing: 0, lineHeight: 1.45, textTransform: "none", whiteSpace: "pre-line" }}>
+                  {formatReviewCountPairStacked(reviews.length, frqReviews.length)}
+                </span>
               </span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <ReviewerStack reviews={reviews} />
@@ -499,9 +500,12 @@ function ScorecardModal({
               <div style={{ marginTop: 10 }}>
                 {reviews.map((review, index) => {
                   const reviewOverridden = review?.adminOverride?.overrideScore != null;
-                  const displayScore = equalized && hasNumericScore(review.normalizedScore)
-                    ? `${formatScore(Math.min(100, review.normalizedScore))}%`
-                    : `${formatScore(getReviewTotal(review))}/24`;
+                  const reviewMax = Number(review?.maxScore)
+                    || Math.max(Object.keys(review?.scores || {}).length * maxPerCategory, maxPerCategory);
+                  const normalizedReviewScore = hasNumericScore(review.normalizedScore)
+                    ? Number(review.normalizedScore)
+                    : Number(getReviewTotal(review)) / reviewMax * 100;
+                  const displayScore = `${formatScore(Math.min(100, normalizedReviewScore))}%`;
 
                   return (
                   <div key={review.id ?? index} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
@@ -522,9 +526,10 @@ function ScorecardModal({
                   );
                 })}
                 {frqReviews.map((review, index) => {
-                  const displayScore = equalized && hasNumericScore(review.normalizedScore)
-                    ? `${formatScore(Math.min(100, review.normalizedScore))}%`
-                    : `${formatScore(review.score ?? getReviewTotal(review))}/${FRQ_MAX_SCORE}`;
+                  const normalizedReviewScore = hasNumericScore(review.normalizedScore)
+                    ? Number(review.normalizedScore)
+                    : Number(review.score ?? getReviewTotal(review)) / FRQ_MAX_SCORE * 100;
+                  const displayScore = `${formatScore(Math.min(100, normalizedReviewScore))}%`;
 
                   return (
                     <div key={review.id ?? `frq-${index}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
@@ -728,6 +733,19 @@ export default function ScoreboardPage() {
     if (opts.silent !== true) setDecisionError("");
     return queryClient.invalidateQueries({ queryKey: scoreboardKey });
   }, [queryClient, scoreboardKey]);
+
+  const prefetchCandidateApplication = useCallback((resumeId) => {
+    queryClient.prefetchQuery(candidateApplicationQueryOptions(authedFetch, resumeId));
+  }, [authedFetch, queryClient]);
+
+  const openCandidateWorkspace = useCallback((candidate) => {
+    navigate(`/scoreboard/${candidate.id}/application`, {
+      state: {
+        candidateRank: candidate.rank,
+        candidateCount: data.stats?.applicants,
+      },
+    });
+  }, [data.stats?.applicants, navigate]);
 
   useEffect(() => {
     if (scoreboardQuery.error) {
@@ -1770,6 +1788,7 @@ export default function ScoreboardPage() {
           <div
             key={c.id}
             ref={el => { rowRefs.current[c.id] = el; }}
+            onMouseEnter={() => prefetchCandidateApplication(c.id)}
             onClick={() => {
               if (!deliberationMode) return;
               setFocusedCandidateId(prev => (String(prev) === String(c.id) ? null : c.id));
@@ -1799,8 +1818,7 @@ export default function ScoreboardPage() {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (isAdmin) navigate(`/scoreboard/${c.id}/application`, { state: { candidateRank: c.rank, candidateCount: data.stats?.applicants } });
-                    else setSelectedCandidate(c);
+                    openCandidateWorkspace(c);
                   }}
                   style={{
                     border: "none",
@@ -1836,10 +1854,8 @@ export default function ScoreboardPage() {
               <div style={{ color: scoreColor(headlineScore), fontSize: 17, fontFamily: sansFont, fontWeight: 600, lineHeight: 1.2 }}>
                 {hasNumericScore(headlineScore) ? `${formatScore(headlineScore)}%` : "—"}
               </div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, lineHeight: 1.35 }}>
-                {formatScorePointsLine(c) ?? (equalizeActive ? "Equalized" : "No score")}
-                <br />
-                {formatReviewCounts(c)}
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4, lineHeight: 1.45, whiteSpace: "pre-line" }}>
+                {formatReviewCountsStacked(c)}
               </div>
             </div>
 
@@ -1877,28 +1893,16 @@ export default function ScoreboardPage() {
               />
               <button
                 type="button"
-                title={isAdmin ? "Open candidate workspace" : "View scorecard"}
-                aria-label={`${isAdmin ? "Open candidate workspace" : "View details"} for ${c.name}`}
+                title="Open candidate workspace"
+                aria-label={`Open candidate workspace for ${c.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (isAdmin) navigate(`/scoreboard/${c.id}/application`, { state: { candidateRank: c.rank, candidateCount: data.stats?.applicants } });
-                  else setSelectedCandidate(c);
+                  openCandidateWorkspace(c);
                 }}
                 style={rowIconBtnStyle(t, true)}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
               </button>
-              {isAdmin && (
-                <button
-                  type="button"
-                  title="Open full application"
-                  aria-label={`Open full application for ${c.name}`}
-                  onClick={(e) => { e.stopPropagation(); navigate(`/scoreboard/${c.id}/application`, { state: { candidateRank: c.rank, candidateCount: data.stats?.applicants } }); }}
-                  style={rowIconBtnStyle(t, false)}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
-                </button>
-              )}
             </div>
           </div>
           );
