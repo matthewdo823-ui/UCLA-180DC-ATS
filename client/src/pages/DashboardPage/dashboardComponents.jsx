@@ -310,8 +310,8 @@ function getRoundStageName(round) {
 function getCurrentStageMessage(round) {
   const messages = {
     resume_screen: "Applications are being reviewed for the Coffee Chat pool.",
-    coffee_chat: "Candidate conversations are underway for the Final Round.",
-    interview: "Candidate conversations are underway for the Final Round.",
+    coffee_chat: "Coffee Chat conversations and evaluations are underway.",
+    interview: "Coffee Chat conversations and evaluations are underway.",
     final_round: "Finalists are being evaluated for the incoming cohort.",
   };
 
