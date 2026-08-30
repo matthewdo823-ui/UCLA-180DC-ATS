@@ -6,7 +6,7 @@ import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
-import { formatReviewCountPair } from "../../utils/reviewCounts";
+import { formatReviewCount } from "../../utils/reviewCounts";
 import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import { formatResponseError } from "../../utils/errors";
@@ -293,8 +293,20 @@ export default function AssignmentsPage() {
                               {[candidate.year, candidate.major].filter(Boolean).join(" · ") || "—"}
                             </div>
                           </div>
-                          <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                            <span style={metaPillStyle}>{formatReviewCountPair(candidate.reviewCount, candidate.frqReviewCount)}</span>
+                          <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
+                            <div
+                              style={{
+                                color: css.textGray,
+                                fontSize: 11,
+                                fontWeight: 600,
+                                lineHeight: 1.45,
+                                textAlign: "right",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              <div>{formatReviewCount(candidate.reviewCount, "resume")}</div>
+                              <div>{formatReviewCount(candidate.frqReviewCount, "free response")}</div>
+                            </div>
                             {candidate.assignedCount > 0 && (
                               <span style={{ ...metaPillStyle, ...assignedPillStyle }}>
                                 {candidate.pendingCount > 0
