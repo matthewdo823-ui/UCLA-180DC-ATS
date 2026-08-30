@@ -123,9 +123,55 @@ function FrqReviewCard({ review, index }) {
   );
 }
 
+const COFFEE_RATING_LABELS = {
+  strong_yes: "Strong yes",
+  yes: "Yes",
+  no: "No",
+  strong_no: "Strong no",
+};
+
+function CoffeeChatEvaluationCard({ evaluation, index }) {
+  const reviewerName = evaluation.reviewerName || evaluation.reviewerEmail || `Coffee Chat evaluator ${index + 1}`;
+  const ratingLabel = COFFEE_RATING_LABELS[evaluation.rating] || "Submitted";
+  const positive = Number(evaluation.weightedScore) > 0;
+  const negative = Number(evaluation.weightedScore) < 0;
+
+  return (
+    <article style={{ padding: "16px 18px", background: "#F8FAF6", borderRadius: 10, border: `1px solid ${css.borderLight}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+          <div style={{ width: 36, height: 36, flexShrink: 0, display: "grid", placeItems: "center", borderRadius: "50%", background: cardGreen, color: "#FFF", fontSize: 11, fontWeight: 700 }}>
+            {getInitials(reviewerName)}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+              <p style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>{reviewerName}</p>
+              <span style={{ padding: "3px 7px", borderRadius: 20, background: cardPale, color: cardGreen, fontSize: 9, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Coffee Chat</span>
+            </div>
+            <p style={{ margin: "3px 0 0", color: css.textGray, fontSize: 11 }}>
+              {[evaluation.reviewerEmail && evaluation.reviewerEmail !== reviewerName ? evaluation.reviewerEmail : null, formatDate(evaluation.submittedAt, { style: "datetime" })].filter(Boolean).join(" · ")}
+            </p>
+          </div>
+        </div>
+        <p style={{ margin: 0, color: positive ? cardGreen : negative ? "#E24B4A" : css.textGray, fontSize: 15, fontWeight: 700 }}>
+          {ratingLabel}
+        </p>
+      </div>
+
+      {hasText(evaluation.notes) && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${css.borderLight}` }}>
+          <p style={{ margin: "0 0 5px", color: css.textGray, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Evaluator notes</p>
+          <p style={{ margin: 0, color: css.textDark, fontSize: 13, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{evaluation.notes.trim()}</p>
+        </div>
+      )}
+    </article>
+  );
+}
+
 export default function ApplicationEvaluationsSection({ scoring }) {
   const reviews = scoring?.reviews || [];
   const frqReviews = scoring?.frqReviews || [];
+  const coffeeChatEvaluations = scoring?.coffeeChatEvaluations || [];
   const allMetrics = [...new Set([
     ...(scoring?.metrics || []),
     ...Object.entries(scoring?.categoryScores || {})
@@ -147,6 +193,7 @@ export default function ApplicationEvaluationsSection({ scoring }) {
   const previousGrades = [
     ...reviews.map((review, index) => ({ type: "resume", review, index })),
     ...frqReviews.map((review, index) => ({ type: "frq", review, index })),
+    ...coffeeChatEvaluations.map((review, index) => ({ type: "coffee", review, index })),
   ].sort((a, b) => new Date(b.review.submittedAt || 0) - new Date(a.review.submittedAt || 0));
 
   return (
@@ -163,6 +210,7 @@ export default function ApplicationEvaluationsSection({ scoring }) {
         <StatTile label="Average resume" value={hasNumericScore(averageScore) ? `${formatScore(averageScore)}%` : "—"} detail={formatReviewCount(reviews.length, "resume")} />
         <StatTile label="Average free response" value={hasNumericScore(freeResponsePercent) ? `${formatScore(freeResponsePercent)}%` : "—"} detail={formatReviewCount(frqReviews.length, "free response")} />
         <StatTile label="Reviews" value={reviews.length + frqReviews.length} detail={<span style={{ whiteSpace: "pre-line" }}>{formatReviewCountPairStacked(reviews.length, frqReviews.length)}</span>} />
+        <StatTile label="Coffee Chat points" value={`${scoring?.coffeeChatScore || 0} pts`} detail={`${coffeeChatEvaluations.length} submitted rating${coffeeChatEvaluations.length === 1 ? "" : "s"}`} />
       </div>
 
       {allMetrics.length > 0 && (
@@ -185,7 +233,7 @@ export default function ApplicationEvaluationsSection({ scoring }) {
       <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${css.borderLight}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
           <h3 style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>Previous grades</h3>
-          <span style={{ color: css.textGray, fontSize: 12, lineHeight: 1.45, textAlign: "right", whiteSpace: "pre-line" }}>{formatReviewCountPairStacked(reviews.length, frqReviews.length)}</span>
+          <span style={{ color: css.textGray, fontSize: 12, lineHeight: 1.45, textAlign: "right", whiteSpace: "pre-line" }}>{formatReviewCountPairStacked(reviews.length, frqReviews.length)}{coffeeChatEvaluations.length ? `\n${coffeeChatEvaluations.length} Coffee Chat rating${coffeeChatEvaluations.length === 1 ? "" : "s"}` : ""}</span>
         </div>
 
         {previousGrades.length > 0 ? (
@@ -193,7 +241,9 @@ export default function ApplicationEvaluationsSection({ scoring }) {
             {previousGrades.map(({ type, review, index }) => (
               type === "resume"
                 ? <ResumeReviewCard key={`resume-${review.id}`} review={review} index={index} metrics={resumeMetrics} maxPerCategory={maxPerCategory} />
-                : <FrqReviewCard key={`frq-${review.id}`} review={review} index={index} />
+                : type === "frq"
+                  ? <FrqReviewCard key={`frq-${review.id}`} review={review} index={index} />
+                  : <CoffeeChatEvaluationCard key={`coffee-${review.id}`} evaluation={review} index={index} />
             ))}
           </div>
         ) : (

@@ -159,7 +159,7 @@ export default function AdminDashboard() {
     <div style={{ ...pageStyle, padding: 0 }}>
       <Topbar phaseLabel={phaseLabel} showActivePill={Boolean(context?.activeRound)} activeLabel="Admin" />
 
-      <div style={{ padding: "24px 32px 40px", maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ padding: "24px 32px 40px", maxWidth: 1440, width: "100%", boxSizing: "border-box", margin: "0 auto" }}>
         {error ? (
           <div style={{
             background: "rgba(226,75,74,0.08)",

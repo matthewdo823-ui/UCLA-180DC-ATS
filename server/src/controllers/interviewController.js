@@ -123,7 +123,7 @@ exports.listInterviewCandidates = async (req, res) => {
 
     const { data: candidates, error: candError } = await supabase
       .from("candidates")
-      .select("id, name, email, major, year, gpa, cycle_id")
+      .select("id, name, email, major, year, gpa, headshot, cycle_id")
       .eq("cycle_id", ctx.cycle.id)
       .order("name", { ascending: true });
 
@@ -224,6 +224,7 @@ exports.listInterviewCandidates = async (req, res) => {
         major: candidate.major,
         year: candidate.year,
         gpa: candidate.gpa,
+        headshot: candidate.headshot || "",
         resumeId: resume.id,
         resumeName: resume.name,
         resumeFileUrl: resume.file_url,

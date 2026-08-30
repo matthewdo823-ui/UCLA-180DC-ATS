@@ -499,7 +499,7 @@ export default function GraderScoreboardPage() {
 
       <div style={{ padding: "0 0 48px", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
         <div style={{ border: `1px solid ${css.borderLight}`, borderRadius: 10, overflow: "hidden", background: css.cardWhite, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px", padding: "16px 20px", borderBottom: `2px solid ${css.borderLight}`, color: css.textGray, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 140px", padding: "16px 20px", borderBottom: `2px solid ${css.borderLight}`, color: css.textGray, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
           <div>#</div>
           <div>GRADER</div>
           <div>{activeMode.columnLabel}</div>
@@ -528,7 +528,7 @@ export default function GraderScoreboardPage() {
             key={`${statusFilter}-${searchQuery}-${grader.id}`}
             style={{
               display: "grid",
-              gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 220px",
+              gridTemplateColumns: "60px minmax(240px, 2fr) 1fr 140px",
               padding: "20px 20px",
               borderBottom: `1px solid ${css.borderLight}`,
               alignItems: "center",
@@ -561,16 +561,9 @@ export default function GraderScoreboardPage() {
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button
-                onClick={() => setSelectedGrader(grader)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: css.greenDark, color: "#FFF", border: "none", fontSize: 13, cursor: "pointer" }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                Details
-              </button>
-              <button
                 type="button"
                 onClick={() => setSelectedGrader(grader)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: "#FFF", color: "#333", border: `1px solid ${css.borderLight}`, fontSize: 13, cursor: "pointer" }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: css.greenDark, color: "#FFF", border: "none", fontSize: 13, cursor: "pointer" }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                 Summary

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
@@ -9,10 +10,87 @@ import { css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
+import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { getInitials } from "../../utils/format";
 import { formatReviewCount } from "../../utils/reviewCounts";
+import { ROUND_TYPES, normalizeRoundType } from "../../constants/rounds";
+
+const COFFEE_RATINGS = [
+  { id: "strong_no", label: "Strong no", color: "#E24B4A", bg: "rgba(226,75,74,0.10)" },
+  { id: "no", label: "No", color: "#C47D12", bg: "rgba(239,159,39,0.12)" },
+  { id: "yes", label: "Yes", color: "#53A47D", bg: "rgba(83,164,125,0.12)" },
+  { id: "strong_yes", label: "Strong yes", color: "#147D64", bg: "rgba(20,125,100,0.14)" },
+];
+
+function CoffeeChatCandidateCard({ candidate, busy, onSave, onOpenProfile }) {
+  const [rating, setRating] = useState(candidate.evaluation?.rating || "");
+  const [persistedRating, setPersistedRating] = useState(candidate.evaluation?.rating || "");
+  const [notes, setNotes] = useState(candidate.evaluation?.notes || "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setRating(candidate.evaluation?.rating || "");
+    setPersistedRating(candidate.evaluation?.rating || "");
+    setNotes(candidate.evaluation?.notes || "");
+    setSaved(false);
+  }, [candidate]);
+
+  async function handleSave() {
+    if (!rating && !persistedRating) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      await onSave({ candidate_id: candidate.id, rating, notes });
+      setPersistedRating(rating);
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <article style={{ background: css.cardWhite, border: `1px solid ${rating ? "rgba(29,158,117,0.28)" : css.borderLight}`, borderRadius: 12, padding: 18, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 15 }}>
+        <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={48} background={css.greenDark} />
+        <div style={{ minWidth: 0 }}>
+          <button
+            type="button"
+            onClick={onOpenProfile}
+            style={{ border: "none", background: "transparent", padding: 0, margin: 0, fontFamily: sansFont, fontSize: 16, fontWeight: 700, color: css.greenDark, cursor: "pointer", textAlign: "left" }}
+          >
+            {candidate.name}
+          </button>
+          <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>{[candidate.major, candidate.year].filter(Boolean).join(" · ")}</p>
+        </div>
+      </div>
+
+      <div role="group" aria-label={`Coffee Chat rating for ${candidate.name}`} style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 7, marginBottom: 12 }}>
+        {COFFEE_RATINGS.map((option) => {
+          const selected = rating === option.id;
+          return (
+            <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setRating(selected ? "" : option.id); setSaved(false); }} style={{ display: "flex", justifyContent: "center", border: `1px solid ${selected ? option.color : css.borderLight}`, borderRadius: 8, padding: "9px 7px", background: selected ? option.bg : css.cardWhite, color: selected ? option.color : css.textGray, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <textarea value={notes} onChange={(event) => { setNotes(event.target.value.slice(0, 1000)); setSaved(false); }} rows={3} placeholder="Coffee Chat notes…" style={{ width: "100%", boxSizing: "border-box", padding: "10px 11px", borderRadius: 8, border: `1px solid ${css.borderLight}`, resize: "vertical", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 10 }}>
+        <span style={{ fontSize: 11, color: css.textGray }}>{candidate.coffeeChatEvaluationCount || 0} rating{candidate.coffeeChatEvaluationCount === 1 ? "" : "s"} submitted</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {saved ? <span style={{ fontSize: 11, color: css.greenDark, fontWeight: 700 }}>Saved</span> : null}
+          <button type="button" onClick={handleSave} disabled={busy || saving || (!rating && !persistedRating)} style={{ border: "none", borderRadius: 8, background: css.greenDark, color: "#FFF", padding: "9px 13px", fontSize: 12, fontWeight: 700, cursor: busy || saving || (!rating && !persistedRating) ? "not-allowed" : "pointer", opacity: busy || saving || (!rating && !persistedRating) ? 0.5 : 1 }}>
+            {saving ? "Saving…" : !rating && persistedRating ? "Clear rating" : "Save rating"}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
 
 const DECISION_STYLE = {
   pending: { bg: "rgba(107,114,128,0.12)", color: "#6B7280", bd: "rgba(107,114,128,0.28)" },
@@ -164,6 +242,7 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
 
 export default function InterviewManagementPage() {
   const authedFetch = useAuthedFetch();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { phaseLabel, activeRound, isInterviewRound, loading: cycleLoading, error: cycleError } = useActiveCycle();
   const [filter, setFilter] = useState("all");
@@ -184,6 +263,7 @@ export default function InterviewManagementPage() {
 
   const data = query.data ?? { candidates: [], stats: null, context: null };
   const loading = enabled && query.isPending;
+  const isCoffeeChat = normalizeRoundType(activeRound?.type) === ROUND_TYPES.COFFEE_CHAT;
 
   const saveEvaluation = useCallback(async (payload) => {
     const res = await authedFetch(`${API}/interviews/evaluations`, {
@@ -208,16 +288,25 @@ export default function InterviewManagementPage() {
   const blocked = !cycleLoading && (!isInterviewRound || cycleError);
 
   const roundLabel = activeRound?.name || "Interviews";
+  const coffeeGroups = useMemo(() => {
+    const groups = new Map();
+    (data.candidates || []).forEach((candidate) => {
+      const number = candidate.groupNumber || 0;
+      if (!groups.has(number)) groups.set(number, []);
+      groups.get(number).push(candidate);
+    });
+    return [...groups.entries()].sort(([a], [b]) => a - b);
+  }, [data.candidates]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
       <Topbar phaseLabel={phaseLabel} activeLabel={roundLabel} rightSlot={<></>} />
 
-      <div style={{ maxWidth: 960, margin: "0 auto", width: "100%", padding: "24px 24px 40px" }}>
+      <div style={{ maxWidth: 1380, margin: "0 auto", width: "100%", boxSizing: "border-box", padding: "24px 32px 40px" }}>
         <div style={{ marginBottom: 20 }}>
           <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>{roundLabel}</h1>
           <p style={{ margin: 0, color: css.textGray, lineHeight: 1.5 }}>
-            Schedule interviews and record pass / fail / hold decisions. Candidates appear here after advancing from the previous round.
+            {isCoffeeChat ? "Rate each candidate after their Coffee Chat. Choose Strong yes, Yes, No, or Strong no; every evaluator submits independently." : "Schedule interviews and record pass / fail / hold decisions. Candidates appear here after advancing from the previous round."}
           </p>
         </div>
 
@@ -229,13 +318,15 @@ export default function InterviewManagementPage() {
           <>
             {data.stats ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 20 }}>
-                {[
+                {(isCoffeeChat ? [
+                  ["Candidates", data.stats.total], ["Your ratings", data.stats.graded], ["Strong yes", data.stats.strongYes], ["Yes", data.stats.yes], ["Remaining", data.stats.pending],
+                ] : [
                   ["Total", data.stats.total],
                   ["Pending", data.stats.pending],
                   ["Pass", data.stats.pass],
                   ["Fail", data.stats.fail],
                   ["Hold", data.stats.hold],
-                ].map(([label, value]) => (
+                ]).map(([label, value]) => (
                   <div key={label} style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: "14px 16px" }}>
                     <div style={{ fontSize: 22, fontWeight: 700, color: css.textDark }}>{value ?? 0}</div>
                     <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em", marginTop: 4 }}>{label.toUpperCase()}</div>
@@ -244,7 +335,7 @@ export default function InterviewManagementPage() {
               </div>
             ) : null}
 
-            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+            {!isCoffeeChat ? <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
               {["all", "pending", "pass", "fail", "hold"].map((id) => (
                 <button
                   key={id}
@@ -265,7 +356,7 @@ export default function InterviewManagementPage() {
                   {id}
                 </button>
               ))}
-            </div>
+            </div> : null}
 
             {query.error ? (
               <ErrorBanner
@@ -277,11 +368,25 @@ export default function InterviewManagementPage() {
 
             {loading || cycleLoading ? (
               <PageLoader />
-            ) : filtered.length === 0 ? (
+            ) : (isCoffeeChat ? data.candidates : filtered).length === 0 ? (
               <div style={{ padding: 40, textAlign: "center", color: css.textGray, lineHeight: 1.6 }}>
                 {data.deliberationStarted
                   ? "No candidates were advanced from resume screening. Mark candidates as Advanced on the Scoreboard deliberation view, then return here."
                   : "No candidates ready for interviews yet. Complete resume screening first, or use Scoreboard deliberation to advance candidates."}
+              </div>
+            ) : isCoffeeChat ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                {coffeeGroups.map(([number, candidates]) => (
+                  <section key={number} style={{ padding: 18, background: number ? "rgba(29,158,117,0.035)" : "rgba(239,159,39,0.05)", border: `1px solid ${css.borderLight}`, borderRadius: 14 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
+                      <h2 style={{ margin: 0, fontSize: 18, color: css.textDark }}>{number ? `Table ${number}` : "Unassigned candidates"}</h2>
+                      <span style={{ fontSize: 12, color: css.textGray }}>{candidates.length} candidate{candidates.length === 1 ? "" : "s"}</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
+                      {candidates.map((candidate) => <CoffeeChatCandidateCard key={candidate.id} candidate={candidate} busy={loading} onSave={saveEvaluation} onOpenProfile={() => navigate(`/scoreboard/${candidate.resumeId}/application`, { state: { resumeScreenRank: candidate.resumeScreenRank, coffeeChatScore: candidate.coffeeChatScore, coffeeChatEvaluationCount: candidate.coffeeChatEvaluationCount } })} />)}
+                    </div>
+                  </section>
+                ))}
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
