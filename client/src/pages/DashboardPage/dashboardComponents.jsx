@@ -307,6 +307,28 @@ function getRoundStageName(round) {
   return labels[round?.type] || round?.name || formatRoundKind(round?.type);
 }
 
+function getRoundStageDescription(round) {
+  const descriptions = {
+    resume_screen: "Review every application and shape the interview pool.",
+    coffee_chat: "Meet the strongest candidates and find the best fit.",
+    interview: "Meet the strongest candidates and find the best fit.",
+    final_round: "Choose the candidates who will join the incoming cohort.",
+  };
+
+  return descriptions[round?.type] || "Move candidates through the recruiting process.";
+}
+
+function getCurrentStageMessage(round) {
+  const messages = {
+    resume_screen: "Applications are being reviewed for the Coffee Chat pool.",
+    coffee_chat: "Candidate conversations are underway for the Final Round.",
+    interview: "Candidate conversations are underway for the Final Round.",
+    final_round: "Finalists are being evaluated for the incoming cohort.",
+  };
+
+  return messages[round?.type] || "Choose an active stage in Cycle Management.";
+}
+
 export function RoundTimeline({ rounds, activeRound, onManage }) {
   const sorted = [...(rounds || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const currentRoundName = activeRound ? getRoundStageName(activeRound) : "No active round";
@@ -321,10 +343,18 @@ export function RoundTimeline({ rounds, activeRound, onManage }) {
       boxShadow: "0 4px 18px rgba(40, 98, 65, 0.06)",
     }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24, marginBottom: 24 }}>
-        <h2 style={{ margin: 0, minWidth: 0, fontSize: 27, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em", color: css.textDark }}>
-          Current round: <span style={{ color: css.greenDark }}>{currentRoundName}</span>
-        </h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 24, marginBottom: 26 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 800, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            Recruiting stages
+          </div>
+          <h2 style={{ margin: 0, fontSize: 27, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em", color: css.textDark }}>
+            Current stage: <span style={{ color: css.greenDark }}>{currentRoundName}</span>
+          </h2>
+          <p style={{ margin: "8px 0 0", fontSize: 14, lineHeight: 1.45, color: css.textGray }}>
+            {getCurrentStageMessage(activeRound)}
+          </p>
+        </div>
         <button
           type="button"
           onClick={onManage}
@@ -335,7 +365,7 @@ export function RoundTimeline({ rounds, activeRound, onManage }) {
       </div>
       {sorted.length ? (
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${sorted.length}, minmax(0, 1fr))`, gap: 14, overflowX: "auto" }}>
-        {sorted.map((round) => {
+        {sorted.map((round, index) => {
           const isCurrent = activeRound?.id === round.id;
           const StageElement = isCurrent ? "button" : "div";
 
@@ -347,23 +377,38 @@ export function RoundTimeline({ rounds, activeRound, onManage }) {
               aria-label={isCurrent ? `${getRoundStageName(round)} is the current stage. Open cycle management.` : undefined}
               style={{
                 minWidth: 210,
-                minHeight: 132,
+                position: "relative",
+                minHeight: 226,
+                overflow: "hidden",
                 display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                textAlign: "center",
-                background: isCurrent ? css.greenDark : css.cardWhite,
+                flexDirection: "column",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                textAlign: "left",
+                background: isCurrent
+                  ? "linear-gradient(145deg, var(--color-primary) 0%, #1D9E75 145%)"
+                  : "linear-gradient(145deg, var(--color-surface) 0%, rgba(29,158,117,0.07) 145%)",
                 border: `1px solid ${isCurrent ? css.greenDark : css.borderLight}`,
-                borderRadius: 13,
-                padding: "19px 20px",
+                borderRadius: 25,
+                padding: "24px 24px 22px",
                 boxShadow: isCurrent ? "0 9px 24px rgba(40, 98, 65, 0.22)" : "0 1px 3px rgba(0,0,0,0.03)",
                 cursor: isCurrent ? "pointer" : "default",
                 color: isCurrent ? "#FFF" : css.textDark,
                 fontFamily: "'DM Sans', sans-serif",
               }}
             >
-              <div style={{ fontSize: 21, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.02em" }}>
-                {getRoundStageName(round)}
+              <span aria-hidden="true" style={{ position: "absolute", width: 124, height: 124, right: -52, top: -55, borderRadius: "50%", background: isCurrent ? "rgba(255,255,255,0.07)" : "rgba(29,158,117,0.055)" }} />
+              <div style={{ position: "relative", zIndex: 1, maxWidth: 250 }}>
+                <div style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em" }}>
+                  {getRoundStageName(round)}
+                </div>
+                <div style={{ marginTop: 9, fontSize: 13, lineHeight: 1.45, color: isCurrent ? "rgba(255,255,255,0.78)" : css.textGray }}>
+                  {getRoundStageDescription(round)}
+                </div>
+              </div>
+              <div style={{ position: "relative", zIndex: 1, width: 72, height: 72, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderRadius: "50%", background: isCurrent ? "rgba(255,255,255,0.14)" : "rgba(29,158,117,0.09)", border: `1px solid ${isCurrent ? "rgba(255,255,255,0.24)" : "rgba(29,158,117,0.18)"}`, color: isCurrent ? "#FFF" : css.greenDark }}>
+                <span style={{ fontSize: 9, lineHeight: 1, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.78 }}>Stage</span>
+                <strong style={{ marginTop: 4, fontSize: 25, lineHeight: 1, fontWeight: 800 }}>{index + 1}</strong>
               </div>
             </StageElement>
           );
