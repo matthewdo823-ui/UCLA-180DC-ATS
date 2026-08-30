@@ -48,7 +48,8 @@ function averageFrqScore(frqReviews = []) {
 
 /**
  * Merge resume-only aggregates with FRQ grades into composite headline scores.
- * aggregateScore = source of truth (raw pts). normalizedScore/score = cosmetic % for display.
+ * aggregateScore retains rubric arithmetic; normalizedScore/score are the
+ * cross-rubric comparison values used for display and ranking.
  */
 function applyCompositeScoringToCandidate(candidate, {
   frqReviews = [],
