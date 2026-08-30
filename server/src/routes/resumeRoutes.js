@@ -30,8 +30,8 @@ router.get('/candidate-referrals', requireRoles('admin'), resumeController.getCa
 router.get('/resume/:id/file', resumeController.getResumeFile);
 router.get('/view/pdf', resumeController.viewPdf);
 router.get('/view/image', resumeController.viewImage);
-router.get('/scoreboard/:resumeId/application/summary', resumeController.getScoreboardApplicationSummary);
-router.get('/scoreboard/:resumeId/application', resumeController.getScoreboardApplication);
+router.get('/scoreboard/:resumeId/application/summary', requireRoles('admin'), resumeController.getScoreboardApplicationSummary);
+router.get('/scoreboard/:resumeId/application', requireRoles('admin'), resumeController.getScoreboardApplication);
 router.get('/scoreboard/:resumeId/application/admin-override', requireRoles('admin'), resumeController.getAdminOverride);
 router.patch('/scoreboard/:resumeId/application/admin-override', requireRoles('admin'), resumeController.upsertAdminOverride);
 router.get('/scoreboard/:resumeId/review-overrides', requireRoles('admin'), resumeController.getReviewOverrides);
