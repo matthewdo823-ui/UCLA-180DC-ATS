@@ -31,10 +31,6 @@ exports.updateUserRole = async (req, res) => {
         return res.status(400).json({ error: 'Role must be applicant, member, or admin' });
     }
 
-    if (!['member', 'admin'].includes(role)) {
-        return res.status(400).json({ error: 'Only member or admin roles can be assigned' });
-    }
-
     try {
         const { data: targetUser, error: fetchError } = await supabase
             .from('users')
