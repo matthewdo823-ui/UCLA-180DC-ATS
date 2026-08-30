@@ -68,11 +68,11 @@ function CoffeeChatCandidateCard({ candidate, busy, onSave, onOpenProfile }) {
         </div>
       </div>
 
-      <div role="group" aria-label={`Coffee Chat rating for ${candidate.name}`} style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 7, marginBottom: 12 }}>
+      <div role="group" aria-label={`Coffee Chat rating for ${candidate.name}`} style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 7, marginBottom: 12 }}>
         {COFFEE_RATINGS.map((option) => {
           const selected = rating === option.id;
           return (
-            <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setRating(selected ? "" : option.id); setSaved(false); }} style={{ display: "flex", justifyContent: "center", border: `1px solid ${selected ? option.color : css.borderLight}`, borderRadius: 8, padding: "9px 10px", background: selected ? option.bg : css.cardWhite, color: selected ? option.color : css.textGray, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setRating(selected ? "" : option.id); setSaved(false); }} style={{ display: "flex", justifyContent: "center", border: `1px solid ${selected ? option.color : css.borderLight}`, borderRadius: 8, padding: "9px 7px", background: selected ? option.bg : css.cardWhite, color: selected ? option.color : css.textGray, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
               {option.label}
             </button>
           );
