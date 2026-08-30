@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
 import { css } from "../../theme/colors";
+import { formatReviewCountPair } from "../../utils/reviewCounts";
 import useAdminDashboard from "./useAdminDashboard";
 import {
   pageStyle,
@@ -71,10 +72,16 @@ function getDashboardFocus({ context, pipeline, actionItems, isInterview }) {
     };
   }
   if ((pipeline?.awaitingReviews || 0) > 0) {
+    const resumeLeft = pipeline.resumeReviewsRemaining || 0;
+    const frqLeft = pipeline.frqReviewsRemaining || 0;
     return {
       eyebrow: `${context.activeRound.name || "Active round"}`,
-      title: `${pipeline.awaitingReviews} application${pipeline.awaitingReviews === 1 ? "" : "s"} still need review`,
-      detail: `${pipeline.reviewed || 0} of ${pipeline.applicants || 0} complete across the team.`,
+      title: isInterview
+        ? `${pipeline.awaitingReviews} candidate${pipeline.awaitingReviews === 1 ? "" : "s"} still need evaluation`
+        : `${formatReviewCountPair(resumeLeft, frqLeft)} left`,
+      detail: isInterview
+        ? `${pipeline.reviewed || 0} of ${pipeline.applicants || 0} evaluated.`
+        : `${pipeline.resumeReviewed || 0}/${pipeline.applicants || 0} candidates have a resume review; ${pipeline.frqReviewed || 0}/${pipeline.applicants || 0} have a free response review.`,
       actionLabel: isInterview ? "Open interviews" : "Open review queue",
       path: isInterview ? "/interviews" : "/scoreboard",
     };
@@ -143,7 +150,10 @@ export default function AdminDashboard() {
   const sortedActionItems = [...actionItems].sort(
     (a, b) => (severityRank[a.severity] ?? 3) - (severityRank[b.severity] ?? 3)
   );
-  const reviewPct = pipeline?.applicants ? Math.round(((pipeline?.reviewed || 0) / pipeline.applicants) * 100) : 0;
+  const applicants = pipeline?.applicants || 0;
+  const reviewPct = applicants ? Math.round(((pipeline?.reviewed || 0) / applicants) * 100) : 0;
+  const resumeReviewPct = applicants ? Math.round(((pipeline?.resumeReviewed || 0) / applicants) * 100) : 0;
+  const frqReviewPct = applicants ? Math.round(((pipeline?.frqReviewed || 0) / applicants) * 100) : 0;
 
   return (
     <div style={{ ...pageStyle, padding: 0 }}>
@@ -169,6 +179,21 @@ export default function AdminDashboard() {
           <PageLoader minHeight="60vh" />
         ) : (
           <>
+            <Panel
+              title={context?.cycle?.name ? `${context.cycle.name} · recruiting timeline` : "Recruiting timeline"}
+              rightSlot={(
+                <button type="button" onClick={() => navigate("/cycle-management")} style={{ border: "none", padding: 0, background: "transparent", color: css.greenDark, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  Manage cycles →
+                </button>
+              )}
+            >
+              <RoundTimeline
+                rounds={context?.allRounds}
+                activeRound={context?.activeRound}
+                nextRound={context?.nextRound}
+              />
+            </Panel>
+
             <section style={{
               background: css.cardWhite,
               border: `1px solid ${css.borderLight}`,
@@ -192,8 +217,25 @@ export default function AdminDashboard() {
               </div>
               <div style={{ flexShrink: 0, minWidth: 142, textAlign: "right" }}>
                 <div style={{ fontSize: 11, color: css.textGray, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Round progress</div>
-                <div style={{ marginTop: 3, fontSize: 25, fontWeight: 700, color: css.greenDark, letterSpacing: "-0.03em" }}>{reviewPct}%</div>
-                <div style={{ marginTop: 2, marginBottom: 13, fontSize: 12, color: css.textGray }}>{pipeline?.reviewed || 0} of {pipeline?.applicants || 0} reviewed</div>
+                {isInterview ? (
+                  <>
+                    <div style={{ marginTop: 3, fontSize: 25, fontWeight: 700, color: css.greenDark, letterSpacing: "-0.03em" }}>{reviewPct}%</div>
+                    <div style={{ marginTop: 2, marginBottom: 13, fontSize: 12, color: css.textGray }}>
+                      {pipeline?.reviewed || 0} of {applicants} evaluated
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ margin: "7px 0 13px", display: "grid", gap: 5, minWidth: 190 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 14, fontSize: 12 }}>
+                      <span style={{ color: css.textGray }}>Resume</span>
+                      <strong style={{ color: css.greenDark }}>{pipeline?.resumeReviewed || 0}/{applicants} · {resumeReviewPct}%</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 14, fontSize: 12 }}>
+                      <span style={{ color: css.textGray }}>Free response</span>
+                      <strong style={{ color: "#1D9E75" }}>{pipeline?.frqReviewed || 0}/{applicants} · {frqReviewPct}%</strong>
+                    </div>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => navigate(focus.path)}
@@ -228,34 +270,33 @@ export default function AdminDashboard() {
                 ) : (
                   <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: "18px 20px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 16, paddingBottom: 14, marginBottom: 4, borderBottom: `1px solid ${css.borderLight}`, fontSize: 13 }}>
-                      <span style={{ color: css.textDark, fontWeight: 700 }}>{graderSummary.activeGraders} active <span style={{ color: css.textGray, fontWeight: 500 }}>of {graderSummary.graders} graders</span></span>
-                      <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} not started</span>
+                      <span style={{ color: css.textDark, fontWeight: 700 }}>{graderSummary.activeGraders} resume-active <span style={{ color: css.textGray, fontWeight: 500 }}>of {graderSummary.graders} graders</span></span>
+                      <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} with no resume reviews</span>
                     </div>
-                    {graderSummary.behindGraders?.length > 0 ? (
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: "10px 0 12px", color: css.textGray, fontSize: 12 }}>
+                      <span>{formatReviewCountPair(graderSummary.totalResumeGrades, graderSummary.totalFrqGrades)}</span>
+                    </div>
+                    {graderSummary.graderProgress?.length > 0 ? (
                       <>
                         <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                          Behind on goal
+                          Progress by grader
                         </div>
-                        <GraderProgressRows
-                          graders={graderSummary.behindGraders}
-                          expectedReviews={graderSummary.expectedReviews}
-                        />
+                        <div style={{ maxHeight: 430, overflowY: "auto", paddingRight: 4 }}>
+                          <GraderProgressRows
+                            graders={graderSummary.graderProgress}
+                            expectedReviews={graderSummary.expectedReviews}
+                            expectedFrqReviews={graderSummary.expectedFrqReviews}
+                          />
+                        </div>
                       </>
                     ) : (
-                      <div style={{ fontSize: 13, color: css.textGray, paddingTop: 10 }}>All active graders are on track.</div>
+                      <div style={{ fontSize: 13, color: css.textGray, paddingTop: 10 }}>No grader activity yet.</div>
                     )}
                   </div>
                 )}
               </Panel>
             </div>
 
-            <Panel title="Round timeline" style={{ marginTop: 4 }}>
-              <RoundTimeline
-                rounds={context?.allRounds}
-                activeRound={context?.activeRound}
-                nextRound={context?.nextRound}
-              />
-            </Panel>
           </>
         )}
       </div>
