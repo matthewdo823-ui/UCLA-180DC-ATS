@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { css } from "../../theme/colors";
 import { formatRoundKind } from "../../constants/rounds";
+import { formatReviewCountPair } from "../../utils/reviewCounts";
 
 export const pageStyle = {
   minHeight: "100%",
@@ -97,6 +98,12 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
   const applicants = pipeline.applicants || 0;
   const reviewed = pipeline.reviewed || 0;
   const reviewPct = applicants > 0 ? Math.round((reviewed / applicants) * 100) : 0;
+  const resumeReviewed = pipeline.resumeReviewed || 0;
+  const frqReviewed = pipeline.frqReviewed || 0;
+  const resumeLeft = pipeline.resumeReviewsRemaining || 0;
+  const frqLeft = pipeline.frqReviewsRemaining || 0;
+  const resumeReviewPct = applicants > 0 ? Math.round((resumeReviewed / applicants) * 100) : 0;
+  const frqReviewPct = applicants > 0 ? Math.round((frqReviewed / applicants) * 100) : 0;
 
   const segments = isInterview
     ? [
@@ -124,17 +131,34 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
       boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
     }}
     >
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>
-            {isInterview ? "Evaluation progress" : "Review progress"}
-          </span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>
-            {reviewed} / {applicants} ({reviewPct}%)
-          </span>
+      {isInterview ? (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Evaluation progress</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>
+              {reviewed} / {applicants} ({reviewPct}%)
+            </span>
+          </div>
+          <ProgressBar pct={reviewPct} />
         </div>
-        <ProgressBar pct={reviewPct} />
-      </div>
+      ) : (
+        <div style={{ display: "grid", gap: 14, marginBottom: 20 }}>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Resume review coverage</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>{resumeReviewed} / {applicants} ({resumeReviewPct}%) · {resumeLeft} left</span>
+            </div>
+            <ProgressBar pct={resumeReviewPct} />
+          </div>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Free response review coverage</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#1D9E75" }}>{frqReviewed} / {applicants} ({frqReviewPct}%) · {frqLeft} left</span>
+            </div>
+            <ProgressBar pct={frqReviewPct} color="#1D9E75" />
+          </div>
+        </div>
+      )}
 
       <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
         {breakdownTitle}
@@ -249,7 +273,7 @@ export function ActionItemList({ items, onNavigate, limit }) {
                 <div style={{ fontSize: 12, color: css.textGray, marginTop: 4 }}>{item.detail}</div>
               ) : null}
             </div>
-            {item.count != null ? (
+            {item.countLabel != null || item.count != null ? (
               <span style={{
                 background: style.bg,
                 color: style.color,
@@ -261,7 +285,7 @@ export function ActionItemList({ items, onNavigate, limit }) {
                 flexShrink: 0,
               }}
               >
-                {item.count}
+                {item.countLabel ?? item.count}
               </span>
             ) : (
               <span style={{ fontSize: 18, color: css.textGray, flexShrink: 0 }}>→</span>
@@ -370,11 +394,14 @@ function getRoundPhaseMessage({ rounds, activeRound, nextRound }) {
 
 export function RoundTimeline({ rounds, activeRound, nextRound }) {
   const sorted = [...(rounds || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const phase = getRoundPhaseMessage({ rounds: sorted, activeRound, nextRound });
 
   if (!sorted.length) {
-    const phase = getRoundPhaseMessage({ rounds: sorted, activeRound, nextRound });
     return (
-      <div style={{ fontSize: 13, color: css.textGray }}>{phase.detail}</div>
+      <div style={{ padding: "14px 16px", borderRadius: 10, border: `1px solid ${phase.bd || css.borderLight}`, background: phase.bg || css.cardWhite }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: phase.accent || css.textDark }}>{phase.title}</div>
+        <div style={{ marginTop: 4, fontSize: 13, color: css.textGray }}>{phase.detail}</div>
+      </div>
     );
   }
 
@@ -387,6 +414,17 @@ export function RoundTimeline({ rounds, activeRound, nextRound }) {
       boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
     }}
     >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 12, padding: "11px 13px", borderRadius: 9, border: `1px solid ${phase.bd || css.borderLight}`, background: phase.bg || css.cardWhite }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: phase.accent || css.textDark }}>{phase.title}</div>
+          <div style={{ marginTop: 3, fontSize: 12, lineHeight: 1.45, color: css.textGray }}>{phase.detail}</div>
+        </div>
+        {activeRound ? (
+          <span style={{ flexShrink: 0, padding: "5px 9px", borderRadius: 999, background: css.cardWhite, border: `1px solid ${phase.bd || css.borderLight}`, color: phase.accent || css.greenDark, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Active round
+          </span>
+        ) : null}
+      </div>
       <div style={{ display: "flex", alignItems: "stretch", gap: 6, overflowX: "auto" }}>
         {sorted.map((round, index) => {
           const status = round.status || "draft";
@@ -496,7 +534,7 @@ export function PrimaryButton({ label, onClick, disabled, icon }) {
   );
 }
 
-export function GraderProgressRows({ graders, expectedReviews }) {
+export function GraderProgressRows({ graders, expectedReviews, expectedFrqReviews = 0 }) {
   if (!graders?.length) {
     return <div style={{ fontSize: 13, color: css.textGray }}>No grader data yet.</div>;
   }
@@ -504,22 +542,43 @@ export function GraderProgressRows({ graders, expectedReviews }) {
   return (
     <div>
       {graders.map((grader, index) => {
-        const pct = expectedReviews > 0
-          ? Math.min(100, Math.round((grader.reviewCount / expectedReviews) * 100))
+        const resumeCount = grader.resumeReviewCount ?? grader.reviewCount ?? 0;
+        const frqCount = grader.frqReviewCount || 0;
+        const resumePct = expectedReviews > 0
+          ? Math.min(100, Math.round((resumeCount / expectedReviews) * 100))
           : 0;
+        const frqPct = expectedFrqReviews > 0
+          ? Math.min(100, Math.round((frqCount / expectedFrqReviews) * 100))
+          : 0;
+        const showFrqProgress = grader.role === "admin" && expectedFrqReviews > 0;
         return (
           <div key={grader.id} style={{
             padding: "11px 0",
             borderTop: index ? `1px solid ${css.borderLight}` : "none",
           }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: css.textDark }}>{grader.name}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: css.greenDark }}>
-                {grader.reviewCount} / {expectedReviews}
-              </span>
+              <span style={{ fontSize: 11, color: css.textGray }}>{formatReviewCountPair(resumeCount, frqCount)}</span>
             </div>
-            <ProgressBar pct={pct} />
+            <div style={{ display: "grid", gap: 8 }}>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
+                  <span style={{ color: css.textGray }}>Resume reviews</span>
+                  <strong style={{ color: css.greenDark }}>{resumeCount} / {expectedReviews}</strong>
+                </div>
+                <ProgressBar pct={resumePct} />
+              </div>
+              {showFrqProgress ? (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
+                    <span style={{ color: css.textGray }}>Free response reviews</span>
+                    <strong style={{ color: "#1D9E75" }}>{frqCount} / {expectedFrqReviews}</strong>
+                  </div>
+                  <ProgressBar pct={frqPct} color="#1D9E75" />
+                </div>
+              ) : null}
+            </div>
           </div>
         );
       })}

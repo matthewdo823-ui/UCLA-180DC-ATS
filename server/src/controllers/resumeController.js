@@ -2299,10 +2299,22 @@ exports.exportScoreboardDecisions = async (req, res) => {
 
         if (reviewError) return respondWithServerError(res, reviewError, "exportScoreboardDecisions reviews");
 
+        const { data: frqReviews, error: frqReviewError } = await supabase
+            .from("frq_reviews")
+            .select("resume_id")
+            .eq("cycle_id", activeCycleId)
+            .eq("round_id", resumeRound.id);
+
+        if (frqReviewError) return respondWithServerError(res, frqReviewError, "exportScoreboardDecisions FRQ reviews");
+
         const reviewsByResume = {};
         (reviews || []).forEach((review) => {
             if (!reviewsByResume[review.resume_id]) reviewsByResume[review.resume_id] = [];
             reviewsByResume[review.resume_id].push(review);
+        });
+        const frqReviewCountByResume = {};
+        (frqReviews || []).forEach((review) => {
+            frqReviewCountByResume[review.resume_id] = (frqReviewCountByResume[review.resume_id] || 0) + 1;
         });
 
         const exportRows = (resumes || []).map((resume) => {
@@ -2333,6 +2345,7 @@ exports.exportScoreboardDecisions = async (req, res) => {
                 gpa: linked.gpa,
                 score: avgRawScore,
                 numReviews: resumeReviews.length,
+                numFrqReviews: frqReviewCountByResume[resume.id] || 0,
                 decision: resolveCandidateDecision(linked.candidateId, decisionLookup),
             };
         });

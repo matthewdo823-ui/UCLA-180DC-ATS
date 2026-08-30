@@ -2,6 +2,7 @@ import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import { css } from "../../theme/colors";
 import { sansFont } from "../../theme/typography";
 import { formatScore, hasNumericScore } from "../../utils/format";
+import { formatReviewCounts } from "../../utils/reviewCounts";
 import { hasText } from "./applicationUtils";
 import { cardGreen, cardMint, cardPale, ROUND_1_LABEL, UPCOMING_EVALUATION_ROUNDS } from "./constants";
 
@@ -69,8 +70,8 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring }
                   </div>
                   <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
                     {scoring?.adminOverride?.overrideScore != null
-                      ? `Admin override · ${scoring.numReviews} ${scoring.numReviews === 1 ? "review" : "reviews"}`
-                      : `${formatScore(scoring.aggregateScore)} raw pts · ${scoring.numReviews} ${scoring.numReviews === 1 ? "review" : "reviews"}`
+                      ? `Admin override · ${formatReviewCounts(scoring)}`
+                      : `${formatScore(scoring.aggregateScore)} raw pts · ${formatReviewCounts(scoring)}`
                     }
                   </p>
                 </>

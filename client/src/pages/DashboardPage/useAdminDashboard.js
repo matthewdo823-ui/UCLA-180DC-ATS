@@ -6,6 +6,7 @@ import { isInterviewRoundType } from "../../constants/rounds";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
+import { formatReviewCountPair, getFreeResponseReviewCount, getResumeReviewCount } from "../../utils/reviewCounts";
 
 function mapScoreboardToPipeline(scoreboardData, interviewData) {
   const activeRound = scoreboardData?.context?.activeRound;
@@ -28,14 +29,25 @@ function mapScoreboardToPipeline(scoreboardData, interviewData) {
   }
 
   const stats = scoreboardData?.stats || {};
+  const candidates = scoreboardData?.candidates || [];
+  const resumeReviewed = candidates.filter((candidate) => getResumeReviewCount(candidate) > 0).length;
+  const frqReviewed = candidates.filter((candidate) => getFreeResponseReviewCount(candidate) > 0).length;
+  const fullyReviewed = candidates.filter(
+    (candidate) => getResumeReviewCount(candidate) > 0 && getFreeResponseReviewCount(candidate) > 0
+  ).length;
+  const applicants = stats.applicants || 0;
   const undecidedCount = scoreboardData?.context?.undecidedCount
     ?? ((stats.pending || 0) + (stats.hold || 0));
 
   return {
     mode: "resume",
-    applicants: stats.applicants || 0,
-    reviewed: stats.reviewed || 0,
-    awaitingReviews: Math.max(0, (stats.applicants || 0) - (stats.reviewed || 0)),
+    applicants,
+    reviewed: fullyReviewed,
+    resumeReviewed,
+    frqReviewed,
+    resumeReviewsRemaining: Math.max(0, applicants - resumeReviewed),
+    frqReviewsRemaining: Math.max(0, applicants - frqReviewed),
+    awaitingReviews: Math.max(0, applicants - fullyReviewed),
     advanced: stats.advanced || 0,
     hold: stats.hold || 0,
     rejected: stats.rejected || 0,
@@ -44,10 +56,25 @@ function mapScoreboardToPipeline(scoreboardData, interviewData) {
   };
 }
 
-function mapGraderScoreboard(graderData) {
+function mapGraderScoreboard(graderData, frqGraderData) {
   const stats = graderData?.stats || {};
-  const graders = Array.isArray(graderData?.graders) ? graderData.graders : [];
+  const frqByGraderId = new Map(
+    (frqGraderData?.graders || []).map((grader) => [String(grader.id), grader.reviewCount || 0])
+  );
+  const graders = (Array.isArray(graderData?.graders) ? graderData.graders : []).map((grader) => ({
+    ...grader,
+    resumeReviewCount: grader.reviewCount || 0,
+    frqReviewCount: frqByGraderId.get(String(grader.id)) || 0,
+  }));
   const expectedReviews = stats.expectedReviews || 30;
+  const expectedFrqReviews = frqGraderData?.stats?.expectedReviews ?? 0;
+  const graderProgress = [...graders].sort((a, b) => {
+    const resumeDelta = (b.resumeReviewCount || 0) - (a.resumeReviewCount || 0);
+    if (resumeDelta) return resumeDelta;
+    const frqDelta = (b.frqReviewCount || 0) - (a.frqReviewCount || 0);
+    if (frqDelta) return frqDelta;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
 
   const behindGraders = graders
     .filter((g) => (g.reviewCount || 0) > 0 && (g.reviewCount || 0) < expectedReviews)
@@ -63,8 +90,12 @@ function mapGraderScoreboard(graderData) {
     activeGraders: stats.activeGraders ?? graders.filter((g) => (g.reviewCount || 0) > 0).length,
     notStarted: graders.filter((g) => (g.reviewCount || 0) === 0).length,
     totalReviews: stats.totalReviews ?? graders.reduce((sum, g) => sum + (g.reviewCount || 0), 0),
+    totalResumeGrades: stats.totalReviews ?? graders.reduce((sum, g) => sum + (g.resumeReviewCount || 0), 0),
+    totalFrqGrades: frqGraderData?.stats?.totalReviews ?? graders.reduce((sum, g) => sum + (g.frqReviewCount || 0), 0),
     avgReviews: stats.avgReviews ?? 0,
     expectedReviews,
+    expectedFrqReviews,
+    graderProgress,
     behindGraders,
     behindCount,
     completeCount: graders.filter((g) => (g.reviewCount || 0) >= expectedReviews).length,
@@ -74,7 +105,7 @@ function mapGraderScoreboard(graderData) {
 export default function useAdminDashboard(enabled = true) {
   const authedFetch = useAuthedFetch();
 
-  // Four independent cache entries rather than one composite blob. Each is keyed
+  // Independent cache entries rather than one composite blob. Each is keyed
   // and revalidated on its own, and two of them (/scoreboard, /grader-scoreboard)
   // are the same entries the scoreboard and grader pages read — so navigating
   // between those pages and the dashboard serves from cache instead of refetching.
@@ -103,6 +134,16 @@ export default function useAdminDashboard(enabled = true) {
     staleTime: STALE.dashboard,
   });
 
+  const frqGraderQuery = useQuery({
+    queryKey: qk.frqGraderScoreboard(),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/frq-grader-scoreboard`);
+      return readJsonOrThrow(res, "loading free-response grader coverage", "Check GET /frq-grader-scoreboard in server/src/routes/resumeRoutes.js");
+    },
+    enabled,
+    staleTime: STALE.dashboard,
+  });
+
   const isInterview = isInterviewRoundType(
     scoreboardQuery.data?.context?.activeRound?.type
   );
@@ -121,7 +162,7 @@ export default function useAdminDashboard(enabled = true) {
   });
 
   // The scoreboard is the only hard dependency — the dashboard cannot render
-  // without it. The other three degrade to defaults exactly as before.
+  // without it. The remaining queries degrade to defaults.
   const error = scoreboardQuery.error
     ? scoreboardQuery.error.message || "Could not load admin dashboard"
     : "";
@@ -131,11 +172,13 @@ export default function useAdminDashboard(enabled = true) {
     (scoreboardQuery.isPending ||
       adminQuery.isPending ||
       graderQuery.isPending ||
+      frqGraderQuery.isPending ||
       (isInterview && interviewQuery.isPending));
 
   const scoreboardData = scoreboardQuery.data;
   const rawAdminData = adminQuery.data;
   const graderData = graderQuery.data ?? null;
+  const frqGraderData = frqGraderQuery.data ?? null;
   const interviewData = interviewQuery.data ?? null;
 
   const data = useMemo(() => {
@@ -145,11 +188,17 @@ export default function useAdminDashboard(enabled = true) {
     const adminData = rawAdminData ?? {};
 
     const pipeline = mapScoreboardToPipeline(scoreboardData, interviewData);
-    const graderSummary = graderData ? mapGraderScoreboard(graderData) : null;
+    const graderSummary = graderData ? mapGraderScoreboard(graderData, frqGraderData) : null;
 
     const actionItems = (adminData.actionItems || []).map((item) => {
       if (item.id === "awaiting-reviews" && pipeline.awaitingReviews != null) {
-        return { ...item, count: pipeline.awaitingReviews };
+        if (pipeline.mode === "interview") return { ...item, count: pipeline.awaitingReviews };
+        return {
+          ...item,
+          label: "Grading still left in this round",
+          detail: `${formatReviewCountPair(pipeline.resumeReviewsRemaining, pipeline.frqReviewsRemaining)} still needed.`,
+          countLabel: formatReviewCountPair(pipeline.resumeReviewsRemaining, pipeline.frqReviewsRemaining),
+        };
       }
       if (item.id === "undecided" && pipeline.undecidedCount != null) {
         return { ...item, count: pipeline.undecidedCount };
@@ -179,16 +228,21 @@ export default function useAdminDashboard(enabled = true) {
       },
       pipeline,
       graderSummary,
-      graderLoadError: graderData ? null : "Could not load grader coverage",
+      graderLoadError: !graderData
+        ? "Could not load resume-grader coverage"
+        : !frqGraderData
+          ? "Could not load free-response grader coverage"
+          : null,
     };
-  }, [rawAdminData, error, graderData, interviewData, isInterview, scoreboardData]);
+  }, [rawAdminData, error, frqGraderData, graderData, interviewData, isInterview, scoreboardData]);
 
   const reload = useCallback(() => {
     scoreboardQuery.refetch();
     adminQuery.refetch();
     graderQuery.refetch();
+    frqGraderQuery.refetch();
     if (isInterview) interviewQuery.refetch();
-  }, [adminQuery, graderQuery, interviewQuery, isInterview, scoreboardQuery]);
+  }, [adminQuery, frqGraderQuery, graderQuery, interviewQuery, isInterview, scoreboardQuery]);
 
   return { data, loading, error, reload };
 }

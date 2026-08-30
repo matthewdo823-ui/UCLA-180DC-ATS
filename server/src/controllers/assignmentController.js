@@ -17,7 +17,7 @@ function reviewKey(graderId, resumeId) {
 }
 
 async function loadAssignmentBoardData(cycleId) {
-    const [resumeRes, userRes, reviewRes, assignments] = await Promise.all([
+    const [resumeRes, userRes, reviewRes, frqReviewRes, assignments] = await Promise.all([
         supabase
             .from('resumes')
             .select(`
@@ -40,17 +40,23 @@ async function loadAssignmentBoardData(cycleId) {
             .select('resume_id, graded_by')
             .eq('cycle_id', cycleId)
             .not('graded_by', 'is', null),
+        supabase
+            .from('frq_reviews')
+            .select('resume_id')
+            .eq('cycle_id', cycleId),
         fetchAssignmentsForCycle(cycleId),
     ]);
 
     if (resumeRes.error) throw resumeRes.error;
     if (userRes.error) throw userRes.error;
     if (reviewRes.error) throw reviewRes.error;
+    if (frqReviewRes.error) throw frqReviewRes.error;
 
     return {
         resumes: resumeRes.data || [],
         users: userRes.data || [],
         reviews: reviewRes.data || [],
+        frqReviews: frqReviewRes.data || [],
         assignments,
     };
 }
@@ -64,7 +70,7 @@ exports.getAssignmentBoard = async (req, res) => {
         }
 
         const round = await getResumeScreenRoundForCycle(cycle.id);
-        const { resumes, users, reviews, assignments } = await loadAssignmentBoardData(cycle.id);
+        const { resumes, users, reviews, frqReviews, assignments } = await loadAssignmentBoardData(cycle.id);
 
         const completedPairs = new Set();
         const reviewsByResume = {};
@@ -72,6 +78,11 @@ exports.getAssignmentBoard = async (req, res) => {
             if (!row.resume_id || !row.graded_by) return;
             completedPairs.add(reviewKey(row.graded_by, row.resume_id));
             reviewsByResume[row.resume_id] = (reviewsByResume[row.resume_id] || 0) + 1;
+        });
+        const frqReviewsByResume = {};
+        (frqReviews || []).forEach((row) => {
+            if (!row.resume_id) return;
+            frqReviewsByResume[row.resume_id] = (frqReviewsByResume[row.resume_id] || 0) + 1;
         });
 
         const graderLookup = {};
@@ -128,6 +139,7 @@ exports.getAssignmentBoard = async (req, res) => {
                 major: candidate?.major || null,
                 gpa: candidate?.gpa || null,
                 reviewCount: reviewsByResume[row.id] ?? row.review_count ?? 0,
+                frqReviewCount: frqReviewsByResume[row.id] || 0,
                 assignments: assigned,
                 assignedCount: assigned.length,
                 pendingCount: assigned.filter((item) => !item.completed).length,

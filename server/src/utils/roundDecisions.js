@@ -89,7 +89,7 @@ function buildDecisionsCsv(rows, { decisionFilter = "all" } = {}) {
     return normalizeRoundDecision(row.decision?.status) === decisionFilter;
   });
 
-  const header = ["name", "email", "phone", "major", "year", "gpa", "score_raw_pts", "num_reviews", "decision", "notes"];
+  const header = ["name", "email", "phone", "major", "year", "gpa", "score_raw_pts", "num_resume_grades", "num_free_response_grades", "decision", "notes"];
   const lines = [header.join(",")];
 
   filtered.forEach((row) => {
@@ -102,6 +102,7 @@ function buildDecisionsCsv(rows, { decisionFilter = "all" } = {}) {
       escapeCsvField(row.gpa),
       escapeCsvField(row.score ?? ""),
       escapeCsvField(row.numReviews ?? 0),
+      escapeCsvField(row.numFrqReviews ?? 0),
       escapeCsvField(row.decision?.status || "pending"),
       escapeCsvField(row.decision?.notes || ""),
     ].join(","));
