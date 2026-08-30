@@ -51,17 +51,14 @@ export function getCandidateMetrics(candidate, fallbackMetrics = []) {
       : scoredCategoryMetrics.length
         ? scoredCategoryMetrics
         : fallbackMetrics;
-  return [...new Set([
-    ...primaryMetrics,
-    ...scoredCategoryMetrics,
-  ])];
+  return [...new Set(primaryMetrics)];
 }
 export function getCandidateMetricMax(candidate, metric, fallbackMax = 4) {
   const explicit = Number(candidate?.categoryMaxScores?.[metric]);
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
   if (metric === FRQ_METRIC) return FRQ_MAX_SCORE;
-  const review = (candidate?.reviews || []).find((item) => hasNumericScore(item?.scores?.[metric]));
-  const reviewMax = Number(review?.maxPerCategory);
+  const review = (candidate?.reviews || []).find((item) => hasNumericScore((item?.displayScores || item?.scores)?.[metric]));
+  const reviewMax = Number(review?.displayMaxPerCategory || review?.maxPerCategory);
   return Number.isFinite(reviewMax) && reviewMax > 0 ? reviewMax : fallbackMax;
 }
 
