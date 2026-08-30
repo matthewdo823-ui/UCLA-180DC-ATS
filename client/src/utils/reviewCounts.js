@@ -17,7 +17,8 @@ function normalizeCount(value) {
 
 export function formatReviewCount(count, type) {
   const normalized = normalizeCount(count);
-  return `${normalized} ${type} review${normalized === 1 ? "" : "s"}`;
+  const label = type === "free response" || type === "fr" ? "FR" : type;
+  return `${normalized} ${label} review${normalized === 1 ? "" : "s"}`;
 }
 
 export function formatReviewCountPair(resumeCount, freeResponseCount) {
@@ -25,7 +26,7 @@ export function formatReviewCountPair(resumeCount, freeResponseCount) {
 }
 
 export function formatReviewCountPairCompact(resumeCount, freeResponseCount) {
-  return `${normalizeCount(resumeCount)} resume | ${normalizeCount(freeResponseCount)} free response`;
+  return `${normalizeCount(resumeCount)} resume | ${normalizeCount(freeResponseCount)} FR`;
 }
 
 export function formatReviewCountPairStacked(resumeCount, freeResponseCount) {
