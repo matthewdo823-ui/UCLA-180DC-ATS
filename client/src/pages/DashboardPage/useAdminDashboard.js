@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
-import { isInterviewRoundType } from "../../constants/rounds";
+import { ROUND_TYPES, isInterviewRoundType, normalizeRoundType } from "../../constants/rounds";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
@@ -13,13 +13,22 @@ function mapScoreboardToPipeline(scoreboardData, interviewData) {
   const isInterview = isInterviewRoundType(activeRound?.type);
 
   if (isInterview && interviewData?.stats) {
-    const stats = interviewData.stats;
-    const reviewed = (stats.pass || 0) + (stats.fail || 0) + (stats.hold || 0);
+    const isCoffeeChat = normalizeRoundType(interviewData.context?.round?.type) === ROUND_TYPES.COFFEE_CHAT;
+    const stats = isCoffeeChat ? (interviewData.aggregateStats || interviewData.stats) : interviewData.stats;
+    const reviewed = isCoffeeChat
+      ? stats.graded || 0
+      : (stats.pass || 0) + (stats.fail || 0) + (stats.hold || 0);
     return {
       mode: "interview",
+      ratingMode: isCoffeeChat ? "coffee_chat" : "decision",
       applicants: stats.total || 0,
       reviewed,
       awaitingReviews: stats.pending || 0,
+      totalRatings: stats.totalRatings || 0,
+      strongYes: stats.strongYes || 0,
+      yes: stats.yes || 0,
+      no: stats.no || 0,
+      strongNo: stats.strongNo || 0,
       pass: stats.pass || 0,
       fail: stats.fail || 0,
       hold: stats.hold || 0,

@@ -29,6 +29,9 @@ export default function CandidateApplicationPage() {
   const cachedCandidate = cachedScoreboard?.candidates?.find((entry) => String(entry.id) === String(resumeId));
   const candidateRank = Number(location.state?.candidateRank ?? cachedCandidate?.rank) || null;
   const candidateCount = Number(location.state?.candidateCount ?? cachedScoreboard?.stats?.applicants) || null;
+  const resumeScreenRank = Number(location.state?.resumeScreenRank ?? cachedCandidate?.resumeScreenRank) || candidateRank;
+  const coffeeChatScore = Number(location.state?.coffeeChatScore ?? scoring?.coffeeChatScore) || 0;
+  const coffeeChatEvaluationCount = Number(location.state?.coffeeChatEvaluationCount ?? scoring?.coffeeChatEvaluationCount) || 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
@@ -71,8 +74,10 @@ export default function CandidateApplicationPage() {
               resume={resume}
               scoring={scoring}
               authToken={token}
-              candidateRank={candidateRank}
               candidateCount={candidateCount}
+              resumeScreenRank={resumeScreenRank}
+              coffeeChatScore={coffeeChatScore}
+              coffeeChatEvaluationCount={coffeeChatEvaluationCount}
             />
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>

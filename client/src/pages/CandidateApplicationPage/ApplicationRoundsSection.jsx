@@ -142,6 +142,41 @@ function FrqReviewRow({ review, isFirst }) {
   );
 }
 
+const COFFEE_RATING_LABELS = {
+  strong_yes: "Strong yes",
+  yes: "Yes",
+  no: "No",
+  strong_no: "Strong no",
+};
+
+function CoffeeChatEvaluationRow({ evaluation, isFirst }) {
+  const score = Number(evaluation.weightedScore);
+  const scoreColor = score > 0 ? cardGreen : score < 0 ? "#E24B4A" : css.textGray;
+
+  return (
+    <div style={{ borderTop: isFirst ? "none" : `1px solid ${css.borderLight}`, padding: "16px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: css.textDark }}>
+            {evaluation.reviewerName || evaluation.reviewerEmail || "Coffee Chat evaluator"}
+          </p>
+          <span style={{ fontSize: 12, color: css.textGray }}>
+            {formatDate(evaluation.submittedAt, { style: "short" })}
+          </span>
+        </div>
+        <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: scoreColor, whiteSpace: "nowrap" }}>
+          {COFFEE_RATING_LABELS[evaluation.rating] || "Submitted"}
+        </p>
+      </div>
+      {hasText(evaluation.notes) && (
+        <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.6, color: css.textDark, whiteSpace: "pre-wrap" }}>
+          {evaluation.notes.trim()}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function ApplicationRoundsSection({ scoring, roundDecision }) {
   const [totalExpanded, setTotalExpanded] = useState(false);
   const [expandedReviewId, setExpandedReviewId] = useState(null);
@@ -152,6 +187,7 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
   const isOverridden = scoring?.adminOverride?.overrideScore != null;
   const resumeReviews = scoring?.reviews || [];
   const frqReviews = scoring?.frqReviews || [];
+  const coffeeChatEvaluations = scoring?.coffeeChatEvaluations || [];
 
   return (
     <SectionCard title="Rounds">
@@ -229,7 +265,7 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
           )}
         </div>
 
-        {UPCOMING_EVALUATION_ROUNDS.map((round) => (
+        {UPCOMING_EVALUATION_ROUNDS.map((round, roundIndex) => (
           <div key={round.id} style={{ borderTop: `1px solid ${css.borderLight}`, paddingTop: 20 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
               <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: css.textDark }}>{round.label}</p>
@@ -245,12 +281,25 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
                   color: css.textGray,
                 }}
               >
-                Upcoming
+                {roundIndex === 0 && coffeeChatEvaluations.length ? "In progress" : "Upcoming"}
               </span>
             </div>
-            <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
-              Scoring and feedback for this round will appear here once evaluations begin.
-            </p>
+            {roundIndex === 0 && coffeeChatEvaluations.length ? (
+              <>
+                <p style={{ margin: "0 0 2px", fontSize: 13, color: css.textGray }}>
+                  {formatScore(scoring.coffeeChatScore || 0)} points from {coffeeChatEvaluations.length} {coffeeChatEvaluations.length === 1 ? "rating" : "ratings"}
+                </p>
+                <div>
+                  {coffeeChatEvaluations.map((evaluation, index) => (
+                    <CoffeeChatEvaluationRow key={evaluation.id} evaluation={evaluation} isFirst={index === 0} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
+                Scoring and feedback for this round will appear here once evaluations begin.
+              </p>
+            )}
           </div>
         ))}
       </div>

@@ -144,13 +144,19 @@ export default function GraderDashboard() {
 
         {isInterview && personal?.breakdown && !loading ? (
           <Panel title="Your evaluations">
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-              {[
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${personal.ratingMode === "coffee_chat" ? 5 : 4}, minmax(0, 1fr))`, gap: 10 }}>
+              {(personal.ratingMode === "coffee_chat" ? [
+                ["Strong yes", personal.breakdown.strongYes, "#147D64"],
+                ["Yes", personal.breakdown.yes, "#53A47D"],
+                ["No", personal.breakdown.no, css.amber],
+                ["Strong no", personal.breakdown.strongNo, css.red],
+                ["Remaining", personal.breakdown.pending, css.textGray],
+              ] : [
                 ["Pass", personal.breakdown.pass, css.green],
                 ["Fail", personal.breakdown.fail, css.red],
                 ["Hold", personal.breakdown.hold, css.amber],
                 ["Remaining", personal.breakdown.pending, css.textGray],
-              ].map(([label, val, color]) => (
+              ]).map(([label, val, color]) => (
                 <StatCard key={label} label={label} value={val ?? 0} accent={color} />
               ))}
             </div>

@@ -7,7 +7,7 @@ import { hasText } from "./applicationUtils";
 import { cardGreen, cardMint, cardPale, ROUND_1_LABEL, UPCOMING_EVALUATION_ROUNDS } from "./constants";
 import ApplicationResumeSection from "./ApplicationResumeSection";
 
-export default function ApplicationProfileSidebar({ candidate, resume, scoring, authToken, candidateRank, candidateCount }) {
+export default function ApplicationProfileSidebar({ candidate, resume, scoring, authToken, candidateCount, resumeScreenRank, coffeeChatScore, coffeeChatEvaluationCount }) {
   return (
     <aside style={{ position: "sticky", top: 16 }}>
       <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
@@ -60,7 +60,7 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring, 
                   <div style={{ display: "flex", alignItems: "stretch", gap: 13 }}>
                     <div style={{ minWidth: 48, paddingRight: 13, borderRight: `1px solid ${css.borderLight}` }}>
                       <p style={{ margin: 0, fontSize: 25, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>
-                        {candidateRank ? `#${candidateRank}` : "—"}
+                        {resumeScreenRank ? `#${resumeScreenRank}` : "—"}
                       </p>
                       <p style={{ margin: "5px 0 0", fontSize: 10, color: css.textGray }}>
                         Rank{candidateCount ? ` of ${candidateCount}` : ""}
@@ -81,7 +81,20 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring, 
                 <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>No score yet</p>
               )}
             </div>
-            {UPCOMING_EVALUATION_ROUNDS.map(round => (
+            <div>
+              <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
+                Coffee Chats
+              </p>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+                <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: coffeeChatScore > 0 ? cardGreen : coffeeChatScore < 0 ? "#E24B4A" : css.textGray }}>
+                  {coffeeChatScore} pts
+                </p>
+                <p style={{ margin: 0, fontSize: 11, color: css.textGray }}>
+                  {coffeeChatEvaluationCount} rating{coffeeChatEvaluationCount === 1 ? "" : "s"}
+                </p>
+              </div>
+            </div>
+            {UPCOMING_EVALUATION_ROUNDS.filter((round) => round.id !== "round-2").map(round => (
               <div key={round.id}>
                 <p style={{ margin: "0 0 2px", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
                   {round.label}
