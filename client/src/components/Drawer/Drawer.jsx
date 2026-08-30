@@ -1,6 +1,5 @@
 import { css } from "../../theme/colors";
 import { YEAR_CFG, DEC_STYLE } from "../../constants/config";
-import { resolveReviewMaxScore } from "../../utils/rubric";
 import { formatReviewCount } from "../../utils/reviewCounts";
 
 function yearBadgeConfig(yearRaw) {
@@ -13,7 +12,7 @@ export default function Drawer({ open, onClose, reviews, loading = false, onRevi
   const passCount = reviews.filter((r) => r.decision === "pass").length;
   const flagCount = reviews.filter((r) => r.decision === "flag").length;
   const scoreColor = (review) => {
-    const max = resolveReviewMaxScore(review);
+    const max = Number(review?.maxScore) || 12;
     const total = Number(review?.total) || 0;
     return total >= max * 0.75 ? css.greenDark : total >= max * 0.5 ? css.amber : css.red;
   };
@@ -110,7 +109,7 @@ export default function Drawer({ open, onClose, reviews, loading = false, onRevi
                       ) : null}
                     </div>
                     <span style={{ fontSize: 15, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: scoreColor(r), minWidth: 36, textAlign: "right" }}>
-                      {r.total}<span style={{ fontSize: 11, color: css.textGray, fontWeight: 500 }}>/{resolveReviewMaxScore(r)}</span>
+                      {r.total}{r.maxScore ? <span style={{ fontSize: 11, color: css.textGray, fontWeight: 500 }}>/{r.maxScore}</span> : null}
                     </span>
                     <span
                       style={{

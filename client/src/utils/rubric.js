@@ -1,11 +1,4 @@
-import {
-  CURRENT_RESUME_MAX_SCORE_BY_YEAR,
-  RESUME_MAX_SCORE,
-  RUBRIC_MAX_PER_CATEGORY,
-} from "../constants/config";
-
-const LEGACY_ONLY_RUBRIC_METRICS = ["experience", "leadership", "communication"];
-const LEGACY_RUBRIC_MAX_SCORE = 24;
+import { RUBRIC_MAX_PER_CATEGORY } from "../constants/config";
 
 export const RUBRIC_YEAR_KEYS = [
   { key: "freshman", title: "Freshman" },
@@ -97,19 +90,6 @@ export function normalizeYearKey(yearRaw) {
   return String(yearRaw).toLowerCase().replace(/\s/g, "");
 }
 
-export function getCurrentResumeMaxScore(yearRaw) {
-  const key = normalizeYearKey(yearRaw);
-  return CURRENT_RESUME_MAX_SCORE_BY_YEAR[key]
-    ?? RESUME_MAX_SCORE;
-}
-
-export function scaleRubricScoreToResumeScore(score, rubricMaxScore) {
-  const raw = Number(score);
-  const sourceMax = Number(rubricMaxScore);
-  if (!Number.isFinite(raw) || !Number.isFinite(sourceMax) || sourceMax <= 0) return null;
-  return Number((Math.max(0, Math.min(sourceMax, raw)) / sourceMax * RESUME_MAX_SCORE).toFixed(2));
-}
-
 export function getRubricForYear(rubricConfig, yearRaw) {
   const config = rubricConfig || {};
   const key = normalizeYearKey(yearRaw);
@@ -130,33 +110,6 @@ export function getRubricMaxScore(rubric) {
   const maxPerCategory = rubric?.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
   const metrics = rubric?.metrics || [];
   return metrics.length * maxPerCategory;
-}
-
-export function resolveReviewMaxScore(review, options = {}) {
-  const explicitMax = Number(review?.maxScore);
-  if (Number.isFinite(explicitMax) && explicitMax > 0) return explicitMax;
-
-  const snapshot = review?.rubricSnapshot || review?.rubric_snapshot;
-  const snapshotMax = Number(snapshot?.maxScore);
-  if (Number.isFinite(snapshotMax) && snapshotMax > 0) return snapshotMax;
-
-  if (snapshot?.metrics?.length) {
-    return snapshot.metrics.length
-      * (Number(snapshot.maxPerCategory) || RUBRIC_MAX_PER_CATEGORY);
-  }
-
-  const scoreMetrics = Object.keys(review?.scores || {});
-  if (scoreMetrics.some((metric) => LEGACY_ONLY_RUBRIC_METRICS.includes(metric))) {
-    return LEGACY_RUBRIC_MAX_SCORE;
-  }
-
-  const fallbackMetrics = options.metrics || scoreMetrics;
-  if (fallbackMetrics.length) {
-    return fallbackMetrics.length
-      * (Number(options.maxPerCategory) || RUBRIC_MAX_PER_CATEGORY);
-  }
-
-  return getCurrentResumeMaxScore(review?.year ?? options.year);
 }
 
 export function rubricFromSnapshot(snapshot) {
