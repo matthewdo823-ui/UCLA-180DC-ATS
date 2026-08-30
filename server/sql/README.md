@@ -36,3 +36,19 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 - **`backfill_resume_candidate_ids.sql` (#19):** Run only when you have `resumes` rows with `candidate_id IS NULL` that should be linked to existing candidates.
 - **`allow_frq_score_zero.sql` (#20):** Run on existing databases that already applied `add_frq_reviews.sql`. Needed so FRQ grades of 0 are not rejected by the table check or `save_frq_review()` RPC.
 - **`add_candidate_referral_resolution.sql` (#21):** Run on existing databases that already applied `add_candidate_referrals.sql` before referral resolution was added.
+
+## Current project migration checklist
+
+- **Required on the configured existing Supabase project:** run
+  `add_candidate_referral_resolution.sql` (#21). The current project has the
+  referrals table but does not yet have its `status` and `resolved_at` columns.
+- **No database migration is required for profile category labels.** Older
+  snapshotless reviews retain their original 24-point scores (`experience`,
+  `leadership`, `communication`, and `social impact`). The API projects those
+  values onto the candidate's current year rubric only when building profile
+  category summaries; original review rows and ranking totals remain unchanged.
+- **Optional future data backfill:** permanently rewriting those legacy review
+  rows should happen only after the team decides how the retired
+  `communication` category contributes to the modern rubric. That backfill
+  could change historical totals and rankings, so it is intentionally not part
+  of the current migration set.
