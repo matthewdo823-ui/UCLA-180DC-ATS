@@ -41,3 +41,17 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 - **`backfill_resume_candidate_ids.sql` (#23):** Run only when you have `resumes` rows with `candidate_id IS NULL` that should be linked to existing candidates.
 - **`allow_frq_score_zero.sql` (#24):** Run on existing databases that already applied `add_frq_reviews.sql`. It updates both the table constraint and `save_frq_review()` RPC so a score of 0 is accepted.
 - **`add_candidate_referral_resolution.sql` (#25):** Run on existing databases that already applied `add_candidate_referrals.sql` before referral resolution was added.
+
+## Current project migration checklist
+
+- **Required on the configured existing Supabase project:** run
+  `add_candidate_referral_resolution.sql` (#25). The current project has the
+  referrals table but does not yet have its `status` and `resolved_at` columns.
+- **No database migration is required for profile category labels.** Older
+  snapshotless reviews retain their original scores and labels. The API projects
+  those labels only when building profile category summaries; original review
+  rows and ranking totals remain unchanged.
+- **Optional future data backfill:** permanently rewriting legacy review rows
+  should happen only after the team decides how retired categories contribute
+  to historical totals. That backfill could change rankings and is intentionally
+  not included here.
