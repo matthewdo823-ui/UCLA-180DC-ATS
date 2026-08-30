@@ -837,10 +837,21 @@ export default function ScoreboardPage() {
   const scoreCutoffs = useMemo(() => computeScoreCutoffs(candidates), [candidates]);
 
   const filteredCandidates = useMemo(() => {
-    const effectiveFilters = deliberationMode ? filters : { ...filters, decision: "all" };
+    const effectiveFilters = {
+      ...filters,
+      ...(!deliberationMode ? { decision: "all" } : {}),
+      ...(isCoffeeChatRanking ? { reviews: "all" } : {}),
+    };
     const filtered = filterCandidates(candidates, effectiveFilters, searchQuery, scoreCutoffs);
     return [...filtered].sort((a, b) => compareCandidates(a, b, sortBy));
-  }, [candidates, filters, searchQuery, sortBy, deliberationMode, scoreCutoffs]);
+  }, [candidates, filters, searchQuery, sortBy, deliberationMode, isCoffeeChatRanking, scoreCutoffs]);
+
+  useEffect(() => {
+    if (!isCoffeeChatRanking) return;
+    setFilters(current => (
+      current.reviews === "all" ? current : { ...current, reviews: "all" }
+    ));
+  }, [isCoffeeChatRanking]);
 
   const saveDecision = useCallback(async (candidate, decision) => {
     if (!canEditDeliberations || !deliberationMode) return;
@@ -1106,14 +1117,20 @@ export default function ScoreboardPage() {
     }
   }, [deliberationMode, filteredCandidates, focusedCandidateId]);
 
-  const activeFilterCount = countActiveFilters(
-    deliberationMode ? filters : { ...filters, decision: "all" }
-  );
+  const effectiveSummaryFilters = {
+    ...filters,
+    ...(!deliberationMode ? { decision: "all" } : {}),
+    ...(isCoffeeChatRanking ? { reviews: "all" } : {}),
+  };
+  const activeFilterCount = countActiveFilters(effectiveSummaryFilters);
   const hasActiveSearch = searchQuery.trim().length > 0;
   const hasActiveNarrowing = activeFilterCount > 0 || hasActiveSearch;
   const activeFilterPills = useMemo(
-    () => buildActiveFilterPills(filters, deliberationMode),
-    [filters, deliberationMode]
+    () => buildActiveFilterPills(
+      { ...filters, ...(isCoffeeChatRanking ? { reviews: "all" } : {}) },
+      deliberationMode
+    ),
+    [filters, deliberationMode, isCoffeeChatRanking]
   );
   const summaryCandidates = hasActiveNarrowing ? filteredCandidates : candidates;
   const scopedDecisionStats = useMemo(
@@ -1140,6 +1157,7 @@ export default function ScoreboardPage() {
     };
   }, [displayStats, hasActiveNarrowing, scopedDecisionStats, summaryCandidates]);
   const t = SCOREBOARD_THEME;
+  const showingLiveDeliberation = deliberationMode && !viewingHistorical && !cycleId;
   const gridColumns = deliberationMode
     ? `16px 36px minmax(180px, 2.2fr) ${isCoffeeChatRanking ? "165px" : "100px"} minmax(196px, 0.9fr) minmax(108px, auto)`
     : `48px minmax(220px, 2.2fr) ${isCoffeeChatRanking ? "165px" : "108px"} minmax(100px, auto)`;
@@ -1432,60 +1450,27 @@ export default function ScoreboardPage() {
                     : `Apply cutoffs · ${automaticDecisionPlan.advanceCount} pass / ${automaticDecisionPlan.rejectCount} reject`}
                 </button>
               ) : null}
-              <button
-                type="button"
-                onClick={() => setEqualizeActive(on => !on)}
-                title="Adjust for consistently strict or lenient graders using per-category z-scores"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  cursor: "pointer",
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  background: equalizeActive ? t.accent : t.btnGhostBg,
-                  color: equalizeActive ? "#FFFFFF" : t.btnGhostText,
-                  border: `1px solid ${equalizeActive ? t.accent : t.border}`,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                {equalizeActive ? "Unadjusted scores" : "Bias adjust"}
-              </button>
-              {isAdmin && deliberationMode && !viewingHistorical && canDeliberate && activeRound?.id ? (
+              {!isCoffeeChatRanking && (!deliberationMode || !isAdmin) ? (
                 <button
                   type="button"
-                  onClick={handleAdvanceRound}
-                  disabled={advanceRoundBusy}
-                  title={
-                    canCloseRound
-                      ? nextRound
-                        ? `Confirm all decisions, close ${activeRound.name}, and open ${nextRound.name}`
-                        : `Confirm all decisions and close ${activeRound.name}`
-                      : `Resolve all candidates first — ${undecidedCount || "some"} still need Advance or Reject`
-                  }
+                  onClick={() => setEqualizeActive(on => !on)}
+                  title="Adjust for consistently strict or lenient graders using per-category z-scores"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: 7,
-                    cursor: advanceRoundBusy ? "wait" : "pointer",
+                    gap: 8,
+                    cursor: "pointer",
                     padding: "8px 14px",
                     borderRadius: 8,
-                    background: canCloseRound ? t.accent : t.btnGhostBg,
-                    color: canCloseRound ? "#FFFFFF" : t.textMuted,
-                    border: `1px solid ${canCloseRound ? t.accent : t.border}`,
+                    background: equalizeActive ? t.accent : t.btnGhostBg,
+                    color: equalizeActive ? "#FFFFFF" : t.btnGhostText,
+                    border: `1px solid ${equalizeActive ? t.accent : t.border}`,
                     fontSize: 12,
-                    fontWeight: 700,
-                    opacity: advanceRoundBusy ? 0.6 : 1,
+                    fontWeight: 600,
                     fontFamily: "'DM Sans', sans-serif",
                   }}
                 >
-                  {advanceRoundBusy
-                    ? "Confirming…"
-                    : canCloseRound
-                      ? "Confirm decisions"
-                      : `Confirm decisions · ${undecidedCount} left`}
+                  {equalizeActive ? "Unadjusted scores" : "Bias adjust"}
                 </button>
               ) : null}
             </>
@@ -1532,6 +1517,16 @@ export default function ScoreboardPage() {
                     animation: "scoreboardPanelIn 0.18s ease-out",
                   }}
                 >
+                  {!isCoffeeChatRanking ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setEqualizeActive(on => !on); setAdminMenuOpen(false); }}
+                      style={adminMenuItemStyle(t)}
+                    >
+                      {equalizeActive ? "Show unadjusted scores" : "Use bias-adjusted scores"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     role="menuitem"
@@ -1563,6 +1558,42 @@ export default function ScoreboardPage() {
             </div>
           ) : null}
           {(cycleId || viewingHistorical || isAdmin) ? (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {isAdmin && deliberationMode && !viewingHistorical && canDeliberate && activeRound?.id ? (
+              <button
+              type="button"
+              onClick={handleAdvanceRound}
+              disabled={advanceRoundBusy}
+              title={
+                canCloseRound
+                  ? nextRound
+                    ? `Confirm all decisions, close ${activeRound.name}, and open ${nextRound.name}`
+                    : `Confirm all decisions and close ${activeRound.name}`
+                  : `Resolve all candidates first — ${undecidedCount || "some"} still need Advance or Reject`
+              }
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                cursor: advanceRoundBusy ? "wait" : "pointer",
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: canCloseRound ? t.accent : t.btnGhostBg,
+                color: canCloseRound ? "#FFFFFF" : t.textMuted,
+                border: `1px solid ${canCloseRound ? t.accent : t.border}`,
+                fontSize: 12,
+                fontWeight: 700,
+                opacity: advanceRoundBusy ? 0.6 : 1,
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              {advanceRoundBusy
+                ? "Confirming…"
+                : canCloseRound
+                  ? "Confirm decisions"
+                  : `Confirm decisions · ${undecidedCount} left`}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={cycleId ? () => navigate("/cycle-management?view=past") : viewingHistorical ? handleReturnToCurrentRound : toggleDeliberationMode}
@@ -1573,16 +1604,17 @@ export default function ScoreboardPage() {
                 cursor: "pointer",
                 padding: "8px 14px",
                 borderRadius: 8,
-                background: deliberationMode ? t.accent : t.btnGhostBg,
-                color: deliberationMode ? "#FFFFFF" : t.btnGhostText,
-                border: `1px solid ${deliberationMode ? t.accent : t.border}`,
+                background: showingLiveDeliberation ? "rgba(226,75,74,0.08)" : deliberationMode ? t.accent : t.btnGhostBg,
+                color: showingLiveDeliberation ? css.red : deliberationMode ? "#FFFFFF" : t.btnGhostText,
+                border: `1px solid ${showingLiveDeliberation ? css.red : deliberationMode ? t.accent : t.border}`,
                 fontSize: 12,
-                fontWeight: 600,
+                fontWeight: showingLiveDeliberation ? 700 : 600,
                 fontFamily: "'DM Sans', sans-serif",
               }}
             >
               {cycleId ? "Back to cycles" : viewingHistorical ? "Back to current" : deliberationMode ? "Exit" : "Deliberation"}
             </button>
+            </div>
           ) : null}
           </div>
         </div>
@@ -1709,15 +1741,17 @@ export default function ScoreboardPage() {
             {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </FilterField>
-        <FilterField label="Resume reviews" theme={t} fillRow={deliberationMode}>
-          <select value={filters.reviews} onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))} style={filterSelectStyle}>
-            <option value="all">Any count</option>
-            <option value="0">None yet (0)</option>
-            <option value="1">Exactly 1</option>
-            <option value="1+">At least 1 resume review</option>
-            <option value="2+">2 or more</option>
-          </select>
-        </FilterField>
+        {!isCoffeeChatRanking ? (
+          <FilterField label="Resume reviews" theme={t} fillRow={deliberationMode}>
+            <select value={filters.reviews} onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))} style={filterSelectStyle}>
+              <option value="all">Any count</option>
+              <option value="0">None yet (0)</option>
+              <option value="1">Exactly 1</option>
+              <option value="1+">At least 1 resume review</option>
+              <option value="2+">2 or more</option>
+            </select>
+          </FilterField>
+        ) : null}
         <FilterField label="Score" theme={t} fillRow={deliberationMode}>
           <select value={filters.scoreBand} onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))} style={filterSelectStyle}>
             <option value="all">All scores</option>
@@ -1826,7 +1860,7 @@ export default function ScoreboardPage() {
         </div>
       ) : null}
 
-      {equalizeActive ? (
+      {equalizeActive && !deliberationMode && !isCoffeeChatRanking ? (
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${deliberationMode ? t.infoBorder : css.greenDark}`, background: deliberationMode ? t.infoBg : css.greenDark, fontSize: 13, color: deliberationMode ? t.text : "#FFFFFF", lineHeight: 1.45 }}>
           <strong style={{ color: deliberationMode ? t.accent : "#FFFFFF" }}>Bias-adjusted scores</strong> — each grader is normalized against their own scoring pattern, then mapped to the team distribution per rubric category. Toggle “Unadjusted scores” to compare.
         </div>
