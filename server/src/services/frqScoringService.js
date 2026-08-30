@@ -1,12 +1,14 @@
 const { FRQ_METRIC, FRQ_MAX_SCORE } = require("../constants/frq");
 const {
-  RESUME_MAX_SCORE,
+  getRubricForYear,
+  getRubricMaxScore,
   computeNormalizedFromAggregate,
   resolveCandidateResumeMax,
 } = require("../utils/rubric");
 
-function getResumeMaxForYear() {
-  return RESUME_MAX_SCORE;
+function getResumeMaxForYear(rubricConfig, year) {
+  const rubricForYear = getRubricForYear(rubricConfig, year);
+  return getRubricMaxScore(rubricForYear);
 }
 
 function mapFrqReviewRow(row, graderLookup = {}) {
