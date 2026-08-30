@@ -92,6 +92,7 @@ export default function ScreenerPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [myReviews, setMyReviews] = useState([]);
   const [myFrqReviews, setMyFrqReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -463,6 +464,7 @@ export default function ScreenerPage() {
     setScores({});
     setNotes("");
     setSubmitError("");
+    setShowValidationErrors(false);
   }
 
   function handleGradingModeChange(nextMode) {
@@ -475,6 +477,7 @@ export default function ScreenerPage() {
     setEditingReviewId(null);
     setFetchError("");
     setSubmitError("");
+    setShowValidationErrors(false);
     setDrawerOpen(false);
     setPastReviewDetail(null);
   }
@@ -484,9 +487,6 @@ export default function ScreenerPage() {
 
   const topbarRightSlot = (
     <>
-      {isAdmin && isResumeRound && !screeningBlocked ? (
-        <GradingModeToggle mode={gradingMode} onChange={handleGradingModeChange} />
-      ) : null}
       <button type="button" onClick={() => setDrawerOpen(true)} style={topbarGhostButtonStyle}>
         📋 {isFrqMode ? "Past FRQ Grades" : "Past Reviews"}
         <span style={{ background: css.greenDark, color: css.cardWhite, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: "2px 7px" }}>
