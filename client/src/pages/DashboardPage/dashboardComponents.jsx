@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { css } from "../../theme/colors";
 import { formatRoundKind } from "../../constants/rounds";
 import { formatReviewCountPair } from "../../utils/reviewCounts";
@@ -392,97 +391,104 @@ function getRoundPhaseMessage({ rounds, activeRound, nextRound }) {
   };
 }
 
-export function RoundTimeline({ rounds, activeRound, nextRound }) {
+function getRoundStageName(round) {
+  const labels = {
+    resume_screen: "Resume Screen",
+    coffee_chat: "Coffee Chats",
+    interview: "Coffee Chats",
+    final_round: "Final Round",
+  };
+
+  return labels[round?.type] || round?.name || formatRoundKind(round?.type);
+}
+
+export function RoundTimeline({ rounds, activeRound, nextRound, cycleName, onManage }) {
   const sorted = [...(rounds || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const phase = getRoundPhaseMessage({ rounds: sorted, activeRound, nextRound });
 
   if (!sorted.length) {
     return (
-      <div style={{ padding: "14px 16px", borderRadius: 10, border: `1px solid ${phase.bd || css.borderLight}`, background: phase.bg || css.cardWhite }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: phase.accent || css.textDark }}>{phase.title}</div>
-        <div style={{ marginTop: 4, fontSize: 13, color: css.textGray }}>{phase.detail}</div>
+      <div style={{ marginBottom: 28, padding: "28px 30px", borderRadius: 16, border: `1px solid ${phase.bd || css.borderLight}`, background: phase.bg || css.cardWhite }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: phase.accent || css.textDark, textTransform: "uppercase", letterSpacing: "0.09em" }}>Recruiting journey</div>
+        <div style={{ marginTop: 8, fontSize: 26, fontWeight: 800, color: css.textDark }}>{phase.title}</div>
+        <div style={{ marginTop: 7, fontSize: 14, color: css.textGray }}>{phase.detail}</div>
       </div>
     );
   }
 
   return (
     <div style={{
-      background: css.cardWhite,
+      marginBottom: 28,
+      background: "linear-gradient(135deg, var(--color-surface) 0%, rgba(29, 158, 117, 0.055) 100%)",
       border: `1px solid ${css.borderLight}`,
-      borderRadius: 12,
-      padding: "12px 14px",
-      boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+      borderRadius: 16,
+      padding: "28px 30px 30px",
+      boxShadow: "0 4px 18px rgba(40, 98, 65, 0.06)",
     }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 12, padding: "11px 13px", borderRadius: 9, border: `1px solid ${phase.bd || css.borderLight}`, background: phase.bg || css.cardWhite }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 24, marginBottom: 24 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: phase.accent || css.textDark }}>{phase.title}</div>
-          <div style={{ marginTop: 3, fontSize: 12, lineHeight: 1.45, color: css.textGray }}>{phase.detail}</div>
+          <div style={{ fontSize: 11, fontWeight: 800, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.09em" }}>
+            {cycleName ? `${cycleName} · recruiting journey` : "Recruiting journey"}
+          </div>
+          <div style={{ marginTop: 8, fontSize: 28, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em", color: css.textDark }}>
+            {activeRound ? `We are currently in ${getRoundStageName(activeRound)}` : phase.title}
+          </div>
+          <div style={{ marginTop: 8, maxWidth: 720, fontSize: 14, lineHeight: 1.5, color: css.textGray }}>{phase.detail}</div>
         </div>
-        {activeRound ? (
-          <span style={{ flexShrink: 0, padding: "5px 9px", borderRadius: 999, background: css.cardWhite, border: `1px solid ${phase.bd || css.borderLight}`, color: phase.accent || css.greenDark, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Active round
-          </span>
-        ) : null}
+        <button
+          type="button"
+          onClick={onManage}
+          style={{ flexShrink: 0, border: `1px solid ${css.borderLight}`, borderRadius: 9, background: css.cardWhite, color: css.greenDark, padding: "10px 13px", cursor: "pointer", fontSize: 12, fontWeight: 800, fontFamily: "'DM Sans', sans-serif" }}
+        >
+          Manage cycle →
+        </button>
       </div>
-      <div style={{ display: "flex", alignItems: "stretch", gap: 6, overflowX: "auto" }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${sorted.length}, minmax(0, 1fr))`, gap: 14, overflowX: "auto" }}>
         {sorted.map((round, index) => {
           const status = round.status || "draft";
           const style = ROUND_STATUS_STYLE[status] || ROUND_STATUS_STYLE.draft;
           const isCurrent = activeRound?.id === round.id;
+          const StageElement = isCurrent ? "button" : "div";
 
           return (
-            <Fragment key={round.id}>
-              {/* flex:1 gives every round box an equal share of the row so the
-                  three sit evenly spaced across the full width. */}
-              <div style={{
-                flex: 1,
-                minWidth: 0,
-                background: isCurrent ? style.bg : css.cardWhite,
-                border: `1px solid ${isCurrent ? style.color : style.bd}`,
-                borderRadius: 8,
-                padding: "8px 10px",
-                boxShadow: isCurrent ? `0 0 0 2px ${style.bg}` : "none",
+            <StageElement
+              key={round.id}
+              type={isCurrent ? "button" : undefined}
+              onClick={isCurrent ? onManage : undefined}
+              aria-label={isCurrent ? `${getRoundStageName(round)} is the current stage. Open cycle management.` : undefined}
+              style={{
+                position: "relative",
+                minWidth: 210,
+                minHeight: 148,
+                overflow: "hidden",
+                textAlign: "left",
+                background: isCurrent ? css.greenDark : css.cardWhite,
+                border: `1px solid ${isCurrent ? css.greenDark : style.bd}`,
+                borderRadius: 13,
+                padding: "19px 20px",
+                boxShadow: isCurrent ? "0 9px 24px rgba(40, 98, 65, 0.22)" : "0 1px 3px rgba(0,0,0,0.03)",
+                cursor: isCurrent ? "pointer" : "default",
+                color: isCurrent ? "#FFF" : css.textDark,
+                fontFamily: "'DM Sans', sans-serif",
               }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ color: style.color, fontSize: 11, fontWeight: 700 }}>{style.icon}</span>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: isCurrent ? 700 : 600, color: css.textDark }}>
-                      {round.name || formatRoundKind(round.type)}
-                      {isCurrent ? (
-                        <span style={{
-                          marginLeft: 8,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          color: style.color,
-                        }}
-                        >
-                          You are here
-                        </span>
-                      ) : null}
-                    </div>
-                    <div style={{ fontSize: 11, color: css.textGray, marginTop: 2 }}>
-                      {formatRoundKind(round.type)} · {style.label}
-                    </div>
-                  </div>
-                </div>
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: isCurrent ? "rgba(255,255,255,0.72)" : style.color }}>
+                  Stage {index + 1}
+                </span>
+                <span style={{ fontSize: 16, fontWeight: 800, color: isCurrent ? "#FFF" : style.color }}>{style.icon}</span>
+              </div>
+              <div style={{ marginTop: 22, fontSize: 21, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.02em" }}>
+                {getRoundStageName(round)}
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: isCurrent ? "#FFF" : css.textGray }}>
+                {isCurrent ? "You are here →" : style.label}
               </div>
               {index < sorted.length - 1 ? (
-                <span style={{
-                  alignSelf: "center",
-                  flexShrink: 0,
-                  color: sorted[index + 1]?.status === "draft" && status === "closed" ? css.amber : css.textGray,
-                  fontSize: 16,
-                  fontWeight: 700,
-                }}
-                >
-                  →
-                </span>
+                <span aria-hidden="true" style={{ position: "absolute", right: 15, bottom: 13, fontSize: 22, fontWeight: 800, color: isCurrent ? "rgba(255,255,255,0.28)" : "rgba(107,114,128,0.24)" }}>→</span>
               ) : null}
-            </Fragment>
+            </StageElement>
           );
         })}
       </div>
