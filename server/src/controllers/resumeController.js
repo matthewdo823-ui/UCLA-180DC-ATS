@@ -1981,6 +1981,7 @@ exports.getScoreboard = async (req, res) => {
                 rubricConfig: resumeRound.rubric_config,
                 candidateYear,
             });
+            if (!Number.isFinite(reviewScore) || !Number.isFinite(reviewNormalized)) return;
 
             totalNormalizedSum += reviewNormalized;
             reviewCount++;
@@ -2034,6 +2035,7 @@ exports.getScoreboard = async (req, res) => {
                 score: reviewScore,
                 normalizedScore: reviewNormalized,
                 maxScore: scoring.maxScore,
+                maxPerCategory: scoring.maxPerCategory,
                 legacy: scoring.legacy,
                 gradedBy: review.graded_by ?? null,
                 reviewerName: graderFromUsers?.name || null,
@@ -2363,18 +2365,19 @@ exports.exportScoreboardDecisions = async (req, res) => {
             const linked = applyResumeCandidateLink(resume, embedded, candidateLinkLookups);
             const resumeReviews = reviewsByResume[resume.id] || [];
             let totalRaw = 0;
-            let rawCount = 0;
+            let totalPossible = 0;
+            let scoredReviewCount = 0;
             resumeReviews.forEach((review) => {
                 const scoring = getReviewScoring(review, {
                     rubricConfig: resumeRound.rubric_config,
                     candidateYear: linked.year,
                 });
+                if (!Number.isFinite(scoring.score) || !Number.isFinite(scoring.maxScore) || scoring.maxScore <= 0) return;
                 totalRaw += scoring.score;
-                rawCount += 1;
+                totalPossible += scoring.maxScore;
+                scoredReviewCount += 1;
             });
-            const avgRawScore = rawCount > 0
-                ? Number((totalRaw / rawCount).toFixed(1))
-                : null;
+            const normalizedScore = computeNormalizedFromAggregate(totalRaw, totalPossible);
 
             return {
                 candidateId: linked.candidateId,
@@ -2384,8 +2387,8 @@ exports.exportScoreboardDecisions = async (req, res) => {
                 major: linked.major,
                 year: linked.year,
                 gpa: linked.gpa,
-                score: avgRawScore,
-                numReviews: resumeReviews.length,
+                score: normalizedScore,
+                numReviews: scoredReviewCount,
                 numFrqReviews: frqReviewCountByResume[resume.id] || 0,
                 decision: resolveCandidateDecision(linked.candidateId, decisionLookup),
             };
@@ -2585,6 +2588,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             rubricConfig: resumeRound.rubric_config,
             candidateYear: candidate.year,
         });
+        if (!Number.isFinite(reviewScore) || !Number.isFinite(reviewNormalized)) return null;
 
         totalScore += reviewScore;
         totalNormalized += reviewNormalized;
@@ -2613,7 +2617,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             notes: review.notes || '',
             submittedAt: review.submitted_at,
         };
-    });
+    }).filter(Boolean);
 
     const numReviews = mappedReviews.length;
     const aggregateScore = numReviews > 0 ? Number((totalScore / numReviews).toFixed(1)) : null;
@@ -2634,6 +2638,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             score: normalizedScore === null ? null : Math.round(normalizedScore),
             numReviews,
             year: candidate.year,
+            resumeMax,
             metrics: [...metricSet],
             categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
         },
@@ -2660,7 +2665,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             id: resumeRow.id,
             name: resumeRow.name || candidate.name || 'Unknown',
             fileUrl: resumeFileUrl,
-            reviewCount: resumeRow.review_count ?? numReviews,
+            reviewCount: numReviews,
             submittedAt: resumeRow.created_at,
         },
         candidate: mapApplicationCandidate(candidate),
@@ -2677,10 +2682,14 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             resumeAggregateScore: compositeCandidate.resumeAggregateScore,
             resumeNormalizedScore: compositeCandidate.resumeNormalizedScore,
             resumeMax: compositeCandidate.resumeMax,
+            resumeEarnedPoints: compositeCandidate.resumeEarnedPoints,
+            resumePossiblePoints: compositeCandidate.resumePossiblePoints,
             frqScore: compositeCandidate.frqScore,
             frqPending: compositeCandidate.frqPending,
             numFrqReviews: compositeCandidate.numFrqReviews,
             compositeMax: compositeCandidate.compositeMax,
+            earnedPoints: compositeCandidate.earnedPoints,
+            possiblePoints: compositeCandidate.possiblePoints,
             categoryScores: compositeCandidate.categoryScores,
             categoryMaxScores: {
                 ...buildCategoryScores(categoryMaxTotals, categoryMaxCounts),
@@ -3217,6 +3226,7 @@ exports.getGraderScoreboard = async (req, res) => {
                 rubricConfig: resumeRound?.rubric_config,
                 candidateYear,
             });
+            if (!Number.isFinite(reviewScore) || !Number.isFinite(reviewNormalized)) return;
             grader.reviewCount++;
             grader.totalScore += reviewScore;
             grader.totalNormalized += reviewNormalized;

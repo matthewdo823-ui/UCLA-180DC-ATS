@@ -436,7 +436,7 @@ function ScorecardModal({
           <div style={{ background: cardPale, padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #DCE7D2" }}>
             <div>
               <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>
-                {equalized ? "EQUALIZED" : "NORMALIZED"} SCORE
+                {equalized ? "BIAS-ADJUSTED" : "NORMALIZED"} SCORE
               </p>
               <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
                 {formatScore(headlineScore)}<span style={{ fontSize: 14, color: "#3B6D11" }}>%</span>
@@ -1332,7 +1332,7 @@ export default function ScoreboardPage() {
               <button
                 type="button"
                 onClick={() => setEqualizeActive(on => !on)}
-                title="Recalculate scores using per-grader z-scores on each rubric category"
+                title="Adjust for consistently strict or lenient graders using per-category z-scores"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -1348,7 +1348,7 @@ export default function ScoreboardPage() {
                   fontFamily: "'DM Sans', sans-serif",
                 }}
               >
-                {equalizeActive ? "Raw scores" : "Equalize"}
+                {equalizeActive ? "Unadjusted scores" : "Bias adjust"}
               </button>
             </>
           ) : null}
@@ -1681,7 +1681,7 @@ export default function ScoreboardPage() {
 
       {equalizeActive ? (
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${deliberationMode ? t.infoBorder : css.greenDark}`, background: deliberationMode ? t.infoBg : css.greenDark, fontSize: 13, color: deliberationMode ? t.text : "#FFFFFF", lineHeight: 1.45 }}>
-          <strong style={{ color: deliberationMode ? t.accent : "#FFFFFF" }}>Equalized scores</strong> — adjusted by grader z-scores per rubric category. Toggle “Raw scores” to compare.
+          <strong style={{ color: deliberationMode ? t.accent : "#FFFFFF" }}>Bias-adjusted scores</strong> — each grader is normalized against their own scoring pattern, then mapped to the team distribution per rubric category. Toggle “Unadjusted scores” to compare.
         </div>
       ) : null}
 
@@ -1754,7 +1754,7 @@ export default function ScoreboardPage() {
           {deliberationMode ? <div aria-hidden /> : null}
           <div>#</div>
           <div>CANDIDATE</div>
-          <div>{equalizeActive ? "EQUALIZED" : "SCORE"}</div>
+          <div>{equalizeActive ? "BIAS-ADJUSTED" : "SCORE"}</div>
           {deliberationMode ? <div>DECISION</div> : null}
           <div style={{ textAlign: "right" }} />
         </div>
