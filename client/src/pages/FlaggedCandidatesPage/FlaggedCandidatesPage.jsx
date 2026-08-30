@@ -116,16 +116,6 @@ function FlagCard({ flag, onResolve, resolving, onOpenProfile }) {
           Resume: <span style={{ color: css.textDark, fontWeight: 700 }}>{flag.resume?.name || candidate.name || "Unknown"}</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {flag.resume?.fileUrl && (
-            <a
-              href={flag.resume.fileUrl}
-              target="_blank"
-              rel="noreferrer"
-              style={{ ...buttonStyle, background: "#FFF", color: "#333", border: `1px solid ${css.borderLight}`, textDecoration: "none" }}
-            >
-              Open Resume
-            </a>
-          )}
           <button
             type="button"
             onClick={() => onResolve(flag.id)}
@@ -200,16 +190,6 @@ function ReferralCard({ referral, onResolve, resolving, onOpenProfile }) {
           Resume: <span style={{ color: css.textDark, fontWeight: 700 }}>{referral.resume?.name || candidate.name || "Unknown"}</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {referral.resume?.fileUrl && (
-            <a
-              href={referral.resume.fileUrl}
-              target="_blank"
-              rel="noreferrer"
-              style={{ ...buttonStyle, background: "#FFF", color: "#333", border: `1px solid ${css.borderLight}`, textDecoration: "none" }}
-            >
-              Open Resume
-            </a>
-          )}
           <button
             type="button"
             onClick={() => onResolve(referral.id)}
