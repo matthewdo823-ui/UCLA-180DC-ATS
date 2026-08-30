@@ -160,8 +160,9 @@ function buildCategoryScores(reviews, metrics) {
   const counts = {};
 
   reviews.forEach(review => {
+    const scores = review.displayScores || review.scores || {};
     metrics.forEach(metric => {
-      const value = Number(review.scores?.[metric]);
+      const value = Number(scores[metric]);
       if (!Number.isFinite(value)) return;
       totals[metric] = (totals[metric] || 0) + value;
       counts[metric] = (counts[metric] || 0) + 1;
@@ -175,6 +176,49 @@ function buildCategoryScores(reviews, metrics) {
   });
 
   return categoryScores;
+}
+
+function projectScoresToCandidateRubric(scores, review, candidate, fallbackMax) {
+  const targetMetrics = (candidate?.metrics || []).filter((metric) => metric !== FRQ_METRIC);
+  const hasLegacyExclusiveMetric = ["experience", "leadership", "communication"]
+    .some((metric) => Number.isFinite(Number(scores?.[metric])));
+
+  if (!hasLegacyExclusiveMetric) {
+    return Object.fromEntries(targetMetrics.flatMap((metric) => {
+      const value = Number(scores?.[metric]);
+      return Number.isFinite(value) ? [[metric, value]] : [];
+    }));
+  }
+
+  const sourceMax = getMetricMax(review, fallbackMax);
+  const targetMaxFor = (metric) => {
+    const explicit = Number(candidate?.categoryMaxScores?.[metric]);
+    return Number.isFinite(explicit) && explicit > 0 ? explicit : fallbackMax;
+  };
+  const scaled = (sourceMetric, targetMetric) => {
+    const value = Number(scores?.[sourceMetric]);
+    const targetMax = targetMaxFor(targetMetric);
+    if (!Number.isFinite(value) || !Number.isFinite(sourceMax) || sourceMax <= 0) return null;
+    return Number((value / sourceMax * targetMax).toFixed(2));
+  };
+  const averageAvailable = (...values) => {
+    const finite = values.filter(Number.isFinite);
+    if (!finite.length) return null;
+    return Number((finite.reduce((sum, value) => sum + value, 0) / finite.length).toFixed(2));
+  };
+
+  return Object.fromEntries(targetMetrics.flatMap((metric) => {
+    let value = null;
+    if (metric === "work experience") value = scaled("experience", metric);
+    else if (metric === "leadership experience") value = scaled("leadership", metric);
+    else if (metric === "social impact") value = scaled("social impact", metric);
+    else if (metric === "leadership/work experience") {
+      value = averageAvailable(scaled("experience", metric), scaled("leadership", metric));
+    } else if (metric === "business or social impact") {
+      value = scaled("social impact", metric);
+    }
+    return Number.isFinite(value) ? [[metric, value]] : [];
+  }));
 }
 
 function averageFrqScore(frqReviews = []) {
@@ -281,6 +325,12 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
 
       equalizedReviews = reviews.map(review => {
         const adjustedScores = equalizeReviewScores(review, resumeGraderStats, resumeGlobalStats, maxPerCategory);
+        const displayScores = projectScoresToCandidateRubric(
+          adjustedScores,
+          review,
+          candidate,
+          maxPerCategory
+        );
         const rawScore = computeRawScore(adjustedScores, Object.keys(adjustedScores));
         const reviewMax = Number(review?.maxScore)
           || Object.keys(adjustedScores).length * getMetricMax(review, maxPerCategory);
@@ -296,6 +346,7 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
         return {
           ...review,
           scores: adjustedScores,
+          displayScores,
           score: rawScore,
           normalizedScore,
           equalized: true,
@@ -325,8 +376,9 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
       equalizedFrqReviews
     );
 
-    const resumeCategoryScores = reviews.length && resumeMetrics.length
-      ? buildCategoryScores(equalizedReviews, resumeMetrics)
+    const candidateResumeMetrics = (candidate.metrics || []).filter((metric) => metric !== FRQ_METRIC);
+    const resumeCategoryScores = reviews.length && candidateResumeMetrics.length
+      ? buildCategoryScores(equalizedReviews, candidateResumeMetrics)
       : {};
 
     return {
