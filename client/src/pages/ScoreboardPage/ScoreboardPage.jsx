@@ -755,6 +755,9 @@ export default function ScoreboardPage() {
       state: {
         candidateRank: candidate.rank,
         candidateCount: data.stats?.applicants,
+        resumeScreenRank: candidate.resumeScreenRank,
+        coffeeChatScore: candidate.coffeeChatScore,
+        coffeeChatEvaluationCount: candidate.coffeeChatEvaluationCount,
       },
     });
   }, [cycleId, data.stats?.applicants, navigate]);
@@ -821,13 +824,14 @@ export default function ScoreboardPage() {
 
   const displayStats = useMemo(() => {
     const base = data.stats ?? {};
-    if (!equalizeActive) return base;
+    if (!equalizeActive || data.context?.rankingMode === "coffee_chat") return base;
     const { avgScore } = recomputeEqualizedStats(candidates);
     return { ...base, avgScore };
-  }, [data.stats, candidates, equalizeActive]);
+  }, [data.context?.rankingMode, data.stats, candidates, equalizeActive]);
   const metrics = useMemo(() => data.metrics ?? [], [data.metrics]);
   const maxPerCategory = data.maxPerCategory ?? 4;
   const activeRound = data.context?.round;
+  const isCoffeeChatRanking = data.context?.rankingMode === "coffee_chat";
   const liveActiveRound = data.context?.activeRound;
   const nextRound = data.context?.nextRound;
   const allRounds = data.context?.allRounds ?? [];
@@ -1137,8 +1141,8 @@ export default function ScoreboardPage() {
   );
   const t = deliberationMode ? PAGE_THEME.dark : PAGE_THEME.light;
   const gridColumns = deliberationMode
-    ? "16px 36px minmax(180px, 2.2fr) 100px minmax(196px, 0.9fr) minmax(108px, auto)"
-    : "48px minmax(220px, 2.2fr) 108px minmax(100px, auto)";
+    ? `16px 36px minmax(180px, 2.2fr) ${isCoffeeChatRanking ? "165px" : "100px"} minmax(196px, 0.9fr) minmax(108px, auto)`
+    : `48px minmax(220px, 2.2fr) ${isCoffeeChatRanking ? "165px" : "108px"} minmax(100px, auto)`;
 
   function statCount(value) {
     if (value === undefined || value === null || value === "") return "—";
@@ -1231,8 +1235,17 @@ export default function ScoreboardPage() {
 
   const resumeReviewedApplicants = candidates.filter((candidate) => getResumeReviewCount(candidate) > 0).length;
   const freeResponseReviewedApplicants = candidates.filter((candidate) => getFreeResponseReviewCount(candidate) > 0).length;
+  const coffeeChatEvaluatedApplicants = candidates.filter((candidate) => (candidate.coffeeChatEvaluationCount || 0) > 0).length;
+  const coffeeChatRatings = candidates.reduce((total, candidate) => total + (candidate.coffeeChatEvaluationCount || 0), 0);
 
-  const statRows = deliberationMode
+  const statRows = !deliberationMode && isCoffeeChatRanking
+    ? [
+        { label: "CANDIDATES", value: statCount(displayStats?.applicants), clickable: false },
+        { label: "EVALUATED", value: statCount(coffeeChatEvaluatedApplicants), clickable: false },
+        { label: "RATINGS SUBMITTED", value: statCount(coffeeChatRatings), clickable: false },
+        { label: "AWAITING A RATING", value: statCount(Math.max(0, (displayStats?.applicants || 0) - coffeeChatEvaluatedApplicants)), clickable: false },
+      ]
+    : deliberationMode
     ? [
         { label: "PENDING", value: statCount(displayStats?.pending ?? (displayStats?.applicants != null ? displayStats?.applicants : null)), clickable: true },
         { label: "ADVANCED", value: statCount(displayStats?.advanced ?? 0), clickable: true },
@@ -1247,7 +1260,7 @@ export default function ScoreboardPage() {
         { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
         { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
         { label: "ADVANCED", value: statCount(displayStats?.advanced), clickable: true },
-        { label: "AVG SCORE", value: statCount(displayStats?.avgScore), clickable: false },
+        { label: isCoffeeChatRanking ? "AVG COFFEE CHAT" : "AVG SCORE", value: statCount(isCoffeeChatRanking ? displayStats?.coffeeChatAverage : displayStats?.avgScore), clickable: false },
       ];
 
   const decidedCount = deliberationMode
@@ -1837,7 +1850,7 @@ export default function ScoreboardPage() {
           {deliberationMode ? <div aria-hidden /> : null}
           <div>#</div>
           <div>CANDIDATE</div>
-          <div>{equalizeActive ? "BIAS-ADJUSTED" : "SCORE"}</div>
+          <div style={{ whiteSpace: "nowrap" }}>{isCoffeeChatRanking ? "COFFEE CHAT POINTS" : equalizeActive ? "BIAS-ADJUSTED" : "SCORE"}</div>
           {deliberationMode ? <div>DECISION</div> : null}
           <div style={{ textAlign: "right" }} />
         </div>
@@ -1941,12 +1954,16 @@ export default function ScoreboardPage() {
             </div>
 
             <div>
-              <div style={{ color: scoreColor(headlineScore), fontSize: 17, fontFamily: sansFont, fontWeight: 600, lineHeight: 1.2 }}>
-                {hasNumericScore(headlineScore) ? `${formatScore(headlineScore)}%` : "—"}
+              <div style={{ color: isCoffeeChatRanking ? (Number(c.coffeeChatScore) > 0 ? css.greenDark : Number(c.coffeeChatScore) < 0 ? css.red : t.textMuted) : scoreColor(headlineScore), fontSize: 17, fontFamily: sansFont, fontWeight: 600, lineHeight: 1.2 }}>
+                {isCoffeeChatRanking
+                  ? `${formatScore(c.coffeeChatScore || 0)} pts`
+                  : hasNumericScore(headlineScore) ? `${formatScore(headlineScore)}%` : "—"}
               </div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4, lineHeight: 1.45, whiteSpace: "pre-line" }}>
-                {formatReviewCountsStacked(c)}
-              </div>
+              {!isCoffeeChatRanking ? (
+                <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4, lineHeight: 1.45, whiteSpace: "pre-line" }}>
+                  {formatReviewCountsStacked(c)}
+                </div>
+              ) : null}
             </div>
 
             {deliberationMode ? (
