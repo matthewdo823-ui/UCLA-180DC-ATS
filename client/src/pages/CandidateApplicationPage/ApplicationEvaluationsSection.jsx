@@ -127,12 +127,12 @@ export default function ApplicationEvaluationsSection({ scoring }) {
   const frqReviews = scoring?.frqReviews || [];
   const allMetrics = [...new Set([
     ...(scoring?.metrics || []),
-    ...Object.keys(scoring?.categoryScores || {}),
-  ])].filter(
-    (metric) => hasNumericScore(scoring?.categoryScores?.[metric])
-  );
+    ...Object.entries(scoring?.categoryScores || {})
+      .filter(([, value]) => hasNumericScore(value))
+      .map(([metric]) => metric),
+  ])];
   const resumeMetrics = (scoring?.metrics || []).filter(
-    (metric) => metric !== FRQ_METRIC && hasNumericScore(scoring?.categoryScores?.[metric])
+    (metric) => metric !== FRQ_METRIC
   );
   const averageScore = scoring?.resumeNormalizedScore ?? scoring?.normalizedScore;
   const frqAverage = scoring?.frqScore;
