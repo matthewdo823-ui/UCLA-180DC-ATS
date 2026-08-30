@@ -2025,7 +2025,12 @@ exports.getScoreboard = async (req, res) => {
             candidateMap[resumeId].totalNormalized += reviewNormalized;
             candidateMap[resumeId].numReviews++;
 
-            [...scoring.metrics, ...Object.keys(review.scores || {})].forEach((metric) => {
+            scoring.metrics.forEach((metric) => {
+                if (!candidateMap[resumeId].metrics.includes(metric)) {
+                    candidateMap[resumeId].metrics.push(metric);
+                }
+            });
+            Object.keys(review.scores || {}).forEach((metric) => {
                 const value = review.scores?.[metric];
                 if (value === null || value === '' || !Number.isFinite(Number(value))) return;
                 if (!candidateMap[resumeId].metrics.includes(metric)) {
@@ -2077,6 +2082,7 @@ exports.getScoreboard = async (req, res) => {
                 ? Number((c.totalNormalized / c.numReviews).toFixed(1))
                 : null;
             const categoryScores = buildCategoryScores(c.categoryTotals, c.categoryCounts);
+            const expectedMetrics = getRubricForYear(resumeRound.rubric_config, c.year).metrics;
 
             const decision = resolveCandidateDecision(c.candidateId, decisionLookup, decisionOptions);
 
@@ -2100,7 +2106,7 @@ exports.getScoreboard = async (req, res) => {
                 resumeMax,
                 categoryScores,
                 categoryMaxScores: buildCategoryScores(c.categoryMaxTotals, c.categoryMaxCounts),
-                metrics: c.metrics,
+                metrics: c.metrics.length ? c.metrics : expectedMetrics,
                 numReviews: c.numReviews,
                 reviews: c.reviews.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt)),
                 score: normalizedScore == null ? null : Math.round(normalizedScore),
@@ -2588,6 +2594,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         getGradedByUserLookup(graderIds),
         fetchReviewOverridesByReviewIds((reviews || []).map((review) => review.id)),
     ]);
+    const expectedCandidateMetrics = getRubricForYear(resumeRound.rubric_config, candidate.year).metrics;
     const candidateMetricOrder = [];
     const categoryTotals = {};
     const categoryCounts = {};
@@ -2608,7 +2615,10 @@ async function fetchScoreboardApplicationPayload(resumeId) {
         });
         if (!Number.isFinite(reviewScore) || !Number.isFinite(reviewNormalized)) return null;
 
-        [...scoring.metrics, ...Object.keys(review.scores || {})].forEach((metric) => {
+        scoring.metrics.forEach((metric) => {
+            if (!candidateMetricOrder.includes(metric)) candidateMetricOrder.push(metric);
+        });
+        Object.keys(review.scores || {}).forEach((metric) => {
             const value = review.scores?.[metric];
             if (value === null || value === '' || !Number.isFinite(Number(value))) return;
             if (!candidateMetricOrder.includes(metric)) candidateMetricOrder.push(metric);
@@ -2653,6 +2663,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
     const normalizedScore = numReviews > 0
         ? Number((totalNormalized / numReviews).toFixed(1))
         : null;
+    const displayMetrics = candidateMetricOrder.length ? candidateMetricOrder : expectedCandidateMetrics;
     const resumeFileUrl = resumeRow.file_url || candidate.resume_file_url || '';
 
     const candidateWithOverrides = applyReviewOverridesToCandidate(
@@ -2664,12 +2675,12 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             numReviews,
             year: candidate.year,
             resumeMax,
-            metrics: candidateMetricOrder,
+            metrics: displayMetrics,
             categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
             categoryMaxScores: buildCategoryScores(categoryMaxTotals, categoryMaxCounts),
         },
         reviewOverrideLookup,
-        { rubricConfig: resumeRound.rubric_config, candidateYear: candidate.year, metrics: candidateMetricOrder }
+        { rubricConfig: resumeRound.rubric_config, candidateYear: candidate.year, metrics: displayMetrics }
     );
 
     const frqReviews = (frqRows || []).map((row) => mapFrqReviewRow(row, gradedByUserLookup));

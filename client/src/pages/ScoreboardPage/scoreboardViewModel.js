@@ -41,12 +41,20 @@ export function getSourceNormalizedScore(candidate) { return hasNumericScore(can
 export function normalizeMetricScore(candidate, metric) { const value = candidate?.categoryScores?.[metric]; return hasNumericScore(value) ? Number(value) : null; }
 export function getCandidateMetrics(candidate, fallbackMetrics = []) {
   const reviewMetrics = (candidate?.reviews || []).flatMap((review) => Object.keys(review?.scores || {}));
+  const scoredCategoryMetrics = Object.entries(candidate?.categoryScores || {})
+    .filter(([, value]) => hasNumericScore(value))
+    .map(([metric]) => metric);
+  const primaryMetrics = candidate?.metrics?.length
+    ? candidate.metrics
+    : reviewMetrics.length
+      ? reviewMetrics
+      : scoredCategoryMetrics.length
+        ? scoredCategoryMetrics
+        : fallbackMetrics;
   return [...new Set([
-    ...(candidate?.metrics || []),
-    ...reviewMetrics,
-    ...Object.keys(candidate?.categoryScores || {}),
-    ...fallbackMetrics,
-  ])].filter((metric) => hasNumericScore(candidate?.categoryScores?.[metric]));
+    ...primaryMetrics,
+    ...scoredCategoryMetrics,
+  ])];
 }
 export function getCandidateMetricMax(candidate, metric, fallbackMax = 4) {
   const explicit = Number(candidate?.categoryMaxScores?.[metric]);
