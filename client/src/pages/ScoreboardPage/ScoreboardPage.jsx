@@ -78,7 +78,7 @@ const SCOREBOARD_THEME = {
   infoBorder: "rgba(40, 98, 65, 0.18)",
 };
 
-function DecisionReadonlyBadge({ status, dark }) {
+function DecisionReadonlyBadge({ status, dark, label }) {
   const style = DECISION_STYLE[status] || DECISION_STYLE.pending;
   return (
     <span
@@ -97,7 +97,7 @@ function DecisionReadonlyBadge({ status, dark }) {
         opacity: dark ? 0.95 : 1,
       }}
     >
-      {style.label}
+      {label || style.label}
     </span>
   );
 }
@@ -210,6 +210,7 @@ function buildActiveFilterPills(filters, deliberationMode) {
       advance: "Advanced",
       hold: "Hold",
       reject: "Rejected",
+      not_advanced: "Cut this round",
     };
     pills.push({
       key: "decision",
@@ -813,6 +814,8 @@ export default function ScoreboardPage() {
   const maxPerCategory = data.maxPerCategory ?? 4;
   const activeRound = data.context?.round;
   const isCoffeeChatRanking = data.context?.rankingMode === "coffee_chat";
+  const viewingFinalizedRound = viewingHistorical && activeRound?.status === "closed";
+  const historicalCutLabel = `Cut at ${activeRound?.name || "this round"}`;
   const liveActiveRound = data.context?.activeRound;
   const nextRound = data.context?.nextRound;
   const allRounds = data.context?.allRounds ?? [];
@@ -1243,12 +1246,24 @@ export default function ScoreboardPage() {
   const coffeeChatEvaluatedApplicants = summaryCandidates.filter((candidate) => (candidate.coffeeChatEvaluationCount || 0) > 0).length;
   const coffeeChatRatings = summaryCandidates.reduce((total, candidate) => total + (candidate.coffeeChatEvaluationCount || 0), 0);
 
+  const historicalCutCount = (summaryStats?.pending ?? 0) + (summaryStats?.hold ?? 0) + (summaryStats?.rejected ?? 0);
+
   const statRows = !deliberationMode && isCoffeeChatRanking
     ? [
         { label: "CANDIDATES", value: statCount(summaryStats?.applicants), clickable: false },
         { label: "EVALUATED", value: statCount(coffeeChatEvaluatedApplicants), clickable: false },
         { label: "RATINGS SUBMITTED", value: statCount(coffeeChatRatings), clickable: false },
         { label: "AWAITING A RATING", value: statCount(Math.max(0, (summaryStats?.applicants || 0) - coffeeChatEvaluatedApplicants)), clickable: false },
+      ]
+    : deliberationMode && viewingFinalizedRound
+    ? [
+        { label: "ADVANCED", value: statCount(summaryStats?.advanced ?? 0), clickable: true, color: DECISION_STYLE.advance.color },
+        { label: historicalCutLabel.toUpperCase(), value: statCount(historicalCutCount), clickable: false, color: DECISION_STYLE.reject.color },
+        ...(!isCoffeeChatRanking ? [
+          { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
+          { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
+        ] : []),
+        { label: "APPLICANTS", value: statCount(summaryStats?.applicants), clickable: true },
       ]
     : deliberationMode
     ? [
@@ -1271,16 +1286,23 @@ export default function ScoreboardPage() {
       ];
 
   const decidedCount = deliberationMode
-    ? (summaryStats?.advanced ?? 0) + (summaryStats?.hold ?? 0) + (summaryStats?.rejected ?? 0)
+    ? viewingFinalizedRound
+      ? (summaryStats?.applicants ?? 0)
+      : (summaryStats?.advanced ?? 0) + (summaryStats?.hold ?? 0) + (summaryStats?.rejected ?? 0)
     : 0;
   const totalApplicants = summaryStats?.applicants ?? 0;
   const decisionProgress = totalApplicants > 0 ? Math.round((decidedCount / totalApplicants) * 100) : 0;
-  const decisionMix = [
-    { label: "Advanced", value: Number(summaryStats?.advanced) || 0, color: DECISION_STYLE.advance.color },
-    { label: "Hold", value: Number(summaryStats?.hold) || 0, color: DECISION_STYLE.hold.color },
-    { label: "Rejected", value: Number(summaryStats?.rejected) || 0, color: DECISION_STYLE.reject.color },
-    { label: "Pending", value: Number(summaryStats?.pending) || 0, color: "#D1D5DB" },
-  ];
+  const decisionMix = viewingFinalizedRound
+    ? [
+        { label: "Advanced", value: Number(summaryStats?.advanced) || 0, color: DECISION_STYLE.advance.color },
+        { label: historicalCutLabel, value: historicalCutCount, color: DECISION_STYLE.reject.color },
+      ]
+    : [
+        { label: "Advanced", value: Number(summaryStats?.advanced) || 0, color: DECISION_STYLE.advance.color },
+        { label: "Hold", value: Number(summaryStats?.hold) || 0, color: DECISION_STYLE.hold.color },
+        { label: "Rejected", value: Number(summaryStats?.rejected) || 0, color: DECISION_STYLE.reject.color },
+        { label: "Pending", value: Number(summaryStats?.pending) || 0, color: "#D1D5DB" },
+      ];
 
   const barSelectStyle = {
     ...selectStyle,
@@ -1721,14 +1743,24 @@ export default function ScoreboardPage() {
           </select>
         </FilterField>
         {deliberationMode ? (
-          <FilterField label="Committee decision" theme={t} fillRow>
+          <FilterField label={viewingFinalizedRound ? "Round outcome" : "Committee decision"} theme={t} fillRow>
             <select value={filters.decision} onChange={e => setFilters(f => ({ ...f, decision: e.target.value }))} style={filterSelectStyle}>
-              <option value="all">All decisions</option>
-              <option value="undecided">Undecided (pending + hold)</option>
-              <option value="pending">Pending only</option>
-              <option value="advance">Advanced</option>
-              <option value="hold">Hold</option>
-              <option value="reject">Rejected</option>
+              {viewingFinalizedRound ? (
+                <>
+                  <option value="all">All outcomes</option>
+                  <option value="advance">Advanced</option>
+                  <option value="not_advanced">{historicalCutLabel}</option>
+                </>
+              ) : (
+                <>
+                  <option value="all">All decisions</option>
+                  <option value="undecided">Undecided (pending + hold)</option>
+                  <option value="pending">Pending only</option>
+                  <option value="advance">Advanced</option>
+                  <option value="hold">Hold</option>
+                  <option value="reject">Rejected</option>
+                </>
+              )}
             </select>
           </FilterField>
         ) : null}
@@ -1916,7 +1948,9 @@ export default function ScoreboardPage() {
 
         {!loading && filteredCandidates.map((c, index) => {
           const decisionStatus = getCandidateDecisionStatus(c);
-          const decisionStyle = DECISION_STYLE[decisionStatus];
+          const isHistoricalCut = viewingFinalizedRound && decisionStatus !== "advance";
+          const displayDecisionStatus = isHistoricalCut ? "reject" : decisionStatus;
+          const decisionStyle = DECISION_STYLE[displayDecisionStatus];
           const isFocused = deliberationMode && focusedCandidateId != null && String(focusedCandidateId) === String(c.id);
           const rowSaving = savingDecisionId === c.id;
           const headlineScore = getHeadlineScore(c);
@@ -1948,7 +1982,7 @@ export default function ScoreboardPage() {
             }}
           >
             {deliberationMode ? (
-              <div style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: decisionStatus === "pending" ? "transparent" : decisionStyle.color, minHeight: 40 }} aria-hidden />
+              <div style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: displayDecisionStatus === "pending" ? "transparent" : decisionStyle.color, minHeight: 40 }} aria-hidden />
             ) : null}
 
             <div style={{ color: isFocused ? t.accent : t.textMuted, fontWeight: 700, fontSize: 13 }}>{index + 1}</div>
@@ -2022,7 +2056,11 @@ export default function ScoreboardPage() {
                     onSelect={decision => saveDecision(c, decision)}
                   />
                 ) : isStaff ? (
-                  <DecisionReadonlyBadge status={decisionStatus} dark={false} />
+                  <DecisionReadonlyBadge
+                    status={displayDecisionStatus}
+                    dark={false}
+                    label={isHistoricalCut ? historicalCutLabel : undefined}
+                  />
                 ) : (
                   <span style={{ fontSize: 12, color: t.textMuted }}>Staff only</span>
                 )}
