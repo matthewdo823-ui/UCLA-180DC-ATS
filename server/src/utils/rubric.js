@@ -1,15 +1,5 @@
 const RUBRIC_MAX_PER_CATEGORY = 4;
 
-// Canonical maxima for the current resume rubric. Historical reviews continue
-// to use the maximum stored in their rubric snapshot.
-const CURRENT_RESUME_MAX_SCORE_BY_YEAR = Object.freeze({
-  freshman: 8,
-  sophomore: 12,
-  junior: 8,
-  juniortransfer: 8,
-  senior: 8,
-});
-
 /** Pre-2026 rubric: four categories scored 1–6 (max 24). */
 const LEGACY_RUBRIC_METRICS = [
   "experience",
@@ -54,12 +44,6 @@ const DEFAULT_RUBRIC_CONFIG = {
 function normalizeYearKey(yearRaw) {
   if (yearRaw == null || yearRaw === "") return null;
   return String(yearRaw).toLowerCase().replace(/\s/g, "");
-}
-
-function getCurrentResumeMaxScore(yearRaw) {
-  const key = normalizeYearKey(yearRaw);
-  return CURRENT_RESUME_MAX_SCORE_BY_YEAR[key]
-    ?? CURRENT_RESUME_MAX_SCORE_BY_YEAR.sophomore;
 }
 
 function getRubricForYear(rubricConfig, yearRaw) {
@@ -219,9 +203,7 @@ function resolveReviewScoringContext(review, options = {}) {
   const metrics = Object.keys(scores);
   return {
     metrics,
-    maxScore: metrics.length
-      ? metrics.length * RUBRIC_MAX_PER_CATEGORY
-      : getCurrentResumeMaxScore(options.candidateYear),
+    maxScore: metrics.length ? metrics.length * RUBRIC_MAX_PER_CATEGORY : null,
     maxPerCategory: RUBRIC_MAX_PER_CATEGORY,
     legacy: false,
     snapshot: null,
@@ -233,7 +215,7 @@ function resolveCandidateResumeMax(reviews = [], options = {}) {
     if (options.rubricConfig) {
       return getRubricMaxScore(getRubricForYear(options.rubricConfig, options.candidateYear));
     }
-    return getCurrentResumeMaxScore(options.candidateYear);
+    return null;
   }
 
   const maxScores = reviews
@@ -292,7 +274,7 @@ function getMetricsFromRubricConfig(rubricConfig) {
 
 function getLegacyNormalizedScore(scores) {
   const raw = computeRawScore(scores);
-  return Number(Math.min(100, (raw / LEGACY_RUBRIC_MAX_SCORE) * 100).toFixed(2));
+  return Number(Math.min(100, (raw / 24) * 100).toFixed(2));
 }
 
 /** Cosmetic % derived from raw rubric scores — never treat as source of truth. */
@@ -329,13 +311,11 @@ function resolveReviewNormalizedValue(review, options = {}) {
 
 module.exports = {
   RUBRIC_MAX_PER_CATEGORY,
-  CURRENT_RESUME_MAX_SCORE_BY_YEAR,
   LEGACY_RUBRIC_METRICS,
   LEGACY_RUBRIC_MAX_PER_CATEGORY,
   LEGACY_RUBRIC_MAX_SCORE,
   DEFAULT_RUBRIC_CONFIG,
   normalizeYearKey,
-  getCurrentResumeMaxScore,
   getRubricForYear,
   getRubricMaxScore,
   validateRubricConfig,
