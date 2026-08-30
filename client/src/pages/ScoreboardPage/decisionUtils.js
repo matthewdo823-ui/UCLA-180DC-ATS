@@ -117,6 +117,8 @@ export function passesDecisionFilter(candidate, decisionFilter) {
       return status === "reject";
     case "undecided":
       return status === "pending" || status === "hold";
+    case "not_advanced":
+      return status !== "advance";
     default:
       return true;
   }
