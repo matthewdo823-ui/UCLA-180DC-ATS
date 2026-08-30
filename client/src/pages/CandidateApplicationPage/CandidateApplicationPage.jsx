@@ -26,7 +26,7 @@ export default function CandidateApplicationPage() {
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
       <Topbar phaseLabel={contextLabel} activeLabel="Application" rightSlot={<></>} />
 
-      <div style={{ flex: 1, padding: "20px 22px 40px", maxWidth: 1180, margin: "0 auto", width: "100%" }}>
+      <div style={{ flex: 1, padding: "18px 20px 36px", width: "100%", boxSizing: "border-box" }}>
         <button
           type="button"
           onClick={() => navigate("/scoreboard")}
@@ -57,10 +57,11 @@ export default function CandidateApplicationPage() {
         )}
 
         {!loading && !error && candidate && (
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 300px) minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
+          <div className="candidate-application-grid" style={{ display: "grid", gridTemplateColumns: "minmax(250px, 280px) minmax(0, 1fr)", gap: 18, alignItems: "start" }}>
             <ApplicationProfileSidebar candidate={candidate} resume={resume} scoring={scoring} />
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+              <ApplicationEvaluationsSection scoring={scoring} />
               <ApplicationSummarySection {...summaryState} onRefresh={summaryState.refresh} />
               <ApplicationContactSection candidate={candidate} resume={resume} />
               <ApplicationSignalsSection signals={signals} />
@@ -72,11 +73,20 @@ export default function CandidateApplicationPage() {
                 />
               )}
               <ApplicationResumeSection candidate={candidate} resume={resume} authToken={token} />
-              <ApplicationEvaluationsSection scoring={scoring} />
             </div>
           </div>
         )}
       </div>
+      <style>{`
+        @media (max-width: 900px) {
+          .candidate-application-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .candidate-application-grid aside {
+            position: static !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
