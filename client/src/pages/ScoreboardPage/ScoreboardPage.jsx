@@ -1120,6 +1120,30 @@ export default function ScoreboardPage() {
     () => buildActiveFilterPills(filters, deliberationMode),
     [filters, deliberationMode]
   );
+  const summaryCandidates = hasActiveNarrowing ? filteredCandidates : candidates;
+  const scopedDecisionStats = useMemo(
+    () => recomputeDecisionStats(summaryCandidates),
+    [summaryCandidates]
+  );
+  const summaryStats = useMemo(() => {
+    if (!hasActiveNarrowing) return displayStats;
+
+    const { avgScore } = recomputeEqualizedStats(summaryCandidates);
+    const coffeeChatAverage = summaryCandidates.length
+      ? Number((summaryCandidates.reduce((sum, candidate) => sum + Number(candidate.coffeeChatScore || 0), 0) / summaryCandidates.length).toFixed(1))
+      : null;
+
+    return {
+      ...displayStats,
+      applicants: summaryCandidates.length,
+      advanced: scopedDecisionStats.advance,
+      hold: scopedDecisionStats.hold,
+      rejected: scopedDecisionStats.reject,
+      pending: scopedDecisionStats.pending,
+      avgScore,
+      coffeeChatAverage,
+    };
+  }, [displayStats, hasActiveNarrowing, scopedDecisionStats, summaryCandidates]);
   const t = SCOREBOARD_THEME;
   const gridColumns = deliberationMode
     ? `16px 36px minmax(180px, 2.2fr) ${isCoffeeChatRanking ? "165px" : "100px"} minmax(196px, 0.9fr) minmax(108px, auto)`
@@ -1214,48 +1238,48 @@ export default function ScoreboardPage() {
     }
   }, [viewingHistorical, deliberationMode]);
 
-  const resumeReviewedApplicants = candidates.filter((candidate) => getResumeReviewCount(candidate) > 0).length;
-  const freeResponseReviewedApplicants = candidates.filter((candidate) => getFreeResponseReviewCount(candidate) > 0).length;
-  const coffeeChatEvaluatedApplicants = candidates.filter((candidate) => (candidate.coffeeChatEvaluationCount || 0) > 0).length;
-  const coffeeChatRatings = candidates.reduce((total, candidate) => total + (candidate.coffeeChatEvaluationCount || 0), 0);
+  const resumeReviewedApplicants = summaryCandidates.filter((candidate) => getResumeReviewCount(candidate) > 0).length;
+  const freeResponseReviewedApplicants = summaryCandidates.filter((candidate) => getFreeResponseReviewCount(candidate) > 0).length;
+  const coffeeChatEvaluatedApplicants = summaryCandidates.filter((candidate) => (candidate.coffeeChatEvaluationCount || 0) > 0).length;
+  const coffeeChatRatings = summaryCandidates.reduce((total, candidate) => total + (candidate.coffeeChatEvaluationCount || 0), 0);
 
   const statRows = !deliberationMode && isCoffeeChatRanking
     ? [
-        { label: "CANDIDATES", value: statCount(displayStats?.applicants), clickable: false },
+        { label: "CANDIDATES", value: statCount(summaryStats?.applicants), clickable: false },
         { label: "EVALUATED", value: statCount(coffeeChatEvaluatedApplicants), clickable: false },
         { label: "RATINGS SUBMITTED", value: statCount(coffeeChatRatings), clickable: false },
-        { label: "AWAITING A RATING", value: statCount(Math.max(0, (displayStats?.applicants || 0) - coffeeChatEvaluatedApplicants)), clickable: false },
+        { label: "AWAITING A RATING", value: statCount(Math.max(0, (summaryStats?.applicants || 0) - coffeeChatEvaluatedApplicants)), clickable: false },
       ]
     : deliberationMode
     ? [
-        { label: "PENDING", value: statCount(displayStats?.pending ?? (displayStats?.applicants != null ? displayStats?.applicants : null)), clickable: true, color: DECISION_STYLE.pending.color },
-        { label: "ADVANCED", value: statCount(displayStats?.advanced ?? 0), clickable: true, color: DECISION_STYLE.advance.color },
-        { label: "HOLD", value: statCount(displayStats?.hold ?? 0), clickable: true, color: DECISION_STYLE.hold.color },
-        { label: "REJECTED", value: statCount(displayStats?.rejected ?? 0), clickable: true, color: DECISION_STYLE.reject.color },
+        { label: "PENDING", value: statCount(summaryStats?.pending ?? (summaryStats?.applicants != null ? summaryStats?.applicants : null)), clickable: true, color: DECISION_STYLE.pending.color },
+        { label: "ADVANCED", value: statCount(summaryStats?.advanced ?? 0), clickable: true, color: DECISION_STYLE.advance.color },
+        { label: "HOLD", value: statCount(summaryStats?.hold ?? 0), clickable: true, color: DECISION_STYLE.hold.color },
+        { label: "REJECTED", value: statCount(summaryStats?.rejected ?? 0), clickable: true, color: DECISION_STYLE.reject.color },
         ...(!isCoffeeChatRanking ? [
           { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
           { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
         ] : []),
-        { label: "APPLICANTS", value: statCount(displayStats?.applicants), clickable: true },
+        { label: "APPLICANTS", value: statCount(summaryStats?.applicants), clickable: true },
       ]
     : [
-        { label: "APPLICANTS", value: statCount(displayStats?.applicants), clickable: true },
+        { label: "APPLICANTS", value: statCount(summaryStats?.applicants), clickable: true },
         { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
         { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
-        { label: "ADVANCED", value: statCount(displayStats?.advanced), clickable: true },
-        { label: isCoffeeChatRanking ? "AVG COFFEE CHAT" : "AVG SCORE", value: statCount(isCoffeeChatRanking ? displayStats?.coffeeChatAverage : displayStats?.avgScore), clickable: false },
+        { label: "ADVANCED", value: statCount(summaryStats?.advanced), clickable: true },
+        { label: isCoffeeChatRanking ? "AVG COFFEE CHAT" : "AVG SCORE", value: statCount(isCoffeeChatRanking ? summaryStats?.coffeeChatAverage : summaryStats?.avgScore), clickable: false },
       ];
 
   const decidedCount = deliberationMode
-    ? (displayStats?.advanced ?? 0) + (displayStats?.hold ?? 0) + (displayStats?.rejected ?? 0)
+    ? (summaryStats?.advanced ?? 0) + (summaryStats?.hold ?? 0) + (summaryStats?.rejected ?? 0)
     : 0;
-  const totalApplicants = displayStats?.applicants ?? 0;
+  const totalApplicants = summaryStats?.applicants ?? 0;
   const decisionProgress = totalApplicants > 0 ? Math.round((decidedCount / totalApplicants) * 100) : 0;
   const decisionMix = [
-    { label: "Advanced", value: Number(displayStats?.advanced) || 0, color: DECISION_STYLE.advance.color },
-    { label: "Hold", value: Number(displayStats?.hold) || 0, color: DECISION_STYLE.hold.color },
-    { label: "Rejected", value: Number(displayStats?.rejected) || 0, color: DECISION_STYLE.reject.color },
-    { label: "Pending", value: Number(displayStats?.pending) || 0, color: "#D1D5DB" },
+    { label: "Advanced", value: Number(summaryStats?.advanced) || 0, color: DECISION_STYLE.advance.color },
+    { label: "Hold", value: Number(summaryStats?.hold) || 0, color: DECISION_STYLE.hold.color },
+    { label: "Rejected", value: Number(summaryStats?.rejected) || 0, color: DECISION_STYLE.reject.color },
+    { label: "Pending", value: Number(summaryStats?.pending) || 0, color: "#D1D5DB" },
   ];
 
   const barSelectStyle = {
@@ -1415,6 +1439,41 @@ export default function ScoreboardPage() {
               >
                 {equalizeActive ? "Unadjusted scores" : "Bias adjust"}
               </button>
+              {isAdmin && deliberationMode && !viewingHistorical && canDeliberate && activeRound?.id ? (
+                <button
+                  type="button"
+                  onClick={handleAdvanceRound}
+                  disabled={advanceRoundBusy}
+                  title={
+                    canCloseRound
+                      ? nextRound
+                        ? `Confirm all decisions, close ${activeRound.name}, and open ${nextRound.name}`
+                        : `Confirm all decisions and close ${activeRound.name}`
+                      : `Resolve all candidates first — ${undecidedCount || "some"} still need Advance or Reject`
+                  }
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 7,
+                    cursor: advanceRoundBusy ? "wait" : "pointer",
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    background: canCloseRound ? t.accent : t.btnGhostBg,
+                    color: canCloseRound ? "#FFFFFF" : t.textMuted,
+                    border: `1px solid ${canCloseRound ? t.accent : t.border}`,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    opacity: advanceRoundBusy ? 0.6 : 1,
+                    fontFamily: "'DM Sans', sans-serif",
+                  }}
+                >
+                  {advanceRoundBusy
+                    ? "Confirming…"
+                    : canCloseRound
+                      ? "Confirm decisions"
+                      : `Confirm decisions · ${undecidedCount} left`}
+                </button>
+              ) : null}
             </>
           ) : null}
           {isAdmin && deliberationMode ? (
@@ -1485,35 +1544,6 @@ export default function ScoreboardPage() {
                   >
                     Advance email
                   </button>
-                  {canDeliberate && activeRound?.id && !viewingHistorical ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      disabled={advanceRoundBusy || !canCloseRound}
-                      title={
-                        !canCloseRound
-                          ? `Mark all ${undecidedCount || "remaining"} candidates Advance or Reject before closing`
-                          : nextRound
-                            ? `Close ${activeRound.name} and open ${nextRound.name}`
-                            : "Close this round"
-                      }
-                      onClick={() => { handleAdvanceRound(); setAdminMenuOpen(false); }}
-                      style={{
-                        ...adminMenuItemStyle(t),
-                        color: t.accent,
-                        fontWeight: 700,
-                        opacity: advanceRoundBusy || !canCloseRound ? 0.55 : 1,
-                      }}
-                    >
-                      {advanceRoundBusy
-                        ? "Advancing…"
-                        : !canCloseRound
-                          ? `Close round (${undecidedCount} undecided)`
-                          : nextRound
-                            ? `Close & open ${nextRound.name}`
-                            : "Close round"}
-                    </button>
-                  ) : null}
                 </div>
               ) : null}
             </div>
