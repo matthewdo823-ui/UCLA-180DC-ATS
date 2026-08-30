@@ -43,6 +43,7 @@ function mapRound(row) {
     rubricConfig: row.rubric_config || null,
     autoAdvancePercent: Number(row.auto_advance_percent) || 0,
     autoRejectPercent: Number(row.auto_reject_percent) || 0,
+    interviewGroupCount: Number(row.interview_group_count) || 1,
     createdAt: row.created_at,
   };
 }

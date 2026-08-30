@@ -26,6 +26,7 @@ const {
 const { firstRel } = require('../utils/supabaseHelpers');
 const { getUserName } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
+const { isMissingSchemaError } = require('../utils/schemaCompatibility');
 const {
     normalizeRoundDecision,
     mapRoundDecision,
@@ -36,7 +37,7 @@ const {
     summarizeIncompleteDeliberation,
     buildDecisionsCsv,
 } = require('../utils/roundDecisions');
-const { isResumeScreenType } = require('../utils/rounds');
+const { ROUND_TYPES, getRoundByType, isResumeScreenType, normalizeRoundType } = require('../utils/rounds');
 const {
     buildCandidateLinkLookups,
     resolveCandidateLink,
@@ -1943,6 +1944,7 @@ exports.getScoreboard = async (req, res) => {
             priorRoundDecisionRows,
             reviewResult,
             frqResult,
+            interviewEvaluationResult,
         ] = await Promise.all([
             supabase
                 .from('resumes')
@@ -2023,6 +2025,13 @@ exports.getScoreboard = async (req, res) => {
                 .select("id, resume_id, score, notes, graded_by, submitted_at")
                 .eq("cycle_id", activeCycleId)
                 .eq("round_id", resumeRound.id),
+            normalizeRoundType(deliberationRound.type) === ROUND_TYPES.COFFEE_CHAT
+                ? supabase
+                    .from("interview_evaluations")
+                    .select("candidate_id, rating, weighted_score, evaluated_by, notes, submitted_at")
+                    .eq("cycle_id", activeCycleId)
+                    .eq("round_id", deliberationRound.id)
+                : Promise.resolve({ data: [], error: null }),
         ]);
 
         const { data: resumes, error: resumeError } = resumeResult;
@@ -2030,11 +2039,13 @@ exports.getScoreboard = async (req, res) => {
         const { data: roundDecisionRows, error: decisionError } = roundDecisionResult;
         const { data: reviews, error: reviewError } = reviewResult;
         const { data: frqRows, error: frqError } = frqResult;
+        const { data: interviewEvaluationRows, error: interviewEvaluationError } = interviewEvaluationResult;
         if (resumeError) throw resumeError;
         if (cycleCandError) throw cycleCandError;
         if (decisionError) throw decisionError;
         if (reviewError) throw reviewError;
         if (frqError) throw frqError;
+        if (interviewEvaluationError && !isMissingSchemaError(interviewEvaluationError)) throw interviewEvaluationError;
 
         const candidateLinkLookups = buildCandidateLinkLookups(cycleCandidates);
         const decisionLookup = buildDecisionLookup(roundDecisionRows);
@@ -2260,6 +2271,8 @@ exports.getScoreboard = async (req, res) => {
             applyCandidateSignals(c, signalLookups)
         );
 
+        // Resume rank is retained as a tie-breaker after the cycle moves into
+        // Coffee Chats; the Coffee Chat total becomes the primary ranking value.
         candidatesWithSignals.sort((a, b) => {
             if (a.normalizedScore === null && b.normalizedScore === null) {
                 return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
@@ -2268,6 +2281,33 @@ exports.getScoreboard = async (req, res) => {
             if (b.normalizedScore === null) return -1;
             return b.normalizedScore - a.normalizedScore;
         });
+        candidatesWithSignals.forEach((c, index) => {
+            c.resumeScreenRank = index + 1;
+        });
+
+        const coffeeChatEvaluationsByCandidate = {};
+        (interviewEvaluationError ? [] : interviewEvaluationRows || []).forEach((row) => {
+            if (!Number.isFinite(Number(row.weighted_score))) return;
+            if (!coffeeChatEvaluationsByCandidate[row.candidate_id]) coffeeChatEvaluationsByCandidate[row.candidate_id] = [];
+            coffeeChatEvaluationsByCandidate[row.candidate_id].push(row);
+        });
+        candidatesWithSignals.forEach((candidate) => {
+            const evaluations = coffeeChatEvaluationsByCandidate[candidate.candidateId] || [];
+            candidate.coffeeChatScore = evaluations.reduce((sum, row) => sum + Number(row.weighted_score), 0);
+            candidate.coffeeChatEvaluationCount = evaluations.length;
+        });
+
+        const isCoffeeChatScoreboard = normalizeRoundType(deliberationRound.type) === ROUND_TYPES.COFFEE_CHAT;
+        if (isCoffeeChatScoreboard) {
+            candidatesWithSignals.sort((a, b) =>
+                b.coffeeChatScore - a.coffeeChatScore
+                || a.resumeScreenRank - b.resumeScreenRank
+                || String(a.id).localeCompare(String(b.id))
+            );
+            candidatesWithSignals.forEach((candidate) => {
+                candidate.rankingScore = candidate.coffeeChatScore;
+            });
+        }
         candidatesWithSignals.forEach((c, index) => { c.rank = index + 1; });
 
         const totalReviewed = candidatesWithSignals.filter(c => c.numReviews > 0).length;
@@ -2310,6 +2350,7 @@ exports.getScoreboard = async (req, res) => {
                 undecidedCount,
                 incompleteCount: incompleteSummary.incompleteCount,
                 notification,
+                rankingMode: isCoffeeChatScoreboard ? "coffee_chat" : "resume_screen",
             },
             metrics: metricsWithFrq,
             maxPerCategory,
@@ -2321,6 +2362,9 @@ exports.getScoreboard = async (req, res) => {
                 rejected: decisionCounts.reject,
                 pending: decisionCounts.pending,
                 avgScore: avgScore,
+                coffeeChatAverage: isCoffeeChatScoreboard && candidatesWithSignals.length
+                    ? Number((candidatesWithSignals.reduce((sum, candidate) => sum + candidate.coffeeChatScore, 0) / candidatesWithSignals.length).toFixed(1))
+                    : null,
             },
             candidates: candidatesWithSignals
         });
@@ -2695,7 +2739,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     // Once the active-cycle id is known, the cycle metadata, rubric, and resume
     // are independent. Fetch them together so opening a profile does not pay for
     // three sequential Supabase round trips before review loading can begin.
-    const [activeCycleResult, resumeRound, resumeResult] = await Promise.all([
+    const [activeCycleResult, resumeRound, resumeResult, cycleRounds] = await Promise.all([
         supabase
             .from('cycles')
             .select('id, name')
@@ -2736,7 +2780,11 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
             `)
             .eq('id', resumeId)
             .maybeSingle(),
+        getRoundsForCycle(activeCycleId),
     ]);
+
+    const activeRound = (cycleRounds || []).find((round) => round.status === 'active') || null;
+    const coffeeChatRound = getRoundByType(cycleRounds, ROUND_TYPES.COFFEE_CHAT);
 
     const { data: activeCycle, error: activeCycleError } = activeCycleResult;
     if (activeCycleError) {
@@ -2776,7 +2824,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
         throw err;
     }
 
-    const [reviewResult, frqResult] = await Promise.all([
+    const [reviewResult, frqResult, coffeeChatResult] = await Promise.all([
         supabase
             .from('resume_reviews')
             .select('id, scores, notes, submitted_at, graded_by, rubric_snapshot, decision')
@@ -2790,6 +2838,15 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
             .eq('resume_id', resumeId)
             .eq('cycle_id', activeCycleId)
             .eq('round_id', resumeRound.id),
+        coffeeChatRound
+            ? supabase
+                .from('interview_evaluations')
+                .select('id, rating, weighted_score, notes, evaluated_by, submitted_at')
+                .eq('candidate_id', candidate.id)
+                .eq('cycle_id', activeCycleId)
+                .eq('round_id', coffeeChatRound.id)
+                .order('submitted_at', { ascending: true })
+            : Promise.resolve({ data: [], error: null }),
     ]);
 
     const { data: reviews, error: reviewError } = reviewResult;
@@ -2801,9 +2858,15 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     }
 
     const { data: frqRows, error: frqError } = frqResult;
+    const { data: coffeeChatRows, error: coffeeChatError } = coffeeChatResult;
     if (frqError) {
         const err = new Error(frqError.message || 'Failed to load FRQ reviews');
         err.cause = frqError;
+        throw err;
+    }
+    if (coffeeChatError && !isMissingSchemaError(coffeeChatError)) {
+        const err = new Error(coffeeChatError.message || 'Failed to load Coffee Chat evaluations');
+        err.cause = coffeeChatError;
         throw err;
     }
 
@@ -2813,6 +2876,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     const graderIds = [
         ...(reviews || []).map((review) => review.graded_by),
         ...(frqRows || []).map((row) => row.graded_by),
+        ...(coffeeChatRows || []).map((row) => row.evaluated_by),
     ];
     const [gradedByUserLookup, reviewOverrideLookup] = await Promise.all([
         getGradedByUserLookup(graderIds),
@@ -2909,6 +2973,15 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     );
 
     const frqReviews = (frqRows || []).map((row) => mapFrqReviewRow(row, gradedByUserLookup));
+    const coffeeChatEvaluations = (coffeeChatError ? [] : coffeeChatRows || []).map((row) => ({
+        id: row.id,
+        rating: row.rating,
+        weightedScore: Number(row.weighted_score),
+        notes: row.notes || '',
+        reviewerName: gradedByUserLookup[row.evaluated_by]?.name || null,
+        reviewerEmail: gradedByUserLookup[row.evaluated_by]?.email || null,
+        submittedAt: row.submitted_at,
+    }));
     const compositeCandidate = applyCompositeScoringToCandidate(candidateWithOverrides, {
         frqReviews,
         rubricConfig: resumeRound.rubric_config,
@@ -2952,6 +3025,9 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
             categoryMaxScores: compositeCandidate.categoryMaxScores,
             reviews: compositeCandidate.reviews,
             frqReviews: compositeCandidate.frqReviews,
+            coffeeChatScore: coffeeChatEvaluations.reduce((sum, row) => sum + (Number.isFinite(row.weightedScore) ? row.weightedScore : 0), 0),
+            coffeeChatEvaluationCount: coffeeChatEvaluations.length,
+            coffeeChatEvaluations,
         },
     };
 }
