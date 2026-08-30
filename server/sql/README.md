@@ -25,11 +25,13 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 19 | `backfill_resume_candidate_ids.sql` | **Optional data repair** — link orphan `resumes` to `candidates` by name / Drive file id |
 | 20 | `allow_frq_score_zero.sql` | Allows FRQ grades of 0 (updates check constraint + `save_frq_review()` RPC) |
 | 21 | `add_candidate_referral_resolution.sql` | **Existing-database upgrade** — adds the referral open/resolved workflow |
+| 22 | `add_coffee_chat_scoring_and_groups.sql` | Coffee Chat random groups and per-evaluator Strong Yes / Yes / No / Strong No scoring |
 
 ## Notes
 
 - **Fresh database:** run 1–4, then 6–13 and 15–18 in order. Skip 5, 14, and 19–21 unless noted below. Fresh installs of current `add_frq_reviews.sql` already allow 0–4 FRQ scores, and current `add_candidate_referrals.sql` already includes referral resolution.
 - **Existing database:** skip scripts you have already applied. Each file uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` where possible, but re-running `init.sql` or seed blocks in `add_cycles_and_rounds.sql` may fail or duplicate data.
+- **`add_coffee_chat_scoring_and_groups.sql` (#22):** preserves legacy interview rows, changes new Coffee Chat evaluations to one row per evaluator, and adds persistent candidate-to-table assignments.
 - **`init.sql`** begins with a large commented block (legacy candidate/resume DDL); the active statements start at the `user_role` enum.
 - **`fix_candidates_form_sync_upsert.sql` (#5):** Run only if you applied an older `add_cycle_form_config.sql` that created a **partial** unique index (`WHERE google_form_response_id IS NOT NULL`). Fresh installs get the full index from #4 and can skip this. The server also handles form sync without relying on PostgREST upsert.
 - **`alter_resume_review_overrides_scores.sql` (#14):** Run only if `resume_review_overrides` was created with a single `override_score` column and no `override_scores`. **Do not run** if you applied the current `add_resume_review_overrides.sql`, which creates both columns.
@@ -39,6 +41,10 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 
 ## Current project migration checklist
 
+- **Required for Coffee Chat grading:** run
+  `add_coffee_chat_scoring_and_groups.sql` (#22). Until it is applied, the API
+  keeps existing pages readable but disables persistent table assignments and
+  per-evaluator Coffee Chat ratings.
 - **Required on the configured existing Supabase project:** run
   `add_candidate_referral_resolution.sql` (#21). The current project has the
   referrals table but does not yet have its `status` and `resolved_at` columns.
