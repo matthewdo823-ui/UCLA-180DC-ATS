@@ -11,7 +11,8 @@ import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
-import { formatPoints, getInitials } from "../../utils/format";
+import { getInitials } from "../../utils/format";
+import { formatReviewCount } from "../../utils/reviewCounts";
 
 const DECISION_STYLE = {
   pending: { bg: "rgba(107,114,128,0.12)", color: "#6B7280", bd: "rgba(107,114,128,0.28)" },
@@ -74,7 +75,7 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
             </p>
             {candidate.avgResumeScore != null ? (
               <p style={{ margin: "6px 0 0", fontSize: 12, color: css.greenDark, fontWeight: 600 }}>
-                Resume screen avg: {formatPoints(candidate.avgResumeScore, candidate.avgResumeMaxScore)} · {candidate.resumeReviewCount} resume review{candidate.resumeReviewCount === 1 ? "" : "s"}
+                Resume screen avg: {candidate.avgResumeScore}% · {formatReviewCount(candidate.resumeReviewCount, "resume")}
               </p>
             ) : null}
           </div>

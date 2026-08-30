@@ -9,8 +9,7 @@ import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
-import { formatDate, formatNumber, formatPoints, getInitials, hasNumericScore, titleCase } from "../../utils/format";
-import { resolveReviewMaxScore } from "../../utils/rubric";
+import { formatDate, formatNumber, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 import { formatReviewCount } from "../../utils/reviewCounts";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
@@ -249,7 +248,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
           <div style={{ margin: "6px 18px 0", padding: "10px 12px", background: "#F8FAF6", border: "1px solid #E3E8DD", borderRadius: 8 }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.05em", margin: "0 0 5px", fontWeight: 700 }}>SUMMARY</p>
             <p style={{ fontSize: 12, lineHeight: 1.45, color: css.textDark, margin: 0 }}>
-              Average score given: {formatPoints(grader.averageScore, grader.averageMaxScore ?? grader.maxScore, { suffix: true })}. Latest grading activity: {formatDate(grader.latestReviewAt, { fallback: "Not yet" })}.
+              Average normalized score given: {formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%. Raw avg: {formatNumber(grader.averageScore)} pts. Latest grading activity: {formatDate(grader.latestReviewAt, { fallback: "Not yet" })}.
             </p>
           </div>
 
@@ -263,7 +262,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
                   <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{review.resumeName}</p>
                   <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>{formatDate(review.submittedAt, { fallback: "Not yet" })}</p>
                 </div>
-                <div style={{ fontSize: 12, color: cardGreen, fontWeight: 700 }}>{formatPoints(review.score, resolveReviewMaxScore(review))}</div>
+                <div style={{ fontSize: 12, color: cardGreen, fontWeight: 700 }}>{formatNumber(review.normalizedScore ?? review.score)}%</div>
               </div>
             ))}
             {grader.reviews?.length === 0 && (
@@ -556,7 +555,7 @@ export default function GraderScoreboardPage() {
                 {grader.reviewCount} / {grader.expectedReviews}
               </div>
               <div style={{ fontSize: 11, color: css.textGray }}>
-                {formatReviewCount(grader.reviewCount, activeMode.reviewType)} · {grader.progressScore}% complete · avg {formatPoints(grader.averageScore, grader.averageMaxScore ?? grader.maxScore)}
+                {formatReviewCount(grader.reviewCount, activeMode.reviewType)} · {grader.progressScore}% complete · avg {formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%
               </div>
             </div>
 

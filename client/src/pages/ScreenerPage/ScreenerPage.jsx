@@ -27,28 +27,25 @@ const GRADING_MODES = {
   FRQ: "frq",
 };
 
-function GradingModeToggle({ mode, onChange, resumeComplete, frqComplete, showValidation, disabled = false }) {
+function GradingModeToggle({ mode, onChange, disabled = false }) {
   const options = [
-    { id: GRADING_MODES.RESUME, label: "Resume", complete: resumeComplete, points: 8 },
-    { id: GRADING_MODES.FRQ, label: "Free response", complete: frqComplete, points: 4 },
+    { id: GRADING_MODES.RESUME, label: "Resume" },
+    { id: GRADING_MODES.FRQ, label: "Free response" },
   ];
 
   return (
     <div
       style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        width: "100%",
-        borderRadius: 12,
+        display: "inline-flex",
+        borderRadius: 20,
         border: `1px solid ${css.borderLight}`,
-        padding: 4,
-        gap: 4,
-        background: "#F1F5EE",
+        overflow: "hidden",
+        background: css.cardWhite,
+        marginRight: 8,
       }}
     >
-      {options.map(({ id, label, complete, points }) => {
+      {options.map(({ id, label }) => {
         const active = mode === id;
-        const incompleteError = showValidation && !complete;
         return (
           <button
             key={id}
@@ -57,14 +54,14 @@ function GradingModeToggle({ mode, onChange, resumeComplete, frqComplete, showVa
             onClick={() => onChange(id)}
             style={{
               ...topbarGhostButtonStyle,
-              border: `1px solid ${incompleteError ? css.red : active ? css.greenDark : "transparent"}`,
-              borderRadius: 9,
+              border: "none",
+              borderRadius: 0,
               margin: 0,
               boxShadow: active ? "0 1px 4px rgba(40,98,65,0.16)" : "none",
               padding: "10px 14px",
               fontSize: 12,
               background: active ? css.cardWhite : "transparent",
-              color: incompleteError ? css.red : active ? css.greenDark : css.textGray,
+              color: active ? css.greenDark : css.textGray,
               cursor: disabled ? "not-allowed" : "pointer",
               opacity: disabled ? 0.65 : 1,
               display: "flex",
@@ -73,10 +70,7 @@ function GradingModeToggle({ mode, onChange, resumeComplete, frqComplete, showVa
               gap: 10,
             }}
           >
-            <span style={{ fontWeight: 700 }}>{label} · {points} pts</span>
-            <span style={{ fontSize: 10, fontWeight: 700 }}>
-              {complete ? "✓ Graded" : "Needs grade"}
-            </span>
+            {label}
           </button>
         );
       })}
@@ -95,8 +89,7 @@ export default function ScreenerPage() {
   const [resume, setResume] = useState(null);
   const [scores, setScores] = useState({});
   const [frqScore, setFrqScore] = useState(null);
-  const [resumeNotes, setResumeNotes] = useState("");
-  const [frqNotes, setFrqNotes] = useState("");
+  const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -149,14 +142,6 @@ export default function ScreenerPage() {
     () => typeof frqScore === "number" && frqScore >= 0 && frqScore <= FRQ_MAX_SCORE,
     [frqScore]
   );
-
-  useEffect(() => {
-    if (!showValidationErrors) return;
-    if (resumeScoringComplete && (!isAdmin || frqScoringComplete)) {
-      setShowValidationErrors(false);
-      setSubmitError("");
-    }
-  }, [frqScoringComplete, isAdmin, resumeScoringComplete, showValidationErrors]);
 
   const fetchMyReviews = useCallback(async (opts = {}) => {
     const showLoading = opts.showLoading !== false;
@@ -219,7 +204,7 @@ export default function ScreenerPage() {
       const data = await res.json();
       setResume(data);
       setScores(review.scores || {});
-      setResumeNotes(review.notes ?? "");
+      setNotes(review.notes ?? "");
       setEditingReviewId(data.reviewId || reviewId || null);
     } catch (e) {
       console.error("Load reviewed resume failed:", e);
@@ -250,7 +235,7 @@ export default function ScreenerPage() {
       const data = await res.json();
       setResume(data);
       setFrqScore(typeof data.frqScore === "number" ? data.frqScore : null);
-      setFrqNotes(data.notes ?? "");
+      setNotes(data.notes ?? "");
       setEditingReviewId(data.reviewId || reviewId);
     } catch (e) {
       console.error("Load FRQ review failed:", e);
@@ -283,10 +268,7 @@ export default function ScreenerPage() {
       const data = await res.json();
       setResume(data);
       setScores({});
-      setFrqScore(null);
-      setResumeNotes("");
-      setFrqNotes("");
-      setShowValidationErrors(false);
+      setNotes("");
       setEditingReviewId(null);
     } catch (e) {
       console.error("Fetch failed:", e);
@@ -319,7 +301,7 @@ export default function ScreenerPage() {
       const data = await res.json();
       setResume(data);
       setFrqScore(null);
-      setFrqNotes("");
+      setNotes("");
       setEditingReviewId(null);
     } catch (e) {
       console.error("Fetch FRQ failed:", e);
@@ -331,7 +313,7 @@ export default function ScreenerPage() {
     }
   }, [authedFetch, activeRound]);
 
-  const fetchNext = fetchNextResume;
+  const fetchNext = isFrqMode ? fetchNextFrq : fetchNextResume;
 
   useEffect(() => {
     if (!cycleLoading) fetchNext();
@@ -363,19 +345,9 @@ export default function ScreenerPage() {
   async function handleResumeAction(type) {
     if (submittingRef.current) return;
 
-    const requiresCombinedGrade = isAdmin && !editingReviewId;
-    const missingResume = !resumeScoringComplete;
-    const missingFrq = requiresCombinedGrade && !frqScoringComplete;
-    if (missingResume || missingFrq) {
+    if (!resumeScoringComplete) {
       setShowValidationErrors(true);
-      setSubmitError(
-        missingResume && missingFrq
-          ? "Complete both the resume rubric and free-response grade before submitting."
-          : missingResume
-            ? "Complete every resume rubric category before submitting."
-            : "Complete the free-response grade before submitting."
-      );
-      setGradingMode(missingResume ? GRADING_MODES.RESUME : GRADING_MODES.FRQ);
+      setSubmitError("Complete every resume rubric category before submitting.");
       return;
     }
 
@@ -384,7 +356,7 @@ export default function ScreenerPage() {
     submittingRef.current = true;
     setSubmittingAction(type);
 
-    const payload = { scores, notes: resumeNotes, decision: type };
+    const payload = { scores, notes, decision: type };
 
     try {
       const res = editingReviewId
@@ -396,11 +368,7 @@ export default function ScreenerPage() {
         : await authedFetch(`${API}/reviews`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              resume_id: resume.id,
-              ...payload,
-              ...(requiresCombinedGrade ? { frq_score: frqScore, frq_notes: frqNotes } : {}),
-            }),
+            body: JSON.stringify({ resume_id: resume.id, ...payload }),
           });
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
@@ -408,16 +376,11 @@ export default function ScreenerPage() {
         setSubmitError(message);
         throw new Error(message);
       }
-
       // The API only responds successfully after Supabase has accepted the
-      // review (and the paired FRQ grade for admins). Celebrate that confirmed
-      // result, never the click itself.
+      // review. Celebrate that confirmed result, never the click itself.
       setCelebrationKey((key) => key + 1);
       setEditingReviewId(null);
-      await Promise.all([
-        fetchMyReviews({ showLoading: false }),
-        requiresCombinedGrade ? fetchMyFrqReviews({ showLoading: false }) : Promise.resolve(),
-      ]);
+      await fetchMyReviews({ showLoading: false });
       // This review changes the scoreboard, the dashboard counts and this
       // grader's coverage — expire them so those pages don't serve a cached
       // number that's now one review out of date.
@@ -445,11 +408,6 @@ export default function ScreenerPage() {
   async function handleFrqComplete() {
     if (submittingRef.current) return;
 
-    if (!editingReviewId) {
-      await handleResumeAction("pass");
-      return;
-    }
-
     if (!frqScoringComplete) {
       setShowValidationErrors(true);
       setSubmitError("Complete the free-response grade before submitting.");
@@ -460,7 +418,7 @@ export default function ScreenerPage() {
     submittingRef.current = true;
     setSubmittingAction("frq");
 
-    const payload = { score: frqScore, notes: frqNotes };
+    const payload = { score: frqScore, notes };
 
     try {
       const res = editingReviewId
@@ -505,7 +463,7 @@ export default function ScreenerPage() {
 
   function handleResumeReset() {
     setScores({});
-    setResumeNotes("");
+    setNotes("");
     setSubmitError("");
     setShowValidationErrors(false);
   }
@@ -513,7 +471,16 @@ export default function ScreenerPage() {
   function handleGradingModeChange(nextMode) {
     if (nextMode === gradingMode) return;
     setGradingMode(nextMode);
+    setResume(null);
+    setScores({});
+    setFrqScore(null);
+    setNotes("");
+    setEditingReviewId(null);
+    setFetchError("");
     setSubmitError("");
+    setShowValidationErrors(false);
+    setDrawerOpen(false);
+    setPastReviewDetail(null);
   }
 
   const screeningBlocked = !cycleLoading && (!activeRound || cycleError || !isResumeRound);
@@ -545,9 +512,6 @@ export default function ScreenerPage() {
           <GradingModeToggle
             mode={gradingMode}
             onChange={handleGradingModeChange}
-            resumeComplete={resumeScoringComplete}
-            frqComplete={frqScoringComplete}
-            showValidation={showValidationErrors}
             disabled={Boolean(submittingAction)}
           />
         ) : null}
@@ -605,10 +569,10 @@ export default function ScreenerPage() {
                     <FrqScoringPanel
                       score={frqScore}
                       onScore={setFrqScore}
-                      notes={frqNotes}
-                      onNotes={setFrqNotes}
+                      notes={notes}
+                      onNotes={setNotes}
                       onComplete={handleFrqComplete}
-                      scoringComplete={isAdmin && !editingReviewId ? true : frqScoringComplete}
+                      scoringComplete={frqScoringComplete}
                       submitError={submitError}
                       submitting={Boolean(submittingAction)}
                     />
@@ -617,11 +581,11 @@ export default function ScreenerPage() {
                       rubric={rubric}
                       scores={scores}
                       onScore={(metric, val) => setScores((s) => ({ ...s, [metric]: val }))}
-                      notes={resumeNotes}
-                      onNotes={setResumeNotes}
+                      notes={notes}
+                      onNotes={setNotes}
                       onAction={handleResumeAction}
                       onReset={handleResumeReset}
-                      scoringComplete={isAdmin && !editingReviewId ? true : resumeScoringComplete}
+                      scoringComplete={resumeScoringComplete}
                       submitError={submitError}
                       submittingAction={submittingAction}
                     />

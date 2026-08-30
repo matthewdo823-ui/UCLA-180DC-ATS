@@ -12,9 +12,8 @@ import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import { UserFriendlyError, formatResponseError } from "../../utils/errors";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
-import { formatPoints, formatScore, hasNumericScore, titleCase } from "../../utils/format";
+import { formatScore, hasNumericScore, titleCase } from "../../utils/format";
 import { isAdminRole } from "../../utils/auth";
-import { resolveReviewMaxScore } from "../../utils/rubric";
 import { formatReviewCountPair, formatReviewCounts, getFreeResponseReviewCount, getResumeReviewCount } from "../../utils/reviewCounts";
 import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
 import {
@@ -46,7 +45,7 @@ import {
   getReviewerInitials,
   getReviewerLabel,
   getReviewTotal,
-  getSourceAggregateScore,
+  getSourceNormalizedScore,
   normalizeMetricScore,
   scoreColor,
   SORT_TABS,
@@ -212,7 +211,7 @@ function buildActiveFilterPills(filters, deliberationMode) {
     pills.push({ key: "reviews", label: reviewLabels[effective.reviews] || effective.reviews, clear: { reviews: "all" } });
   }
   if (effective.scoreBand !== "all") {
-    const bandLabels = { top: "Top 20%", strong: "Top 30%", low: "Low score", pending: "No score" };
+    const bandLabels = { top: "Top 20%", strong: "Top 30%", low: "Low <60%", pending: "No score" };
     pills.push({ key: "scoreBand", label: bandLabels[effective.scoreBand] || effective.scoreBand, clear: { scoreBand: "all" } });
   }
   if (effective.signals !== "all") {
@@ -295,7 +294,7 @@ function ScoreTiles({ score, maxScore }) {
   );
 }
 
-function CategoryRow({ metric, value, maxPerCategory = 4 }) {
+function CategoryRow({ metric, value, maxPerCategory = 4, equalized = false }) {
   const pct = hasNumericScore(value) ? Math.max(0, Math.min(100, (Number(value) / maxPerCategory) * 100)) : 0;
 
   return (
@@ -303,7 +302,13 @@ function CategoryRow({ metric, value, maxPerCategory = 4 }) {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
         <span style={{ fontSize: 12, color: css.textDark }}>{titleCase(metric)}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: cardGreen }}>
-          {formatScore(value)} <span style={{ color: css.textGray, fontWeight: 400 }}>/ {maxPerCategory}</span>
+          {equalized ? (
+            <>{formatScore(pct)}%</>
+          ) : (
+            <>
+              {formatScore(value)} <span style={{ color: css.textGray, fontWeight: 400 }}>/ {maxPerCategory}</span>
+            </>
+          )}
         </span>
       </div>
       <div style={{ height: 5, background: "#EEF1EC", borderRadius: 3, overflow: "hidden" }}>
@@ -324,9 +329,9 @@ function ScorecardModal({
   onOverrideSaved,
 }) {
   const [reviewersOpen, setReviewersOpen] = useState(false);
+  const headlineScore = getHeadlineScore(candidate);
+  const sourceNormalizedScore = getSourceNormalizedScore(candidate);
   const aggregateScore = getAggregateScore(candidate);
-  const sourceAggregateScore = getSourceAggregateScore(candidate);
-  const availableScore = candidate?.compositeMax ?? candidate?.maxScore;
   const reviews = candidate?.reviews ?? [];
   const frqReviews = candidate?.frqReviews ?? [];
   const latestNote = [...reviews, ...frqReviews].reverse().find(review => review.notes)?.notes;
@@ -433,14 +438,14 @@ function ScorecardModal({
           <div style={{ background: cardPale, padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #DCE7D2" }}>
             <div>
               <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>
-                {equalized ? "EQUALIZED" : "AVERAGE"} POINTS
+                {equalized ? "EQUALIZED" : "NORMALIZED"} SCORE
               </p>
               <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
-                {formatPoints(aggregateScore, availableScore)}
+                {formatScore(headlineScore)}<span style={{ fontSize: 14, color: "#3B6D11" }}>%</span>
               </p>
-              {equalized && sourceAggregateScore != null ? (
+              {equalized && sourceNormalizedScore != null ? (
                 <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
-                  Unadjusted: {formatPoints(sourceAggregateScore, availableScore)} points
+                  Unadjusted: {formatScore(sourceNormalizedScore)}%
                 </p>
               ) : aggregateScore != null ? (
                 <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
@@ -451,7 +456,7 @@ function ScorecardModal({
             </div>
             <div style={{ textAlign: "right" }}>
               <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>{metrics.length} CATEGORIES</p>
-              <ScoreTiles score={aggregateScore} maxScore={Math.round(Number(availableScore) || 0)} />
+              <ScoreTiles score={headlineScore} maxScore={100} />
             </div>
           </div>
 
@@ -462,6 +467,7 @@ function ScorecardModal({
                 key={metric}
                 metric={metric}
                 maxPerCategory={metric === FRQ_METRIC ? FRQ_MAX_SCORE : maxPerCategory}
+                equalized={equalized}
                 value={normalizeMetricScore(candidate, metric)}
               />
             ))}
@@ -493,7 +499,9 @@ function ScorecardModal({
               <div style={{ marginTop: 10 }}>
                 {reviews.map((review, index) => {
                   const reviewOverridden = review?.adminOverride?.overrideScore != null;
-                  const displayScore = formatPoints(getReviewTotal(review), resolveReviewMaxScore(review, { metrics, maxPerCategory }));
+                  const displayScore = equalized && hasNumericScore(review.normalizedScore)
+                    ? `${formatScore(Math.min(100, review.normalizedScore))}%`
+                    : `${formatScore(getReviewTotal(review))}/24`;
 
                   return (
                   <div key={review.id ?? index} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
@@ -514,7 +522,9 @@ function ScorecardModal({
                   );
                 })}
                 {frqReviews.map((review, index) => {
-                  const displayScore = formatPoints(review.score ?? getReviewTotal(review), review.maxScore ?? FRQ_MAX_SCORE);
+                  const displayScore = equalized && hasNumericScore(review.normalizedScore)
+                    ? `${formatScore(Math.min(100, review.normalizedScore))}%`
+                    : `${formatScore(review.score ?? getReviewTotal(review))}/${FRQ_MAX_SCORE}`;
 
                   return (
                     <div key={review.id ?? `frq-${index}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
@@ -782,8 +792,8 @@ export default function ScoreboardPage() {
   const displayStats = useMemo(() => {
     const base = data.stats ?? {};
     if (!equalizeActive) return base;
-    const { avgScore, avgMaxScore } = recomputeEqualizedStats(candidates);
-    return { ...base, avgScore, avgMaxScore };
+    const { avgScore } = recomputeEqualizedStats(candidates);
+    return { ...base, avgScore };
   }, [data.stats, candidates, equalizeActive]);
   const metrics = useMemo(() => data.metrics ?? [], [data.metrics]);
   const maxPerCategory = data.maxPerCategory ?? 4;
@@ -1169,7 +1179,7 @@ export default function ScoreboardPage() {
         { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
         { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
         { label: "ADVANCED", value: statCount(displayStats?.advanced), clickable: true },
-        { label: "AVG SCORE", value: formatPoints(displayStats?.avgScore, displayStats?.avgMaxScore), clickable: false },
+        { label: "AVG SCORE", value: statCount(displayStats?.avgScore), clickable: false },
       ];
 
   const decidedCount = deliberationMode
@@ -1558,7 +1568,7 @@ export default function ScoreboardPage() {
             <option value="all">All scores</option>
             <option value="top">Top 20%</option>
             <option value="strong">Top 30%</option>
-            <option value="low">Low score</option>
+            <option value="low">Low (&lt; 60%)</option>
             <option value="pending">No score</option>
           </select>
         </FilterField>
@@ -1824,10 +1834,10 @@ export default function ScoreboardPage() {
 
             <div>
               <div style={{ color: scoreColor(headlineScore), fontSize: 17, fontFamily: sansFont, fontWeight: 600, lineHeight: 1.2 }}>
-                {formatScorePointsLine(c) ?? "—"}
+                {hasNumericScore(headlineScore) ? `${formatScore(headlineScore)}%` : "—"}
               </div>
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, lineHeight: 1.35 }}>
-                {equalizeActive ? "Equalized points" : "Average points"}
+                {formatScorePointsLine(c) ?? (equalizeActive ? "Equalized" : "No score")}
                 <br />
                 {formatReviewCounts(c)}
               </div>

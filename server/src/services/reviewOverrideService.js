@@ -1,10 +1,10 @@
 const supabase = require("../config/supabase");
 const {
-  RESUME_MAX_SCORE,
   computeRawScore,
   computeNormalizedFromAggregate,
+  getRubricForYear,
+  getRubricMaxScore,
   resolveReviewScoringContext,
-  scaleRubricScoreToResumeScore,
 } = require("../utils/rubric");
 
 function resolveOverrideScore(row) {
@@ -24,7 +24,6 @@ function mapReviewOverride(row) {
     id: row.id,
     reviewId: row.review_id,
     overrideScore: overrideScore == null ? null : overrideScore,
-    scoreScale: Number(row.override_scores?.scoreScale) || null,
     adminNotes: row.admin_notes || "",
     adminUserId: row.admin_user_id ?? null,
     updatedAt: row.updated_at || null,
@@ -77,11 +76,30 @@ function buildCategoryScoresFromReviews(reviews, metrics = []) {
 }
 
 function resolveResumeMaxScore(options = {}, candidateYear) {
-  return RESUME_MAX_SCORE;
+  if (Number.isFinite(Number(options.resumeMaxScore)) && options.resumeMaxScore > 0) {
+    return Number(options.resumeMaxScore);
+  }
+  if (options.rubricConfig) {
+    return getRubricMaxScore(getRubricForYear(options.rubricConfig, candidateYear));
+  }
+  return null;
 }
 
 function resolveReviewMaxScore(review, options = {}) {
-  return RESUME_MAX_SCORE;
+  if (Number.isFinite(Number(review?.maxScore)) && review.maxScore > 0) {
+    return Number(review.maxScore);
+  }
+
+  const context = resolveReviewScoringContext(review, {
+    rubricConfig: options.rubricConfig,
+    candidateYear: options.candidateYear,
+  });
+  if (Number.isFinite(Number(context.maxScore)) && context.maxScore > 0) {
+    return Number(context.maxScore);
+  }
+
+  const metrics = Object.keys(review?.scores || {});
+  return metrics.length > 0 ? metrics.length * 4 : 24;
 }
 
 function applyReviewOverrideToReview(review, override, options = {}) {
@@ -99,18 +117,10 @@ function applyReviewOverrideToReview(review, override, options = {}) {
     return adminOverride ? { ...review, adminOverride } : review;
   }
 
-  const storedOverride = Number(overrideScore);
+  const totalOverride = Number(overrideScore);
   const sourceScores = review.sourceScores || review.scores || {};
   const metrics = Object.keys(sourceScores);
   const sourceScore = computeRawScore(sourceScores, metrics);
-  const sourceContext = resolveReviewScoringContext(review, {
-    rubricConfig: options.rubricConfig,
-    candidateYear: options.candidateYear,
-  });
-  const totalOverride = Number(override?.scoreScale) === RESUME_MAX_SCORE
-    ? storedOverride
-    : scaleRubricScoreToResumeScore(storedOverride, sourceContext.maxScore);
-  const canonicalSourceScore = scaleRubricScoreToResumeScore(sourceScore, sourceContext.maxScore);
   const maxScore = resolveReviewMaxScore(review, options);
   const normalizedScore = computeNormalizedFromAggregate(totalOverride, maxScore);
 
@@ -119,13 +129,11 @@ function applyReviewOverrideToReview(review, override, options = {}) {
     sourceScores,
     scores: sourceScores,
     score: totalOverride,
-    sourceScore: canonicalSourceScore,
-    sourceRubricScore: sourceScore,
+    sourceScore,
     sourceNormalizedScore: review.sourceNormalizedScore ?? review.normalizedScore,
     normalizedScore,
     adminOverride: {
       overrideScore: totalOverride,
-      scoreScale: RESUME_MAX_SCORE,
       adminNotes: override.adminNotes || "",
       updatedAt: override.updatedAt || null,
     },
@@ -135,39 +143,19 @@ function applyReviewOverrideToReview(review, override, options = {}) {
 function recomputeCandidateScoresFromReviews(candidate, metrics = [], options = {}) {
   const reviews = candidate.reviews || [];
   let totalScore = 0;
-  let totalNormalized = 0;
-  let totalMaxScore = 0;
   let count = 0;
-  let normalizedCount = 0;
-  let maxScoreCount = 0;
 
   reviews.forEach((review) => {
     const raw = Number(review.score);
     if (!Number.isFinite(raw)) return;
     totalScore += raw;
     count += 1;
-
-    const reviewMax = resolveReviewMaxScore(review, options);
-    if (Number.isFinite(reviewMax) && reviewMax > 0) {
-      totalMaxScore += reviewMax;
-      maxScoreCount += 1;
-    }
-
-    const normalized = Number.isFinite(Number(review.normalizedScore))
-      ? Number(review.normalizedScore)
-      : computeNormalizedFromAggregate(raw, reviewMax);
-    if (Number.isFinite(normalized)) {
-      totalNormalized += normalized;
-      normalizedCount += 1;
-    }
   });
 
   const aggregateScore = count > 0 ? Number((totalScore / count).toFixed(1)) : null;
-  const resumeMax = maxScoreCount > 0
-    ? Number((totalMaxScore / maxScoreCount).toFixed(1))
-    : resolveResumeMaxScore(options, candidate.year);
-  const normalizedScore = normalizedCount > 0
-    ? Number((totalNormalized / normalizedCount).toFixed(1))
+  const resumeMax = resolveResumeMaxScore(options, candidate.year);
+  const normalizedScore = resumeMax
+    ? computeNormalizedFromAggregate(aggregateScore, resumeMax)
     : null;
 
   const metricList = metrics.length ? metrics : candidate.metrics || [];
@@ -176,8 +164,6 @@ function recomputeCandidateScoresFromReviews(candidate, metrics = [], options = 
     ...candidate,
     aggregateScore,
     normalizedScore,
-    resumeMax,
-    maxScore: resumeMax,
     // Cosmetic display alias — sorting/ranking should use aggregateScore.
     score: normalizedScore == null ? null : Math.round(normalizedScore),
     categoryScores: buildCategoryScoresFromReviews(reviews, metricList),

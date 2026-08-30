@@ -1,15 +1,4 @@
 const RUBRIC_MAX_PER_CATEGORY = 4;
-const RESUME_MAX_SCORE = 8;
-
-// Canonical maxima for the current resume rubric. Historical reviews continue
-// to use the maximum stored in their rubric snapshot.
-const CURRENT_RESUME_MAX_SCORE_BY_YEAR = Object.freeze({
-  freshman: 8,
-  sophomore: 8,
-  junior: 8,
-  juniortransfer: 8,
-  senior: 8,
-});
 
 /** Pre-2026 rubric: four categories scored 1–6 (max 24). */
 const LEGACY_RUBRIC_METRICS = [
@@ -18,7 +7,6 @@ const LEGACY_RUBRIC_METRICS = [
   "communication",
   "social impact",
 ];
-const LEGACY_ONLY_RUBRIC_METRICS = ["experience", "leadership", "communication"];
 const LEGACY_RUBRIC_MAX_PER_CATEGORY = 6;
 const LEGACY_RUBRIC_MAX_SCORE = LEGACY_RUBRIC_METRICS.length * LEGACY_RUBRIC_MAX_PER_CATEGORY;
 
@@ -56,19 +44,6 @@ const DEFAULT_RUBRIC_CONFIG = {
 function normalizeYearKey(yearRaw) {
   if (yearRaw == null || yearRaw === "") return null;
   return String(yearRaw).toLowerCase().replace(/\s/g, "");
-}
-
-function getCurrentResumeMaxScore(yearRaw) {
-  const key = normalizeYearKey(yearRaw);
-  return CURRENT_RESUME_MAX_SCORE_BY_YEAR[key]
-    ?? RESUME_MAX_SCORE;
-}
-
-function scaleRubricScoreToResumeScore(score, rubricMaxScore) {
-  const raw = Number(score);
-  const sourceMax = Number(rubricMaxScore);
-  if (!Number.isFinite(raw) || !Number.isFinite(sourceMax) || sourceMax <= 0) return null;
-  return Number((Math.max(0, Math.min(sourceMax, raw)) / sourceMax * RESUME_MAX_SCORE).toFixed(2));
 }
 
 function getRubricForYear(rubricConfig, yearRaw) {
@@ -167,7 +142,7 @@ function buildRubricSnapshot(rubricConfig, yearRaw) {
 
 function isLegacyReviewScores(scores = {}) {
   const keys = Object.keys(scores || {});
-  return keys.some((key) => LEGACY_ONLY_RUBRIC_METRICS.includes(key));
+  return keys.some((key) => LEGACY_RUBRIC_METRICS.includes(key));
 }
 
 function buildLegacyRubricSnapshot() {
@@ -228,9 +203,7 @@ function resolveReviewScoringContext(review, options = {}) {
   const metrics = Object.keys(scores);
   return {
     metrics,
-    maxScore: metrics.length
-      ? metrics.length * RUBRIC_MAX_PER_CATEGORY
-      : getCurrentResumeMaxScore(options.candidateYear),
+    maxScore: metrics.length ? metrics.length * RUBRIC_MAX_PER_CATEGORY : null,
     maxPerCategory: RUBRIC_MAX_PER_CATEGORY,
     legacy: false,
     snapshot: null,
@@ -238,21 +211,39 @@ function resolveReviewScoringContext(review, options = {}) {
 }
 
 function resolveCandidateResumeMax(reviews = [], options = {}) {
-  return RESUME_MAX_SCORE;
+  if (!reviews?.length) {
+    if (options.rubricConfig) {
+      return getRubricMaxScore(getRubricForYear(options.rubricConfig, options.candidateYear));
+    }
+    return null;
+  }
+
+  const maxScores = reviews
+    .map((review) => {
+      if (Number.isFinite(Number(review?.maxScore)) && review.maxScore > 0) {
+        return Number(review.maxScore);
+      }
+      return resolveReviewScoringContext(review, options).maxScore;
+    })
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  const unique = [...new Set(maxScores)];
+  if (unique.length === 1) return unique[0];
+
+  if (options.rubricConfig) {
+    return getRubricMaxScore(getRubricForYear(options.rubricConfig, options.candidateYear));
+  }
+
+  return maxScores[0] ?? null;
 }
 
 function getReviewScoring(review, options = {}) {
   const context = resolveReviewScoringContext(review, options);
-  const rubricScore = computeRawScore(review?.scores || {}, context.metrics);
-  const rubricMaxScore = context.maxScore;
-  const normalizedScore = computeNormalizedFromAggregate(rubricScore, rubricMaxScore);
-  const score = scaleRubricScoreToResumeScore(rubricScore, rubricMaxScore);
+  const score = computeRawScore(review?.scores || {}, context.metrics);
+  const normalizedScore = computeNormalizedFromAggregate(score, context.maxScore);
   return {
     ...context,
     score,
-    maxScore: RESUME_MAX_SCORE,
-    rubricScore,
-    rubricMaxScore,
     normalizedScore,
   };
 }
@@ -283,7 +274,7 @@ function getMetricsFromRubricConfig(rubricConfig) {
 
 function getLegacyNormalizedScore(scores) {
   const raw = computeRawScore(scores);
-  return Number(Math.min(100, (raw / LEGACY_RUBRIC_MAX_SCORE) * 100).toFixed(2));
+  return Number(Math.min(100, (raw / 24) * 100).toFixed(2));
 }
 
 /** Cosmetic % derived from raw rubric scores — never treat as source of truth. */
@@ -320,15 +311,11 @@ function resolveReviewNormalizedValue(review, options = {}) {
 
 module.exports = {
   RUBRIC_MAX_PER_CATEGORY,
-  RESUME_MAX_SCORE,
-  CURRENT_RESUME_MAX_SCORE_BY_YEAR,
   LEGACY_RUBRIC_METRICS,
   LEGACY_RUBRIC_MAX_PER_CATEGORY,
   LEGACY_RUBRIC_MAX_SCORE,
   DEFAULT_RUBRIC_CONFIG,
   normalizeYearKey,
-  getCurrentResumeMaxScore,
-  scaleRubricScoreToResumeScore,
   getRubricForYear,
   getRubricMaxScore,
   validateRubricConfig,
