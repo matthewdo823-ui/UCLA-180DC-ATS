@@ -56,45 +56,24 @@ const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
 const cardLime = "#C0DD97";
 
-const PAGE_THEME = {
-  light: {
-    pageBg: css.bgLight,
-    text: css.textDark,
-    textMuted: css.textGray,
-    cardBg: css.cardWhite,
-    border: css.borderLight,
-    accent: css.greenDark,
-    titleAccent: css.greenDark,
-    rowBg: css.cardWhite,
-    rowFocus: "rgba(40, 98, 65, 0.06)",
-    statValue: css.textDark,
-    btnGhostBg: "#FFF",
-    btnGhostText: css.textDark,
-    selectBg: "#FFF",
-    selectText: css.textDark,
-    chipActiveBg: "rgba(40, 98, 65, 0.1)",
-    infoBg: "rgba(40, 98, 65, 0.06)",
-    infoBorder: "rgba(40, 98, 65, 0.18)",
-  },
-  dark: {
-    pageBg: "#0B1628",
-    text: "#E8EEF4",
-    textMuted: "#8FA3B8",
-    cardBg: "#141F33",
-    border: "rgba(255,255,255,0.09)",
-    accent: "#3DCF9A",
-    titleAccent: "#6EE7B8",
-    rowBg: "#141F33",
-    rowFocus: "rgba(61,207,154,0.14)",
-    statValue: "#F3F7FB",
-    btnGhostBg: "#1C2A42",
-    btnGhostText: "#E8EEF4",
-    selectBg: "#1C2A42",
-    selectText: "#E8EEF4",
-    chipActiveBg: "rgba(61,207,154,0.18)",
-    infoBg: "rgba(61,207,154,0.08)",
-    infoBorder: "rgba(61,207,154,0.22)",
-  },
+const SCOREBOARD_THEME = {
+  pageBg: css.bgLight,
+  text: css.textDark,
+  textMuted: css.textGray,
+  cardBg: css.cardWhite,
+  border: css.borderLight,
+  accent: css.greenDark,
+  titleAccent: css.greenDark,
+  rowBg: css.cardWhite,
+  rowFocus: "rgba(40, 98, 65, 0.06)",
+  statValue: css.textDark,
+  btnGhostBg: "#FFF",
+  btnGhostText: css.textDark,
+  selectBg: "#FFF",
+  selectText: css.textDark,
+  chipActiveBg: "rgba(40, 98, 65, 0.1)",
+  infoBg: "rgba(40, 98, 65, 0.06)",
+  infoBorder: "rgba(40, 98, 65, 0.18)",
 };
 
 function DecisionReadonlyBadge({ status, dark }) {
@@ -1131,7 +1110,7 @@ export default function ScoreboardPage() {
     () => buildActiveFilterPills(filters, deliberationMode),
     [filters, deliberationMode]
   );
-  const t = deliberationMode ? PAGE_THEME.dark : PAGE_THEME.light;
+  const t = SCOREBOARD_THEME;
   const gridColumns = deliberationMode
     ? `16px 36px minmax(180px, 2.2fr) ${isCoffeeChatRanking ? "165px" : "100px"} minmax(196px, 0.9fr) minmax(108px, auto)`
     : `48px minmax(220px, 2.2fr) ${isCoffeeChatRanking ? "165px" : "108px"} minmax(100px, auto)`;
@@ -1364,26 +1343,6 @@ export default function ScoreboardPage() {
                   </select>
                 </label>
               ) : null}
-              <button
-                type="button"
-                onClick={cycleId ? () => navigate("/cycle-management?view=past") : viewingHistorical ? handleReturnToCurrentRound : toggleDeliberationMode}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  cursor: "pointer",
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  background: deliberationMode ? t.accent : t.btnGhostBg,
-                  color: deliberationMode ? "#0B1628" : t.btnGhostText,
-                  border: `1px solid ${deliberationMode ? t.accent : t.border}`,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                {cycleId ? "Back to cycles" : viewingHistorical ? "Back to current" : deliberationMode ? "Exit" : "Deliberation"}
-              </button>
               {isAdmin && deliberationMode && !viewingHistorical && (automaticDecisionPlan.advancePercent > 0 || automaticDecisionPlan.rejectPercent > 0) ? (
                 <button
                   type="button"
@@ -1534,6 +1493,28 @@ export default function ScoreboardPage() {
                 </div>
               ) : null}
             </div>
+          ) : null}
+          {(cycleId || viewingHistorical || isAdmin) ? (
+            <button
+              type="button"
+              onClick={cycleId ? () => navigate("/cycle-management?view=past") : viewingHistorical ? handleReturnToCurrentRound : toggleDeliberationMode}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                cursor: "pointer",
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: deliberationMode ? t.accent : t.btnGhostBg,
+                color: deliberationMode ? "#FFFFFF" : t.btnGhostText,
+                border: `1px solid ${deliberationMode ? t.accent : t.border}`,
+                fontSize: 12,
+                fontWeight: 600,
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              {cycleId ? "Back to cycles" : viewingHistorical ? "Back to current" : deliberationMode ? "Exit" : "Deliberation"}
+            </button>
           ) : null}
           </div>
         </div>
@@ -1941,7 +1922,7 @@ export default function ScoreboardPage() {
                     {getCommitteeLinkWarning(c)}
                   </span>
                 ) : null}
-                <CandidateSignalBadges flagCount={c.flagCount} referralCount={c.referralCount} dark={deliberationMode} />
+                <CandidateSignalBadges flagCount={c.flagCount} referralCount={c.referralCount} dark={false} />
               </div>
             </div>
 
@@ -1967,13 +1948,13 @@ export default function ScoreboardPage() {
                 {canEditDeliberations ? (
                   <DecisionButtons
                     status={decisionStatus}
-                    dark={deliberationMode}
+                    dark={false}
                     disabled={!canRecordCommitteeDecision(c)}
                     saving={rowSaving}
                     onSelect={decision => saveDecision(c, decision)}
                   />
                 ) : isStaff ? (
-                  <DecisionReadonlyBadge status={decisionStatus} dark={deliberationMode} />
+                  <DecisionReadonlyBadge status={decisionStatus} dark={false} />
                 ) : (
                   <span style={{ fontSize: 12, color: t.textMuted }}>Staff only</span>
                 )}
@@ -1988,7 +1969,7 @@ export default function ScoreboardPage() {
                 referredByMe={c.referredByMe}
                 authedFetch={authedFetch}
                 onUpdated={handleSignalUpdated}
-                dark={deliberationMode}
+                dark={false}
               />
               <button
                 type="button"
