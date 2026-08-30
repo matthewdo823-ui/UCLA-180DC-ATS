@@ -296,7 +296,8 @@ function ScoreTiles({ score, maxScore }) {
 }
 
 function CategoryRow({ metric, value, maxPerCategory = 4, equalized = false }) {
-  const pct = hasNumericScore(value) ? Math.max(0, Math.min(100, (Number(value) / maxPerCategory) * 100)) : 0;
+  const graded = hasNumericScore(value);
+  const pct = graded ? Math.max(0, Math.min(100, (Number(value) / maxPerCategory) * 100)) : 0;
   const label = metric === FRQ_METRIC ? "Free Response" : titleCase(metric);
 
   return (
@@ -304,7 +305,9 @@ function CategoryRow({ metric, value, maxPerCategory = 4, equalized = false }) {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
         <span style={{ fontSize: 12, color: css.textDark }}>{label}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: cardGreen }}>
-          {equalized ? (
+          {!graded ? (
+            <>N/A</>
+          ) : equalized ? (
             <>{formatScore(pct)}%</>
           ) : (
             <>

@@ -76,13 +76,14 @@ function applyCompositeScoringToCandidate(candidate, {
   } else {
     categoryScores[FRQ_METRIC] = null;
   }
+  const scoredCategoryMetrics = Object.entries(categoryScores)
+    .filter(([, value]) => value !== null && value !== '' && Number.isFinite(Number(value)))
+    .map(([metric]) => metric);
   const metrics = [...new Set([
     ...(candidate.metrics || []),
-    ...Object.keys(categoryScores),
-  ])].filter((metric) => {
-    const value = categoryScores[metric];
-    return value !== null && value !== '' && Number.isFinite(Number(value));
-  });
+    ...scoredCategoryMetrics,
+    FRQ_METRIC,
+  ])];
 
   let aggregateScore = resumeAggregateScore;
   let normalizedScore = resumeNormalizedScore;
