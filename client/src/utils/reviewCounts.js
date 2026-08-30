@@ -24,8 +24,30 @@ export function formatReviewCountPair(resumeCount, freeResponseCount) {
   return `${formatReviewCount(resumeCount, "resume")} | ${formatReviewCount(freeResponseCount, "free response")}`;
 }
 
+export function formatReviewCountPairCompact(resumeCount, freeResponseCount) {
+  return `${normalizeCount(resumeCount)} resume | ${normalizeCount(freeResponseCount)} free response`;
+}
+
+export function formatReviewCountPairStacked(resumeCount, freeResponseCount) {
+  return `${formatReviewCount(resumeCount, "resume")}\n${formatReviewCount(freeResponseCount, "free response")}`;
+}
+
 export function formatReviewCounts(candidate) {
   return formatReviewCountPair(
+    getResumeReviewCount(candidate),
+    getFreeResponseReviewCount(candidate)
+  );
+}
+
+export function formatReviewCountsCompact(candidate) {
+  return formatReviewCountPairCompact(
+    getResumeReviewCount(candidate),
+    getFreeResponseReviewCount(candidate)
+  );
+}
+
+export function formatReviewCountsStacked(candidate) {
+  return formatReviewCountPairStacked(
     getResumeReviewCount(candidate),
     getFreeResponseReviewCount(candidate)
   );
