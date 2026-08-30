@@ -545,6 +545,103 @@ exports.getResumeById = async (req, res) => {
     return res.json(formatted.data);
 };
 
+/** Load both grading modes for one candidate without changing the queue item. */
+exports.getResumeGradingContext = async (req, res) => {
+    const gradedBy = req.user?.user_id;
+    if (!gradedBy) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const screening = await requireActiveResumeScreening();
+    if (screening.error) {
+        return res.status(screening.status).json({ error: screening.error });
+    }
+
+    const resumeId = String(req.params.id || "").trim();
+    if (!resumeId) {
+        return res.status(400).json({ error: "Resume id is required" });
+    }
+
+    const { data: row, error: resumeError } = await supabase
+        .from("resumes")
+        .select(`
+            *,
+            candidates (
+                id,
+                cycle_id,
+                year,
+                name,
+                major,
+                gpa,
+                why_consulting,
+                why_180dc,
+                why_social_impact
+            )
+        `)
+        .eq("id", resumeId)
+        .maybeSingle();
+
+    if (resumeError) return respondWithServerError(res, resumeError, "getResumeGradingContext resume");
+    if (!row) return res.status(404).json({ error: "Resume not found" });
+
+    try {
+        const accessError = await assertResumeAccessibleForScreening(row, {
+            gradedBy,
+            cycleId: screening.cycle.id,
+        });
+        if (accessError) {
+            return res.status(accessError.status).json({ error: accessError.error });
+        }
+    } catch (accessErr) {
+        return respondWithServerError(res, accessErr, "getResumeGradingContext access");
+    }
+
+    const [resumeReviewResult, frqReviewResult] = await Promise.all([
+        supabase
+            .from("resume_reviews")
+            .select("id, scores, notes, decision, rubric_snapshot")
+            .eq("resume_id", resumeId)
+            .eq("graded_by", gradedBy)
+            .eq("cycle_id", screening.cycle.id)
+            .maybeSingle(),
+        supabase
+            .from("frq_reviews")
+            .select("id, score, notes")
+            .eq("resume_id", resumeId)
+            .eq("graded_by", gradedBy)
+            .eq("cycle_id", screening.cycle.id)
+            .maybeSingle(),
+    ]);
+
+    if (resumeReviewResult.error) {
+        return respondWithServerError(res, resumeReviewResult.error, "getResumeGradingContext resume review");
+    }
+    if (frqReviewResult.error) {
+        return respondWithServerError(res, frqReviewResult.error, "getResumeGradingContext FRQ review");
+    }
+
+    const resumeReview = resumeReviewResult.data;
+    const frqReview = frqReviewResult.data;
+    const fileId = isGoogleDriveFileUrl(row.file_url) ? extractDriveFileID(row.file_url) : null;
+
+    return res.json({
+        ...row,
+        file_url: fileId ? toDownloadURL(fileId) : null,
+        resumeReview: resumeReview ? {
+            reviewId: resumeReview.id,
+            scores: resumeReview.scores || {},
+            notes: resumeReview.notes || "",
+            decision: resumeReview.decision || "pass",
+            rubricSnapshot: resumeReview.rubric_snapshot || null,
+        } : null,
+        frqReview: frqReview ? {
+            reviewId: frqReview.id,
+            score: Number(frqReview.score),
+            notes: frqReview.notes || "",
+        } : null,
+    });
+};
+
 /** Load the resume PDF for one of the authenticated user's past reviews. */
 exports.getReviewResume = async (req, res) => {
     const gradedBy = req.user?.user_id;
