@@ -137,7 +137,7 @@ function DecisionButtons({ status, disabled, saving, onSelect, dark }) {
               border: "none",
               borderRight: index < options.length - 1 ? `1px solid ${divider}` : "none",
               background: selected ? style.color : "transparent",
-              color: selected ? "#FFF" : idleColor,
+              color: selected ? style.selectedText || "#FFF" : idleColor,
               padding: "7px 12px",
               fontSize: 11,
               fontWeight: 700,
@@ -1226,12 +1226,14 @@ export default function ScoreboardPage() {
       ]
     : deliberationMode
     ? [
-        { label: "PENDING", value: statCount(displayStats?.pending ?? (displayStats?.applicants != null ? displayStats?.applicants : null)), clickable: true },
-        { label: "ADVANCED", value: statCount(displayStats?.advanced ?? 0), clickable: true },
-        { label: "HOLD", value: statCount(displayStats?.hold ?? 0), clickable: true },
-        { label: "REJECTED", value: statCount(displayStats?.rejected ?? 0), clickable: true },
-        { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
-        { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
+        { label: "PENDING", value: statCount(displayStats?.pending ?? (displayStats?.applicants != null ? displayStats?.applicants : null)), clickable: true, color: DECISION_STYLE.pending.color },
+        { label: "ADVANCED", value: statCount(displayStats?.advanced ?? 0), clickable: true, color: DECISION_STYLE.advance.color },
+        { label: "HOLD", value: statCount(displayStats?.hold ?? 0), clickable: true, color: DECISION_STYLE.hold.color },
+        { label: "REJECTED", value: statCount(displayStats?.rejected ?? 0), clickable: true, color: DECISION_STYLE.reject.color },
+        ...(!isCoffeeChatRanking ? [
+          { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
+          { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
+        ] : []),
         { label: "APPLICANTS", value: statCount(displayStats?.applicants), clickable: true },
       ]
     : [
@@ -1247,6 +1249,12 @@ export default function ScoreboardPage() {
     : 0;
   const totalApplicants = displayStats?.applicants ?? 0;
   const decisionProgress = totalApplicants > 0 ? Math.round((decidedCount / totalApplicants) * 100) : 0;
+  const decisionMix = [
+    { label: "Advanced", value: Number(displayStats?.advanced) || 0, color: DECISION_STYLE.advance.color },
+    { label: "Hold", value: Number(displayStats?.hold) || 0, color: DECISION_STYLE.hold.color },
+    { label: "Rejected", value: Number(displayStats?.rejected) || 0, color: DECISION_STYLE.reject.color },
+    { label: "Pending", value: Number(displayStats?.pending) || 0, color: "#D1D5DB" },
+  ];
 
   const barSelectStyle = {
     ...selectStyle,
@@ -1794,8 +1802,8 @@ export default function ScoreboardPage() {
               fontFamily: "'DM Sans', sans-serif",
             }}
           >
-            <div style={{ fontSize: 24, color: t.statValue, lineHeight: 1.1, fontWeight: 700 }}>{stat.value}</div>
-            <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 700, letterSpacing: "0.06em", marginTop: 4 }}>{stat.label}</div>
+            <div style={{ fontSize: 24, color: stat.color || t.statValue, lineHeight: 1.1, fontWeight: 700 }}>{stat.value}</div>
+            <div style={{ fontSize: 10, color: stat.color || t.textMuted, fontWeight: 700, letterSpacing: "0.06em", marginTop: 4 }}>{stat.label}</div>
           </button>
         ))}
         </div>
@@ -1805,8 +1813,27 @@ export default function ScoreboardPage() {
               <span>Decision progress</span>
               <span style={{ fontWeight: 600, color: t.text }}>{decidedCount} / {totalApplicants} decided ({decisionProgress}%)</span>
             </div>
-            <div style={{ height: 6, borderRadius: 999, background: t.btnGhostBg, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: "100%", background: t.accent, transformOrigin: "left", transform: `scaleX(${Math.max(0, Math.min(100, decisionProgress)) / 100})`, transition: "transform 0.3s ease" }} />
+            <div style={{ height: 10, borderRadius: 999, background: "#E5E7EB", overflow: "hidden", display: "flex" }}>
+              {decisionMix.map((segment) => (
+                <div
+                  key={segment.label}
+                  title={`${segment.label}: ${segment.value}`}
+                  style={{
+                    height: "100%",
+                    width: `${totalApplicants > 0 ? (segment.value / totalApplicants) * 100 : 0}%`,
+                    background: segment.color,
+                    transition: "width 0.3s ease",
+                  }}
+                />
+              ))}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "7px 16px", marginTop: 9 }}>
+              {decisionMix.map((segment) => (
+                <span key={segment.label} style={{ display: "inline-flex", alignItems: "center", gap: 5, color: t.textMuted, fontSize: 11 }}>
+                  <span aria-hidden style={{ width: 8, height: 8, borderRadius: "50%", background: segment.color }} />
+                  {segment.label} {segment.value}
+                </span>
+              ))}
             </div>
           </div>
         ) : null}
