@@ -179,20 +179,13 @@ export default function AdminDashboard() {
           <PageLoader minHeight="60vh" />
         ) : (
           <>
-            <Panel
-              title={context?.cycle?.name ? `${context.cycle.name} · recruiting timeline` : "Recruiting timeline"}
-              rightSlot={(
-                <button type="button" onClick={() => navigate("/cycle-management")} style={{ border: "none", padding: 0, background: "transparent", color: css.greenDark, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                  Manage cycles →
-                </button>
-              )}
-            >
-              <RoundTimeline
-                rounds={context?.allRounds}
-                activeRound={context?.activeRound}
-                nextRound={context?.nextRound}
-              />
-            </Panel>
+            <RoundTimeline
+              rounds={context?.allRounds}
+              activeRound={context?.activeRound}
+              nextRound={context?.nextRound}
+              cycleName={context?.cycle?.name}
+              onManage={() => navigate("/cycle-management")}
+            />
 
             <section style={{
               background: css.cardWhite,
