@@ -9,6 +9,7 @@ import { invalidateAfterReview } from "../../lib/queryKeys";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { FRQ_MAX_SCORE } from "../../constants/frq";
 import { formatReviewCount } from "../../utils/reviewCounts";
+import { rubricFromSnapshot } from "../../utils/rubric";
 
 import Topbar, { topbarGhostButtonStyle } from "../../components/Topbar/Topbar";
 import CandidateRow from "../../components/CandidateRow/CandidateRow";
@@ -92,8 +93,12 @@ export default function ScreenerPage() {
   const [gradingMode, setGradingMode] = useState(GRADING_MODES.RESUME);
   const [resume, setResume] = useState(null);
   const [scores, setScores] = useState({});
+  const [resumeNotes, setResumeNotes] = useState("");
+  const [resumeEditingReviewId, setResumeEditingReviewId] = useState(null);
+  const [resumeRubricSnapshot, setResumeRubricSnapshot] = useState(null);
   const [frqScore, setFrqScore] = useState(null);
-  const [notes, setNotes] = useState("");
+  const [frqNotes, setFrqNotes] = useState("");
+  const [frqEditingReviewId, setFrqEditingReviewId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -103,11 +108,16 @@ export default function ScreenerPage() {
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pastReviewDetail, setPastReviewDetail] = useState(null);
-  const [editingReviewId, setEditingReviewId] = useState(null);
   const [celebrationKey, setCelebrationKey] = useState(0);
   const [submittingAction, setSubmittingAction] = useState(null);
   const submittingRef = useRef(false);
   const panelRef = useRef(null);
+  const gradingContextRef = useRef({
+    resumeId: null,
+    data: null,
+    resumeHydrated: false,
+    frqHydrated: false,
+  });
 
   const graderName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim();
   const specialCelebrationName = ["ryan chao", "matthew do"].includes(graderName.toLowerCase()) ? graderName : "";
@@ -127,8 +137,8 @@ export default function ScreenerPage() {
   const isFrqMode = gradingMode === GRADING_MODES.FRQ;
 
   const rubric = useMemo(
-    () => getYearRubric(resume?.candidates?.year),
-    [getYearRubric, resume?.candidates?.year]
+    () => rubricFromSnapshot(resumeRubricSnapshot) || getYearRubric(resume?.candidates?.year),
+    [getYearRubric, resume?.candidates?.year, resumeRubricSnapshot]
   );
 
   const maxPerCategory = rubric?.maxPerCategory || 4;
@@ -202,19 +212,29 @@ export default function ScreenerPage() {
         const body = await res.json().catch(() => ({}));
         setFetchError(body.error || "Could not load resume");
         setResume(null);
-        setEditingReviewId(null);
+        setResumeEditingReviewId(null);
         return;
       }
       const data = await res.json();
       setResume(data);
       setScores(review.scores || {});
-      setNotes(review.notes ?? "");
-      setEditingReviewId(data.reviewId || reviewId || null);
+      setResumeNotes(review.notes ?? "");
+      setResumeEditingReviewId(data.reviewId || reviewId || null);
+      setResumeRubricSnapshot(review.rubricSnapshot || null);
+      setFrqScore(null);
+      setFrqNotes("");
+      setFrqEditingReviewId(null);
+      gradingContextRef.current = {
+        resumeId: data.id,
+        data: null,
+        resumeHydrated: true,
+        frqHydrated: false,
+      };
     } catch (e) {
       console.error("Load reviewed resume failed:", e);
       setFetchError("Could not load resume");
       setResume(null);
-      setEditingReviewId(null);
+      setResumeEditingReviewId(null);
     } finally {
       setLoading(false);
     }
@@ -233,19 +253,29 @@ export default function ScreenerPage() {
         const body = await res.json().catch(() => ({}));
         setFetchError(body.error || "Could not load candidate");
         setResume(null);
-        setEditingReviewId(null);
+        setFrqEditingReviewId(null);
         return;
       }
       const data = await res.json();
       setResume(data);
       setFrqScore(typeof data.frqScore === "number" ? data.frqScore : null);
-      setNotes(data.notes ?? "");
-      setEditingReviewId(data.reviewId || reviewId);
+      setFrqNotes(data.notes ?? "");
+      setFrqEditingReviewId(data.reviewId || reviewId);
+      setScores({});
+      setResumeNotes("");
+      setResumeEditingReviewId(null);
+      setResumeRubricSnapshot(null);
+      gradingContextRef.current = {
+        resumeId: data.id,
+        data: null,
+        resumeHydrated: false,
+        frqHydrated: true,
+      };
     } catch (e) {
       console.error("Load FRQ review failed:", e);
       setFetchError("Could not load candidate");
       setResume(null);
-      setEditingReviewId(null);
+      setFrqEditingReviewId(null);
     } finally {
       setLoading(false);
     }
@@ -272,13 +302,23 @@ export default function ScreenerPage() {
       const data = await res.json();
       setResume(data);
       setScores({});
-      setNotes("");
-      setEditingReviewId(null);
+      setResumeNotes("");
+      setResumeEditingReviewId(null);
+      setResumeRubricSnapshot(null);
+      setFrqScore(null);
+      setFrqNotes("");
+      setFrqEditingReviewId(null);
+      gradingContextRef.current = {
+        resumeId: data.id,
+        data: null,
+        resumeHydrated: true,
+        frqHydrated: false,
+      };
     } catch (e) {
       console.error("Fetch failed:", e);
       setFetchError("Could not load next resume");
       setResume(null);
-      setEditingReviewId(null);
+      setResumeEditingReviewId(null);
     } finally {
       setLoading(false);
     }
@@ -305,23 +345,31 @@ export default function ScreenerPage() {
       const data = await res.json();
       setResume(data);
       setFrqScore(null);
-      setNotes("");
-      setEditingReviewId(null);
+      setFrqNotes("");
+      setFrqEditingReviewId(null);
+      setScores({});
+      setResumeNotes("");
+      setResumeEditingReviewId(null);
+      setResumeRubricSnapshot(null);
+      gradingContextRef.current = {
+        resumeId: data.id,
+        data: null,
+        resumeHydrated: false,
+        frqHydrated: true,
+      };
     } catch (e) {
       console.error("Fetch FRQ failed:", e);
       setFetchError("Could not load next candidate");
       setResume(null);
-      setEditingReviewId(null);
+      setFrqEditingReviewId(null);
     } finally {
       setLoading(false);
     }
   }, [authedFetch, activeRound]);
 
-  const fetchNext = isFrqMode ? fetchNextFrq : fetchNextResume;
-
   useEffect(() => {
-    if (!cycleLoading) fetchNext();
-  }, [fetchNext, cycleLoading]);
+    if (!cycleLoading) fetchNextResume();
+  }, [fetchNextResume, cycleLoading]);
 
   useEffect(() => {
     fetchMyReviews({ showLoading: false });
@@ -360,11 +408,11 @@ export default function ScreenerPage() {
     submittingRef.current = true;
     setSubmittingAction(type);
 
-    const payload = { scores, notes, decision: type };
+    const payload = { scores, notes: resumeNotes, decision: type };
 
     try {
-      const res = editingReviewId
-        ? await authedFetch(`${API}/reviews/${encodeURIComponent(editingReviewId)}`, {
+      const res = resumeEditingReviewId
+        ? await authedFetch(`${API}/reviews/${encodeURIComponent(resumeEditingReviewId)}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -383,7 +431,7 @@ export default function ScreenerPage() {
       // The API only responds successfully after Supabase has accepted the
       // review. Celebrate that confirmed result, never the click itself.
       setCelebrationKey((key) => key + 1);
-      setEditingReviewId(null);
+      setResumeEditingReviewId(null);
       await fetchMyReviews({ showLoading: false });
       // This review changes the scoreboard, the dashboard counts and this
       // grader's coverage — expire them so those pages don't serve a cached
@@ -422,11 +470,11 @@ export default function ScreenerPage() {
     submittingRef.current = true;
     setSubmittingAction("frq");
 
-    const payload = { score: frqScore, notes };
+    const payload = { score: frqScore, notes: frqNotes };
 
     try {
-      const res = editingReviewId
-        ? await authedFetch(`${API}/frq-reviews/${encodeURIComponent(editingReviewId)}`, {
+      const res = frqEditingReviewId
+        ? await authedFetch(`${API}/frq-reviews/${encodeURIComponent(frqEditingReviewId)}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -442,7 +490,10 @@ export default function ScreenerPage() {
         setSubmitError(message);
         throw new Error(message);
       }
-      setEditingReviewId(null);
+      // Keep both grading modes consistent: celebrate exactly once, and only
+      // after the API confirms that Supabase accepted the awaited write.
+      setCelebrationKey((key) => key + 1);
+      setFrqEditingReviewId(null);
       await fetchMyFrqReviews({ showLoading: false });
       invalidateAfterReview(queryClient);
 
@@ -467,34 +518,87 @@ export default function ScreenerPage() {
 
   function handleResumeReset() {
     setScores({});
-    setNotes("");
+    setResumeNotes("");
     setSubmitError("");
     setShowValidationErrors(false);
   }
 
-  function handleGradingModeChange(nextMode) {
-    if (nextMode === gradingMode) return;
-    setGradingMode(nextMode);
-    setResume(null);
-    setScores({});
-    setFrqScore(null);
-    setNotes("");
-    setEditingReviewId(null);
+  async function handleGradingModeChange(nextMode) {
+    if (nextMode === gradingMode) return true;
     setFetchError("");
     setSubmitError("");
     setShowValidationErrors(false);
     setDrawerOpen(false);
     setPastReviewDetail(null);
+
+    if (!resume?.id) {
+      setGradingMode(nextMode);
+      return true;
+    }
+
+    const resumeId = resume.id;
+    const previousMode = gradingMode;
+    setLoading(true);
+
+    try {
+      let context = gradingContextRef.current;
+      let data = context.resumeId === resumeId ? context.data : null;
+
+      if (!data) {
+        const res = await authedFetch(`${API}/resume/${encodeURIComponent(resumeId)}/grading-context`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || "Could not load this candidate's grading details");
+        }
+        data = await res.json();
+        context = context.resumeId === resumeId
+          ? { ...context, data }
+          : { resumeId, data, resumeHydrated: false, frqHydrated: false };
+      }
+
+      if (nextMode === GRADING_MODES.RESUME && !context.resumeHydrated) {
+        const review = data.resumeReview;
+        setScores(review?.scores || {});
+        setResumeNotes(review?.notes || "");
+        setResumeEditingReviewId(review?.reviewId || null);
+        setResumeRubricSnapshot(review?.rubricSnapshot || null);
+        context = { ...context, resumeHydrated: true };
+      }
+
+      if (nextMode === GRADING_MODES.FRQ && !context.frqHydrated) {
+        const review = data.frqReview;
+        setFrqScore(typeof review?.score === "number" ? review.score : null);
+        setFrqNotes(review?.notes || "");
+        setFrqEditingReviewId(review?.reviewId || null);
+        context = { ...context, frqHydrated: true };
+      }
+
+      gradingContextRef.current = context;
+      setResume(data);
+      setGradingMode(nextMode);
+      return true;
+    } catch (error) {
+      setGradingMode(previousMode);
+      setFetchError(error.message || "Could not switch grading modes");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openPastReviews(nextMode) {
+    const switched = await handleGradingModeChange(nextMode);
+    if (switched) setDrawerOpen(true);
   }
 
   const screeningBlocked = !cycleLoading && (!activeRound || cycleError || !isResumeRound);
   const topbarRightSlot = (
     <>
-      <button type="button" onClick={() => { setGradingMode(GRADING_MODES.RESUME); setDrawerOpen(true); }} style={topbarGhostButtonStyle}>
+      <button type="button" onClick={() => { void openPastReviews(GRADING_MODES.RESUME); }} style={topbarGhostButtonStyle}>
         📋 {formatReviewCount(myReviews.length, "resume")}
       </button>
       {isAdmin ? (
-        <button type="button" onClick={() => { setGradingMode(GRADING_MODES.FRQ); setDrawerOpen(true); }} style={topbarGhostButtonStyle}>
+        <button type="button" onClick={() => { void openPastReviews(GRADING_MODES.FRQ); }} style={topbarGhostButtonStyle}>
           📝 {formatReviewCount(myFrqReviews.length, "free response")}
         </button>
       ) : null}
@@ -516,7 +620,7 @@ export default function ScreenerPage() {
           <GradingModeToggle
             mode={gradingMode}
             onChange={handleGradingModeChange}
-            disabled={Boolean(submittingAction)}
+            disabled={loading || Boolean(submittingAction)}
           />
         ) : null}
         {showValidationErrors && submitError ? (
@@ -573,8 +677,8 @@ export default function ScreenerPage() {
                     <FrqScoringPanel
                       score={frqScore}
                       onScore={setFrqScore}
-                      notes={notes}
-                      onNotes={setNotes}
+                      notes={frqNotes}
+                      onNotes={setFrqNotes}
                       onComplete={handleFrqComplete}
                       scoringComplete={frqScoringComplete}
                       submitError={submitError}
@@ -585,8 +689,8 @@ export default function ScreenerPage() {
                       rubric={rubric}
                       scores={scores}
                       onScore={(metric, val) => setScores((s) => ({ ...s, [metric]: val }))}
-                      notes={notes}
-                      onNotes={setNotes}
+                      notes={resumeNotes}
+                      onNotes={setResumeNotes}
                       onAction={handleResumeAction}
                       onReset={handleResumeReset}
                       scoringComplete={resumeScoringComplete}
