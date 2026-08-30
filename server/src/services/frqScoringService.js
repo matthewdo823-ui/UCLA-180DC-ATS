@@ -78,11 +78,18 @@ function applyCompositeScoringToCandidate(candidate, {
   let aggregateScore = resumeAggregateScore;
   let normalizedScore = resumeNormalizedScore;
   const frqPending = numFrqReviews === 0;
+  const hasResumeScore = Number.isFinite(Number(resumeAggregateScore));
+  const hasResumeMax = Number.isFinite(Number(resumeMax)) && Number(resumeMax) > 0;
+  let compositeMax = hasResumeMax ? Number(resumeMax) : null;
 
-  if (frqAvg != null && resumeAggregateScore != null) {
+  if (frqAvg != null && hasResumeScore && hasResumeMax) {
     aggregateScore = Number((resumeAggregateScore + frqAvg).toFixed(1));
-    const compositeMax = resumeMax + FRQ_MAX_SCORE;
+    compositeMax = Number(resumeMax) + FRQ_MAX_SCORE;
     normalizedScore = computeNormalizedFromAggregate(aggregateScore, compositeMax);
+  } else if (frqAvg != null && !hasResumeScore) {
+    aggregateScore = frqAvg;
+    compositeMax = FRQ_MAX_SCORE;
+    normalizedScore = computeNormalizedFromAggregate(frqAvg, FRQ_MAX_SCORE);
   }
 
   return {
@@ -90,15 +97,19 @@ function applyCompositeScoringToCandidate(candidate, {
     resumeAggregateScore,
     resumeNormalizedScore,
     resumeMax,
+    resumeEarnedPoints: resumeAggregateScore,
+    resumePossiblePoints: resumeMax,
     aggregateScore,
     normalizedScore,
+    earnedPoints: aggregateScore,
+    possiblePoints: compositeMax,
     score: normalizedScore == null ? null : Math.round(normalizedScore),
     frqPending,
     frqScore: frqAvg,
     numFrqReviews,
     frqReviews,
     categoryScores,
-    compositeMax: frqPending ? resumeMax : resumeMax + FRQ_MAX_SCORE,
+    compositeMax,
   };
 }
 
