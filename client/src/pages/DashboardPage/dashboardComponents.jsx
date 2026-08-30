@@ -105,7 +105,14 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
   const frqReviewPct = applicants > 0 ? Math.round((frqReviewed / applicants) * 100) : 0;
 
   const segments = isInterview
-    ? [
+    ? pipeline.ratingMode === "coffee_chat"
+      ? [
+        { label: "Strong yes", value: pipeline.strongYes || 0, color: "#147D64" },
+        { label: "Yes", value: pipeline.yes || 0, color: "#53A47D" },
+        { label: "No", value: pipeline.no || 0, color: css.amber },
+        { label: "Strong no", value: pipeline.strongNo || 0, color: css.red },
+      ]
+      : [
         { label: "Pass", value: pipeline.pass || 0, color: css.green },
         { label: "Fail", value: pipeline.fail || 0, color: css.red },
         { label: "Hold", value: pipeline.hold || 0, color: css.amber },
@@ -119,7 +126,9 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
       ];
 
   const breakdownTotal = segments.reduce((sum, seg) => sum + seg.value, 0);
-  const breakdownTitle = isInterview ? "Evaluation outcomes" : "Decision outcomes";
+  const breakdownTitle = isInterview
+    ? pipeline.ratingMode === "coffee_chat" ? "Submitted ratings" : "Evaluation outcomes"
+    : "Decision outcomes";
 
   return (
     <div style={{
