@@ -1068,15 +1068,15 @@ export default function ScoreboardPage() {
 
       const key = event.key.toLowerCase();
       const currentStatus = getCandidateDecisionStatus(focused);
-      if (key === "g") {
+      if (key === "y") {
         event.preventDefault();
         saveDecision(focused, currentStatus === "advance" ? "pending" : "advance");
-      } else if (key === "y") {
-        event.preventDefault();
-        saveDecision(focused, currentStatus === "hold" ? "pending" : "hold");
-      } else if (key === "r") {
+      } else if (key === "n") {
         event.preventDefault();
         saveDecision(focused, currentStatus === "reject" ? "pending" : "reject");
+      } else if (key === "h") {
+        event.preventDefault();
+        saveDecision(focused, currentStatus === "hold" ? "pending" : "hold");
       }
     }
 
@@ -1766,9 +1766,9 @@ export default function ScoreboardPage() {
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "8px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.btnGhostBg, fontSize: 12, color: t.textMuted, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
           <span style={{ fontWeight: 700, color: t.text, letterSpacing: "0.04em" }}>Shortcuts</span>
           <span>↑↓ navigate</span>
-          <span><kbd style={kbdStyle(t)}>G</kbd> advance</span>
-          <span><kbd style={kbdStyle(t)}>Y</kbd> hold</span>
-          <span><kbd style={kbdStyle(t)}>R</kbd> reject</span>
+          <span><kbd style={kbdStyle(t)}>Y</kbd> advance</span>
+          <span><kbd style={kbdStyle(t)}>N</kbd> reject</span>
+          <span><kbd style={kbdStyle(t)}>H</kbd> hold</span>
           {isInterviewRoundType(activeRound?.type) ? (
             <span style={{ marginLeft: "auto", fontSize: 11 }}>Interview pool — advanced candidates only</span>
           ) : null}
@@ -1935,11 +1935,6 @@ export default function ScoreboardPage() {
                   >
                     {c.name}
                   </button>
-                  {decisionStatus === "advance" ? (
-                    <span title="Advanced to the next stage" aria-label="Advanced to the next stage" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, height: 18, borderRadius: 999, flexShrink: 0, background: DECISION_STYLE.advance.bg, border: `1px solid ${DECISION_STYLE.advance.bd}`, color: DECISION_STYLE.advance.color, fontSize: 11, fontWeight: 900 }}>
-                      ✓
-                    </span>
-                  ) : null}
                 </div>
                 <span style={{ fontSize: 12, color: t.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {[c.major, c.year].filter(Boolean).join(" · ")}
