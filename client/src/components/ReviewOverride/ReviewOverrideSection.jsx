@@ -10,7 +10,7 @@ function getReviewerLabel(review, index) {
   return review?.reviewerName || review?.reviewerEmail || `Reviewer ${index + 1}`;
 }
 
-function getReviewRawTotal(review) {
+function getReviewTotal(review) {
   if (Number.isFinite(Number(review?.score))) return Number(review.score);
   return Object.values(review?.scores ?? {}).reduce(
     (sum, value) => sum + (Number(value) || 0),
@@ -18,10 +18,18 @@ function getReviewRawTotal(review) {
   );
 }
 
+function getReviewMaxScore(review, metrics = [], maxPerCategory = 4) {
+  const explicitMax = Number(review?.maxScore);
+  if (Number.isFinite(explicitMax) && explicitMax > 0) return explicitMax;
+
+  const categoryMax = Number(review?.maxPerCategory) || Number(maxPerCategory) || 4;
+  const categoryCount = Object.keys(review?.scores || {}).length || metrics.length;
+  return Math.max(categoryCount, 1) * categoryMax;
+}
+
 function getReviewScoreLabel(review, maxScore) {
-  const total = getReviewRawTotal(review);
-  const max = maxScore || review?.maxScore || Object.keys(review?.scores || {}).length * 4 || 24;
-  return `${formatScore(total)}/${max} pts`;
+  const total = getReviewTotal(review);
+  return `${formatScore(total)}/${formatScore(maxScore)} pts`;
 }
 
 function getBaselineTotal(review) {
@@ -59,7 +67,7 @@ export default function ReviewOverrideSection({
     () => (reviews || []).map((review, index) => {
       const override = overrideByReviewId[review.id] || review?.adminOverride;
       const hasOverride = override?.overrideScore != null;
-      const maxScore = review?.maxScore || metrics.length * maxPerCategory;
+      const maxScore = getReviewMaxScore(review, metrics, maxPerCategory);
       const displayReview = hasOverride
         ? { ...review, score: override.overrideScore }
         : review;
@@ -73,7 +81,7 @@ export default function ReviewOverrideSection({
         maxScore,
       };
     }),
-    [reviews, overrideByReviewId, metrics.length, maxPerCategory]
+    [reviews, overrideByReviewId, metrics, maxPerCategory]
   );
 
   useEffect(() => {
@@ -107,7 +115,7 @@ export default function ReviewOverrideSection({
     : null;
   const isOverridden = activeOverride?.overrideScore != null;
   const baselineTotal = selectedReview ? getBaselineTotal(selectedReview) : 0;
-  const maxScore = selectedOption?.maxScore || selectedReview?.maxScore || metrics.length * maxPerCategory || 24;
+  const maxScore = selectedOption?.maxScore || getReviewMaxScore(selectedReview, metrics, maxPerCategory);
   const parsedOverrideScore = Number(overrideScore);
   const effectiveOverrideScore = getEffectiveOverrideScore(selectedReview, activeOverride);
 
@@ -267,6 +275,11 @@ export default function ReviewOverrideSection({
           {isOverridden ? (
             <p style={{ margin: "10px 0 0", fontSize: 11, color: "#E24B4A", fontWeight: 600 }}>
               Original: {formatScore(baselineTotal)}/{maxScore} pts
+            </p>
+          ) : null}
+          {selectedReview?.legacy ? (
+            <p style={{ margin: "10px 0 0", fontSize: 11, color: css.textGray, lineHeight: 1.45 }}>
+              Historical rubric: four categories worth 6 points each. The candidate profile converts this result to a percentage for comparison.
             </p>
           ) : null}
         </div>

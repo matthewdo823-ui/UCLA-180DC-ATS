@@ -2,7 +2,7 @@ import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import { css } from "../../theme/colors";
 import { sansFont } from "../../theme/typography";
 import { formatScore, hasNumericScore } from "../../utils/format";
-import { formatReviewCounts } from "../../utils/reviewCounts";
+import { formatReviewCountsStacked } from "../../utils/reviewCounts";
 import { hasText } from "./applicationUtils";
 import { cardGreen, cardMint, cardPale, ROUND_1_LABEL, UPCOMING_EVALUATION_ROUNDS } from "./constants";
 import ApplicationResumeSection from "./ApplicationResumeSection";
@@ -70,14 +70,11 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring, 
                       <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: scoring?.adminOverride?.overrideScore != null ? "#E24B4A" : cardGreen, lineHeight: 1 }}>
                         {formatScore(scoring.normalizedScore)}<span style={{ fontSize: 14 }}>%</span>
                       </p>
-                      <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>Average resume score</p>
+                      <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>Overall average</p>
                     </div>
                   </div>
-                  <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
-                    {scoring?.adminOverride?.overrideScore != null
-                      ? `Admin override · ${formatReviewCounts(scoring)}`
-                      : `${formatScore(scoring.aggregateScore)} raw pts · ${formatReviewCounts(scoring)}`
-                    }
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: css.textGray, lineHeight: 1.5, whiteSpace: "pre-line" }}>
+                    {formatReviewCountsStacked(scoring)}
                   </p>
                 </>
               ) : (

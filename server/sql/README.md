@@ -20,7 +20,7 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 14 | `alter_resume_review_overrides_scores.sql` | **Legacy only** — migrates single `override_score` to `override_scores` JSONB |
 | 15 | `alter_resume_review_overrides_total_score.sql` | Adds `override_score` back for total raw score overrides (e.g. 24/24) |
 | 16 | `add_candidate_admin_overrides.sql` | Admin per-candidate notes + score override on the application page |
-| 17 | `add_candidate_referrals.sql` | Member referrals (positive counterpart to flags) |
+| 17 | `add_candidate_referrals.sql` | Member referrals with an admin open/resolved queue |
 | 18 | `add_candidate_summaries.sql` | Cached AI candidate summaries for the full application view |
 | 19 | `add_password_reset_tokens.sql` | One-time password-reset tokens + atomic reset RPC |
 | 20 | `add_resume_assignments.sql` | Admin-directed resume assignments for grader queues |
@@ -28,6 +28,7 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 22 | `add_round_auto_decision_percentages.sql` | Auto-advance/reject percentages + combined percentage constraint |
 | 23 | `backfill_resume_candidate_ids.sql` | **Optional data repair** — link orphan `resumes` to `candidates` by name / Drive file id |
 | 24 | `allow_frq_score_zero.sql` | **Existing databases only** — allows FRQ grades of 0 in the table constraint and save RPC |
+| 25 | `add_candidate_referral_resolution.sql` | **Existing-database upgrade** — adds the referral open/resolved workflow |
 
 ## Notes
 
@@ -39,3 +40,4 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 - **`add_round_auto_decision_percentages.sql` (#22):** Fresh schemas already have the percentage columns from #2, but this script also adds the combined `advance + reject <= 100` constraint, so run it once.
 - **`backfill_resume_candidate_ids.sql` (#23):** Run only when you have `resumes` rows with `candidate_id IS NULL` that should be linked to existing candidates.
 - **`allow_frq_score_zero.sql` (#24):** Run on existing databases that already applied `add_frq_reviews.sql`. It updates both the table constraint and `save_frq_review()` RPC so a score of 0 is accepted.
+- **`add_candidate_referral_resolution.sql` (#25):** Run on existing databases that already applied `add_candidate_referrals.sql` before referral resolution was added.
