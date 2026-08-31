@@ -2912,7 +2912,6 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
             evaluations: interviewEvaluations.filter((evaluation) => evaluation.roundId === round.id),
         })),
     ];
-
     // Display only the current rubric's categories; the metricSet union carries retired
     // categories from older reviews' snapshots (kept for override/score math above).
     const currentMetrics = getMetricsFromRubricConfig(resumeRound.rubric_config);
