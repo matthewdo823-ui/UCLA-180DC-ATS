@@ -1,4 +1,4 @@
--- Coffee Chat starting-table assignments for member graders.
+-- Coffee Chat starting-table assignments for member and admin participants.
 -- Run once after add_coffee_chat_scoring_and_groups.sql.
 
 BEGIN;
@@ -20,6 +20,6 @@ CREATE INDEX IF NOT EXISTS idx_interview_group_members_round_group
   ON public.interview_group_member_assignments (round_id, group_number);
 
 COMMENT ON TABLE public.interview_group_member_assignments IS
-  'The Coffee Chat table where each member begins grading; graders rotate cyclically after table submission.';
+  'The Coffee Chat table where each participant begins grading; graders rotate cyclically after table submission.';
 
 COMMIT;

@@ -452,7 +452,7 @@ export function PrimaryButton({ label, onClick, disabled, icon }) {
   );
 }
 
-export function GraderProgressRows({ graders, expectedReviews, expectedFrqReviews = 0 }) {
+export function GraderProgressRows({ graders, expectedReviews, expectedFrqReviews = 0, mode = "resume" }) {
   if (!graders?.length) {
     return <div style={{ fontSize: 13, color: css.textGray }}>No grader data yet.</div>;
   }
@@ -469,6 +469,7 @@ export function GraderProgressRows({ graders, expectedReviews, expectedFrqReview
           ? Math.min(100, Math.round((frqCount / expectedFrqReviews) * 100))
           : 0;
         const showFrqProgress = grader.role === "admin" && expectedFrqReviews > 0;
+        const coffeeChatMode = mode === "coffee_chat";
         return (
           <div key={grader.id} style={{
             padding: "11px 0",
@@ -477,17 +478,17 @@ export function GraderProgressRows({ graders, expectedReviews, expectedFrqReview
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: css.textDark }}>{grader.name}</span>
-              <span style={{ fontSize: 11, color: css.textGray }}>{formatReviewCountPair(resumeCount, frqCount)}</span>
+              <span style={{ fontSize: 11, color: css.textGray }}>{coffeeChatMode ? `${resumeCount} Coffee Chat grade${resumeCount === 1 ? "" : "s"}` : formatReviewCountPair(resumeCount, frqCount)}</span>
             </div>
             <div style={{ display: "grid", gap: 8 }}>
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
-                  <span style={{ color: css.textGray }}>Resume reviews</span>
+                  <span style={{ color: css.textGray }}>{coffeeChatMode ? "Coffee Chat grades" : "Resume reviews"}</span>
                   <strong style={{ color: css.greenDark }}>{resumeCount} / {expectedReviews}</strong>
                 </div>
                 <ProgressBar pct={resumePct} />
               </div>
-              {showFrqProgress ? (
+              {!coffeeChatMode && showFrqProgress ? (
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
                     <span style={{ color: css.textGray }}>Free response reviews</span>
@@ -500,6 +501,25 @@ export function GraderProgressRows({ graders, expectedReviews, expectedFrqReview
           </div>
         );
       })}
+    </div>
+  );
+}
+
+export function CoffeeChatPersonalStats({ total = 0, graded = 0, breakdown = {} }) {
+  const items = [
+    ["Candidates", total, css.textDark],
+    ["You graded", graded, css.greenDark],
+    ["Strong no", breakdown.strongNo, css.red],
+    ["No", breakdown.no, css.amber],
+    ["Yes", breakdown.yes, "#53A47D"],
+    ["Strong yes", breakdown.strongYes, "#147D64"],
+  ];
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+      {items.map(([label, value, color]) => (
+        <StatCard key={label} label={label} value={value ?? 0} accent={color} />
+      ))}
     </div>
   );
 }

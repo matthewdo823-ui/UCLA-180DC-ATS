@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
@@ -206,6 +206,7 @@ function ReferralCard({ referral, onResolve, resolving, onOpenProfile }) {
 }
 
 export default function FlaggedCandidatesPage() {
+  const location = useLocation();
   const authedFetch = useAuthedFetch();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -399,7 +400,7 @@ export default function FlaggedCandidatesPage() {
             flag={flag}
             onResolve={(id) => resolveSignal(id, SIGNAL_MODES[0])}
             resolving={resolvingId === flag.id}
-            onOpenProfile={(resumeId) => navigate(`/scoreboard/${resumeId}/application`)}
+            onOpenProfile={(resumeId) => navigate(`/candidates/${resumeId}`, { state: { returnTo: `${location.pathname}${location.search}`, returnLabel: "flags" } })}
           />
         ))}
 
@@ -409,7 +410,7 @@ export default function FlaggedCandidatesPage() {
             referral={referral}
             onResolve={(id) => resolveSignal(id, SIGNAL_MODES[1])}
             resolving={resolvingId === referral.id}
-            onOpenProfile={(resumeId) => navigate(`/scoreboard/${resumeId}/application`)}
+            onOpenProfile={(resumeId) => navigate(`/candidates/${resumeId}`, { state: { returnTo: `${location.pathname}${location.search}`, returnLabel: "referrals" } })}
           />
         ))}
       </div>
