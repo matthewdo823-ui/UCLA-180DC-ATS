@@ -34,6 +34,7 @@ function mapScoreboardToPipeline(scoreboardData, interviewData) {
       hold: stats.hold || 0,
       pending: stats.pending || 0,
       undecidedCount: (stats.pending || 0) + (stats.hold || 0),
+      personalStats: interviewData.stats || null,
     };
   }
 
@@ -111,6 +112,20 @@ function mapGraderScoreboard(graderData, frqGraderData) {
   };
 }
 
+function mapCoffeeChatGraderScoreboard(graderData) {
+  const stats = graderData?.stats || {};
+  const graders = Array.isArray(graderData?.graders) ? graderData.graders : [];
+  return {
+    mode: "coffee_chat",
+    graders: stats.graders ?? graders.length,
+    activeGraders: stats.activeGraders ?? graders.filter((grader) => (grader.reviewCount || 0) > 0).length,
+    notStarted: graders.filter((grader) => (grader.reviewCount || 0) === 0).length,
+    totalReviews: stats.totalReviews ?? graders.reduce((sum, grader) => sum + (grader.reviewCount || 0), 0),
+    expectedReviews: stats.expectedReviews ?? 0,
+    graderProgress: [...graders].sort((a, b) => (b.reviewCount || 0) - (a.reviewCount || 0) || String(a.name || "").localeCompare(String(b.name || ""))),
+  };
+}
+
 export default function useAdminDashboard(enabled = true) {
   const authedFetch = useAuthedFetch();
 
@@ -133,13 +148,17 @@ export default function useAdminDashboard(enabled = true) {
     staleTime: STALE.dashboard,
   });
 
+  const activeRoundType = normalizeRoundType(scoreboardQuery.data?.context?.activeRound?.type);
+  const isCoffeeChat = activeRoundType === ROUND_TYPES.COFFEE_CHAT;
+  const roundContextReady = Boolean(scoreboardQuery.data);
+
   const graderQuery = useQuery({
     queryKey: qk.graderScoreboard(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/grader-scoreboard`);
       return readJsonOrThrow(res, "loading grader coverage", "Check GET /grader-scoreboard in server/src/routes/resumeRoutes.js");
     },
-    enabled,
+    enabled: enabled && roundContextReady && !isCoffeeChat,
     staleTime: STALE.dashboard,
   });
 
@@ -149,7 +168,17 @@ export default function useAdminDashboard(enabled = true) {
       const res = await authedFetch(`${API}/frq-grader-scoreboard`);
       return readJsonOrThrow(res, "loading free-response grader coverage", "Check GET /frq-grader-scoreboard in server/src/routes/resumeRoutes.js");
     },
-    enabled,
+    enabled: enabled && roundContextReady && !isCoffeeChat,
+    staleTime: STALE.dashboard,
+  });
+
+  const coffeeGraderQuery = useQuery({
+    queryKey: qk.coffeeChatGraderScoreboard(),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/coffee-chat-grader-scoreboard`);
+      return readJsonOrThrow(res, "loading Coffee Chat participant coverage", "Check GET /coffee-chat-grader-scoreboard in server/src/routes/interviewRoutes.js");
+    },
+    enabled: enabled && roundContextReady && isCoffeeChat,
     staleTime: STALE.dashboard,
   });
 
@@ -180,14 +209,15 @@ export default function useAdminDashboard(enabled = true) {
     enabled &&
     (scoreboardQuery.isPending ||
       adminQuery.isPending ||
-      graderQuery.isPending ||
-      frqGraderQuery.isPending ||
+      (!isCoffeeChat && (graderQuery.isPending || frqGraderQuery.isPending)) ||
+      (isCoffeeChat && coffeeGraderQuery.isPending) ||
       (isInterview && interviewQuery.isPending));
 
   const scoreboardData = scoreboardQuery.data;
   const rawAdminData = adminQuery.data;
   const graderData = graderQuery.data ?? null;
   const frqGraderData = frqGraderQuery.data ?? null;
+  const coffeeGraderData = coffeeGraderQuery.data ?? null;
   const interviewData = interviewQuery.data ?? null;
 
   const data = useMemo(() => {
@@ -197,11 +227,20 @@ export default function useAdminDashboard(enabled = true) {
     const adminData = rawAdminData ?? {};
 
     const pipeline = mapScoreboardToPipeline(scoreboardData, interviewData);
-    const graderSummary = graderData ? mapGraderScoreboard(graderData, frqGraderData) : null;
+    const graderSummary = isCoffeeChat
+      ? (coffeeGraderData ? mapCoffeeChatGraderScoreboard(coffeeGraderData) : null)
+      : (graderData ? mapGraderScoreboard(graderData, frqGraderData) : null);
 
     const actionItems = (adminData.actionItems || []).map((item) => {
       if (item.id === "awaiting-reviews" && pipeline.awaitingReviews != null) {
-        if (pipeline.mode === "interview") return { ...item, count: pipeline.awaitingReviews };
+        if (pipeline.mode === "interview") return {
+          ...item,
+          label: pipeline.ratingMode === "coffee_chat" ? "Coffee Chat grading in progress" : "Interview evaluations still needed",
+          detail: pipeline.ratingMode === "coffee_chat"
+            ? `${pipeline.totalRatings || 0} Coffee Chat ratings submitted so far.`
+            : `${pipeline.awaitingReviews} candidate evaluations remain.`,
+          count: pipeline.awaitingReviews,
+        };
         return {
           ...item,
           label: "Grading still left in this round",
@@ -237,21 +276,26 @@ export default function useAdminDashboard(enabled = true) {
       },
       pipeline,
       graderSummary,
-      graderLoadError: !graderData
+      graderLoadError: isCoffeeChat && !coffeeGraderData
+        ? "Could not load Coffee Chat participant coverage"
+        : !isCoffeeChat && !graderData
         ? "Could not load resume-grader coverage"
-        : !frqGraderData
+        : !isCoffeeChat && !frqGraderData
           ? "Could not load free-response grader coverage"
           : null,
     };
-  }, [rawAdminData, error, frqGraderData, graderData, interviewData, isInterview, scoreboardData]);
+  }, [rawAdminData, coffeeGraderData, error, frqGraderData, graderData, interviewData, isCoffeeChat, isInterview, scoreboardData]);
 
   const reload = useCallback(() => {
     scoreboardQuery.refetch();
     adminQuery.refetch();
-    graderQuery.refetch();
-    frqGraderQuery.refetch();
+    if (isCoffeeChat) coffeeGraderQuery.refetch();
+    else {
+      graderQuery.refetch();
+      frqGraderQuery.refetch();
+    }
     if (isInterview) interviewQuery.refetch();
-  }, [adminQuery, frqGraderQuery, graderQuery, interviewQuery, isInterview, scoreboardQuery]);
+  }, [adminQuery, coffeeGraderQuery, frqGraderQuery, graderQuery, interviewQuery, isCoffeeChat, isInterview, scoreboardQuery]);
 
   return { data, loading, error, reload };
 }

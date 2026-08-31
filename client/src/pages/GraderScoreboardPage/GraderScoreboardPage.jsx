@@ -11,6 +11,8 @@ import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatDate, formatNumber, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 import { formatReviewCount } from "../../utils/reviewCounts";
+import { useActiveCycle } from "../../hooks/useActiveCycle";
+import { ROUND_TYPES, normalizeRoundType } from "../../constants/rounds";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
@@ -298,10 +300,27 @@ const DEFAULT_SCOREBOARD_DATA = { stats: null, graders: [], metrics: [], maxPerC
 
 export default function GraderScoreboardPage() {
   const authedFetch = useAuthedFetch();
+  const { activeRound, loading: cycleLoading } = useActiveCycle();
   const [mode, setMode] = useState(SCOREBOARD_MODES[0].id);
   const [selectedGrader, setSelectedGrader] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const coffeeChatActive = normalizeRoundType(activeRound?.type) === ROUND_TYPES.COFFEE_CHAT;
+  const availableModes = useMemo(
+    () => coffeeChatActive ? SCOREBOARD_MODES.filter((item) => item.id === "coffee") : SCOREBOARD_MODES.filter((item) => item.id !== "coffee"),
+    [coffeeChatActive]
+  );
+
+  useEffect(() => {
+    if (cycleLoading) return;
+    const nextMode = coffeeChatActive ? "coffee" : mode === "coffee" ? "resume" : mode;
+    if (nextMode === mode) return;
+    setMode(nextMode);
+    setSelectedGrader(null);
+    setStatusFilter("all");
+    setSearchQuery("");
+  }, [coffeeChatActive, cycleLoading, mode]);
 
   const activeMode = useMemo(
     () => SCOREBOARD_MODES.find(m => m.id === mode) ?? SCOREBOARD_MODES[0],
@@ -321,11 +340,12 @@ export default function GraderScoreboardPage() {
       const res = await authedFetch(`${API}/${activeMode.endpoint}`);
       return readJsonOrThrow(res, `loading ${activeMode.label.toLowerCase()}`, `Check GET /${activeMode.endpoint} in server/src/routes/resumeRoutes.js`);
     },
+    enabled: !cycleLoading && (coffeeChatActive ? activeMode.id === "coffee" : activeMode.id !== "coffee"),
     staleTime: STALE.dashboard,
   });
 
   const data = graderQuery.data ?? DEFAULT_SCOREBOARD_DATA;
-  const loading = graderQuery.isPending;
+  const loading = cycleLoading || graderQuery.isPending;
 
   function handleModeChange(nextMode) {
     if (nextMode === mode) return;
@@ -364,7 +384,7 @@ export default function GraderScoreboardPage() {
 
       <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", gap: 8 }}>
-        {SCOREBOARD_MODES.map(m => {
+        {availableModes.map(m => {
           const active = m.id === mode;
           return (
             <button

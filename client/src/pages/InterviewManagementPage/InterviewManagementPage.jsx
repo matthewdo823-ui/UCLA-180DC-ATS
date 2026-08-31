@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
@@ -42,7 +42,7 @@ function makeCoffeeDraft(candidate) {
   };
 }
 
-function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave, onOpenProfile, showSave = true, validationError = false, expectedRatingCount = null }) {
+function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave, onOpenProfile, showSave = true, autoSave = false, validationError = false, expectedRatingCount = null }) {
   const rating = draft?.rating || "";
   const notes = draft?.notes || "";
   const persistedRating = candidate.evaluation?.rating || "";
@@ -55,6 +55,32 @@ function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave
 
   async function handleSave() {
     if (!rating && !persistedRating) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      await onSave({ candidate_id: candidate.id, rating, notes });
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRatingChange(nextRating) {
+    const nextDraft = { ...draft, rating: nextRating };
+    onDraftChange(nextDraft);
+    setSaved(false);
+    if (!autoSave) return;
+    setSaving(true);
+    try {
+      await onSave({ candidate_id: candidate.id, rating: nextRating, notes: nextDraft.notes || "" });
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleNotesBlur() {
+    if (!autoSave || !rating || saving) return;
     setSaving(true);
     setSaved(false);
     try {
@@ -85,14 +111,14 @@ function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave
         {COFFEE_RATINGS.map((option) => {
           const selected = rating === option.id;
           return (
-            <button key={option.id} type="button" aria-pressed={selected} onClick={() => { onDraftChange({ ...draft, rating: selected ? "" : option.id }); setSaved(false); }} style={{ display: "flex", justifyContent: "center", border: `1px solid ${selected ? option.color : css.borderLight}`, borderRadius: 8, padding: "9px 7px", background: selected ? option.bg : css.cardWhite, color: selected ? option.color : css.textGray, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
+            <button key={option.id} type="button" disabled={busy || saving} aria-pressed={selected} onClick={() => handleRatingChange(selected ? "" : option.id)} style={{ display: "flex", justifyContent: "center", border: `1px solid ${selected ? option.color : css.borderLight}`, borderRadius: 8, padding: "9px 7px", background: selected ? option.bg : css.cardWhite, color: selected ? option.color : css.textGray, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: busy || saving ? "wait" : "pointer", opacity: busy || saving ? 0.65 : 1 }}>
               {option.label}
             </button>
           );
         })}
       </div>
 
-      <textarea value={notes} onChange={(event) => { onDraftChange({ ...draft, notes: event.target.value.slice(0, 1000) }); setSaved(false); }} rows={3} placeholder="Coffee Chat notes…" style={{ width: "100%", boxSizing: "border-box", padding: "10px 11px", borderRadius: 8, border: `1px solid ${validationError ? css.red : css.borderLight}`, resize: "vertical", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }} />
+      <textarea value={notes} onChange={(event) => { onDraftChange({ ...draft, notes: event.target.value.slice(0, 1000) }); setSaved(false); }} onBlur={handleNotesBlur} rows={3} placeholder="Coffee Chat notes…" style={{ width: "100%", boxSizing: "border-box", padding: "10px 11px", borderRadius: 8, border: `1px solid ${validationError ? css.red : css.borderLight}`, resize: "vertical", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }} />
       {validationError ? <p role="alert" style={{ margin: "8px 0 0", color: css.red, fontSize: 11, fontWeight: 700 }}>Choose a rating before submitting this table.</p> : null}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 10 }}>
         <span style={{ fontSize: 11, color: css.textGray }}>{candidate.coffeeChatEvaluationCount || 0}{Number.isFinite(expectedRatingCount) ? ` / ${expectedRatingCount}` : ""} rating{candidate.coffeeChatEvaluationCount === 1 ? "" : "s"} submitted</span>
@@ -101,7 +127,7 @@ function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave
           <button type="button" onClick={handleSave} disabled={busy || saving || (!rating && !persistedRating)} style={{ border: "none", borderRadius: 8, background: css.greenDark, color: "#FFF", padding: "9px 13px", fontSize: 12, fontWeight: 700, cursor: busy || saving || (!rating && !persistedRating) ? "not-allowed" : "pointer", opacity: busy || saving || (!rating && !persistedRating) ? 0.5 : 1 }}>
             {saving ? "Saving…" : !rating && persistedRating ? "Clear rating" : "Save rating"}
           </button>
-        </div> : <span style={{ fontSize: 11, color: css.textGray, fontWeight: 600 }}>Submits with table</span>}
+        </div> : <span style={{ fontSize: 11, color: saved ? css.greenDark : css.textGray, fontWeight: 600 }}>{saving ? "Saving…" : autoSave ? (saved ? "Saved" : "Saves automatically") : "Submits with table"}</span>}
       </div>
     </article>
   );
@@ -258,15 +284,17 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
 export default function InterviewManagementPage() {
   const authedFetch = useAuthedFetch();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { phaseLabel, activeRound, isInterviewRound, loading: cycleLoading, error: cycleError } = useActiveCycle();
   const [filter, setFilter] = useState("all");
-  const [coffeeView, setCoffeeView] = useState("scroll");
+  const [coffeeView, setCoffeeView] = useState("list");
   const [activeGroupNumber, setActiveGroupNumber] = useState(null);
   const [coffeeDrafts, setCoffeeDrafts] = useState({});
   const [tableSubmitting, setTableSubmitting] = useState(false);
   const [tableSubmitError, setTableSubmitError] = useState(null);
   const [tableSubmitNotice, setTableSubmitNotice] = useState("");
+  const [startingTableSaving, setStartingTableSaving] = useState(false);
   const [invalidCandidateIds, setInvalidCandidateIds] = useState(() => new Set());
 
   const enabled = !cycleLoading && isInterviewRound;
@@ -311,6 +339,32 @@ export default function InterviewManagementPage() {
     await refreshEvaluationData();
     return result;
   }, [persistEvaluation, refreshEvaluationData]);
+
+  async function chooseStartingTable(groupNumber) {
+    if (!groupNumber || startingTableSaving) return;
+    setStartingTableSaving(true);
+    setTableSubmitError(null);
+    try {
+      const res = await authedFetch(`${API}/interviews/coffee-chat/starting-table`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groupNumber }),
+      });
+      if (!res.ok) throw await formatResponseError(res, "saving your starting table");
+      setCoffeeView("list");
+      setActiveGroupNumber(groupNumber);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() }),
+        queryClient.invalidateQueries({ queryKey: qk.assignments() }),
+        queryClient.invalidateQueries({ queryKey: qk.coffeeChatGraderScoreboard() }),
+      ]);
+      setTableSubmitNotice(`Starting at Table ${groupNumber}. List view will continue rotating from there.`);
+    } catch (error) {
+      setTableSubmitError(error);
+    } finally {
+      setStartingTableSaving(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const list = data.candidates || [];
@@ -417,12 +471,12 @@ export default function InterviewManagementPage() {
       <Topbar phaseLabel={phaseLabel} activeLabel={roundLabel} rightSlot={<></>} />
 
       <div style={{ maxWidth: 1380, margin: "0 auto", width: "100%", boxSizing: "border-box", padding: "24px 32px 40px" }}>
-        <div style={{ marginBottom: 20 }}>
+        {!isCoffeeChat ? <div style={{ marginBottom: 20 }}>
           <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>{roundLabel}</h1>
           <p style={{ margin: 0, color: css.textGray, lineHeight: 1.5 }}>
-            {isCoffeeChat ? "Rate each candidate after their Coffee Chat. Choose Strong yes, Yes, No, or Strong no; every evaluator submits independently." : "Schedule interviews and record pass / fail / hold decisions. Candidates appear here after advancing from the previous round."}
+            Schedule interviews and record pass / fail / hold decisions. Candidates appear here after advancing from the previous round.
           </p>
-        </div>
+        </div> : null}
 
         {blocked ? (
           <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>
@@ -430,17 +484,15 @@ export default function InterviewManagementPage() {
           </div>
         ) : (
           <>
-            {data.stats ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 20 }}>
-                {(isCoffeeChat ? [
-                  ["Candidates", data.stats.total], ["Your ratings", data.stats.graded], ["Strong yes", data.stats.strongYes], ["Yes", data.stats.yes], ["Remaining", data.stats.pending],
-                ] : [
+            {data.stats && !isCoffeeChat ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 10, marginBottom: 20 }}>
+                {[
                   ["Total", data.stats.total],
                   ["Pending", data.stats.pending],
                   ["Pass", data.stats.pass],
                   ["Fail", data.stats.fail],
                   ["Hold", data.stats.hold],
-                ]).map(([label, value]) => (
+                ].map(([label, value]) => (
                   <div key={label} style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: "14px 16px" }}>
                     <div style={{ fontSize: 22, fontWeight: 700, color: css.textDark }}>{value ?? 0}</div>
                     <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em", marginTop: 4 }}>{label.toUpperCase()}</div>
@@ -451,9 +503,21 @@ export default function InterviewManagementPage() {
 
             {isCoffeeChat && coffeeGroups.length ? (
               <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: 14, marginBottom: 16, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 14, borderRight: `1px solid ${css.borderLight}`, fontSize: 12, fontWeight: 700, color: css.textDark }}>
+                  Start at
+                  <select
+                    value={data.context?.startingGroupNumber || ""}
+                    disabled={startingTableSaving || data.context?.memberAssignmentsReady === false}
+                    onChange={(event) => chooseStartingTable(Number(event.target.value))}
+                    style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "8px 10px", background: "#FFF", color: css.textDark, fontSize: 12, fontWeight: 700 }}
+                  >
+                    <option value="">Choose table</option>
+                    {coffeeGroups.filter(([number]) => number).map(([number]) => <option key={number} value={number}>Table {number}</option>)}
+                  </select>
+                </label>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.06em" }}>VIEW</span>
-                  {[{ id: "scroll", label: "Scroll view" }, { id: "list", label: "List view" }].map((option) => {
+                  {[{ id: "list", label: "List view" }, { id: "scroll", label: "Scroll view" }].map((option) => {
                     const selected = coffeeView === option.id;
                     return (
                       <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setCoffeeView(option.id); setTableSubmitError(null); setTableSubmitNotice(""); setInvalidCandidateIds(new Set()); }} style={{ border: `1px solid ${selected ? css.greenDark : css.borderLight}`, background: selected ? css.greenDark : "#FFF", color: selected ? "#FFF" : css.textDark, borderRadius: 8, padding: "8px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
@@ -539,12 +603,13 @@ export default function InterviewManagementPage() {
                             candidate={candidate}
                             draft={coffeeDrafts[candidate.id] || makeCoffeeDraft(candidate)}
                             busy={loading || tableSubmitting}
-                            showSave={coffeeView === "scroll"}
+                            showSave={false}
+                            autoSave={coffeeView === "scroll"}
                             validationError={invalidCandidateIds.has(candidate.id)}
                             expectedRatingCount={Number.isFinite(data.context?.assignedMemberCount) ? data.context.assignedMemberCount : null}
                             onDraftChange={(draft) => updateCoffeeDraft(candidate.id, draft)}
                             onSave={saveEvaluation}
-                            onOpenProfile={() => navigate(`/scoreboard/${candidate.resumeId}/application`, { state: { resumeScreenRank: candidate.resumeScreenRank, coffeeChatScore: candidate.coffeeChatScore, coffeeChatEvaluationCount: candidate.coffeeChatEvaluationCount } })}
+                            onOpenProfile={() => navigate(`/candidates/${candidate.resumeId}`, { state: { returnTo: `${location.pathname}${location.search}`, returnLabel: "Coffee Chat grading", resumeScreenRank: candidate.resumeScreenRank, coffeeChatScore: candidate.coffeeChatScore, coffeeChatEvaluationCount: candidate.coffeeChatEvaluationCount } })}
                           />
                         ))}
                       </div>
