@@ -1,194 +1,215 @@
-# Resume Screener
+# UCLA 180DC Recruiting ATS
 
-Internal ATS for UCLA 180 Degrees Consulting — resume screening, interview management, grader scoreboards, and Google Forms candidate intake.
+This is the internal recruiting app for UCLA 180 Degrees Consulting. It started
+as a resume screener and now covers most of the recruiting cycle: application
+intake, resume and free-response grading, candidate review, round decisions,
+interviews, assignments, and recruiting history.
+
+It is an internal operations tool, not an applicant-facing portal.
+
+## How the app fits together
+
+```text
+Google Form
+    ↓
+Candidate + resume import
+    ↓
+Resume and free-response grading
+    ↓
+Scoreboard deliberation
+    ↓
+Coffee chats / interviews
+    ↓
+Final decisions and round history
+```
+
+Admins set up a recruiting cycle, its rounds, the grading rubric, and the
+Google Form mapping in **Cycle Management**. Form sync creates candidate and
+resume records. Members grade assigned applications, while admins can monitor
+progress, review flags and referrals, and inspect a candidate's full profile.
+
+The **Scoreboard** is the committee view. It combines the available scoring
+evidence and supports advance, hold, and reject decisions. Finalizing a round
+moves advanced candidates into the next round and keeps the old decisions
+available as history.
+
+## Current development status
+
+`main` is the stable repository baseline, but active recruiting work is often
+reviewed as a stack of pull requests. In a stacked PR, each PR targets the
+feature branch directly below it instead of `main`.
+
+That creates one important distinction:
+
+> A stacked PR marked **Merged** has been accepted into its parent feature
+> branch. It is not necessarily on `main` or deployed yet.
+
+The current cycle-management, Coffee Chat, and deliberation work was reviewed
+through PRs
+[#1312](https://github.com/matthewdo823-ui/UCLA-180DC-ATS/pull/1312),
+[#1313](https://github.com/matthewdo823-ui/UCLA-180DC-ATS/pull/1313),
+[#1314](https://github.com/matthewdo823-ui/UCLA-180DC-ATS/pull/1314), and
+[#1315](https://github.com/matthewdo823-ui/UCLA-180DC-ATS/pull/1315).
+Check a PR's **base branch** before assuming its code is on `main`.
+
+Database changes are separate from code merges. SQL files under `server/sql/`
+must be applied manually, in the documented order, before code that depends on
+them is deployed. A prepared migration in Git does not mean the production
+Supabase project has already run it.
 
 ## Stack
 
-| Layer | Tech |
-|-------|------|
-| Frontend | React 19, Vite, React Router |
+| Layer | Technology |
+| --- | --- |
+| Frontend | React 19, Vite, React Router, TanStack Query |
 | Backend | Node.js, Express 5 |
-| Database | Supabase (PostgreSQL) |
-| Auth | JWT + bcrypt |
-| Integrations | Google Forms API, Google Drive (resumes) |
+| Database | Supabase/PostgreSQL |
+| Authentication | JWT and bcrypt |
+| Integrations | Google Forms, Google Drive, Gmail, optional Gemini summaries |
 
-## Project structure
+## Repository layout
 
+```text
+client/             React application
+server/             Express API
+server/sql/         Supabase migrations and migration runbook
+server/scripts/     Google Forms and Gmail setup utilities
+server/docs/        Integration-specific documentation
+images/             Static project images
 ```
-├── client/          # React UI (Vite)
-├── server/          # Express API
-│   ├── sql/         # Database migrations (run in order)
-│   ├── scripts/     # Utility scripts (e.g. Google Form field discovery)
-│   └── gcp/         # Google service account key (gitignored)
-└── images/          # Static assets
-```
 
-## Prerequisites
+The frontend and backend are separate Node projects. Install and run them from
+their own directories; there is no root command that starts the full app.
 
-- **Node.js** 20.19+ (22+ recommended; required by Vite 8)
-- A **Supabase** project (URL + service role key)
-- For Google Forms sync (optional): a Google Cloud service account with Forms API access
+## Local setup
 
-## Quick start (local)
+### 1. Install dependencies
 
-### 1. Clone and install dependencies
+Use Node.js 22 or newer.
 
 ```bash
-git clone <repo-url>
-cd "Resume Screener"
-
-cd server && npm install
-cd ../client && npm install
+git clone https://github.com/matthewdo823-ui/UCLA-180DC-ATS.git
+cd UCLA-180DC-ATS
+npm --prefix server install
+npm --prefix client install
 ```
 
-### 2. Set up the database
+### 2. Create the database
 
-Run the SQL migrations in [server/sql/](server/sql/) **once**, in the order documented in [server/sql/README.md](server/sql/README.md), using the Supabase SQL Editor (or `psql`). That file is the authoritative list for both fresh and existing databases.
+Create a Supabase project, then follow
+[server/sql/README.md](server/sql/README.md). Run migrations once and in the
+listed order—not alphabetically. Some files are upgrades or optional repairs,
+and rerunning seed migrations can fail or duplicate data.
 
-Do not run the directory alphabetically. Some files are legacy upgrades or optional data repairs, and rerunning `init.sql` or the cycle seed blocks can fail or duplicate data.
-
-### 3. Configure environment variables
-
-**Server** — copy the example and fill in values:
+### 3. Configure the environment
 
 ```bash
 cp server/.env.example server/.env
-```
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SUPABASE_URL` | Yes | Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | Yes | Supabase service role key |
-| `JWT_SECRET` | Yes | Secret for signing auth tokens |
-| `JWT_EXPIRES_IN` | No | JWT lifetime (default `8h`) |
-| `PORT` | No | API port (default `3000`) |
-| `CORS_ALLOWED_ORIGINS` | No | Comma-separated production frontend origins |
-| `GOOGLE_CLOUD_KEY_PATH` | For Forms/Drive | Path to a real GCP service account JSON file |
-| `GOOGLE_APPLICATION_CREDENTIALS` | For Forms/Drive | Standard alternative to `GOOGLE_CLOUD_KEY_PATH` |
-| `GOOGLE_DRIVE_IMPERSONATE_USER` | Workspace only | User to impersonate for private Forms/Drive files |
-| `FORM_CONFIG_PATH` | Legacy only | Fallback `form-config.json` path; current config is stored per cycle |
-| `FORMS_SYNC_CRON` | No | In-process sync schedule (default every 10 minutes) |
-| `DISABLE_FORMS_SYNC_CRON` | No | Set to `1` when using Vercel cron instead |
-| `CRON_SECRET` | For cron | Shared secret for `POST /cron/forms-sync` |
-| `GRADER_REVIEW_GOAL` | No | Resume-review target per grader (default `30`) |
-| `FRQ_REVIEW_GOAL` | No | FRQ-review target (defaults to `GRADER_REVIEW_GOAL`) |
-| `PASSWORD_RESET_URL` | No | Frontend reset route (default `http://localhost:5173/reset-password`) |
-| `GEMINI_API_KEY` | For AI summaries | Enables candidate summaries; omit to hide them |
-| Gmail (advance emails) | Optional | See [server/docs/gmail-setup.md](server/docs/gmail-setup.md) — OAuth for personal Gmail or Workspace delegation |
-
-**Client** — copy the example:
-
-```bash
 cp client/.env.example client/.env
 ```
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_API_URL` | Yes | Backend URL (default `http://localhost:3000`) |
+At minimum, the server needs `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, and a new
+`JWT_SECRET`. The client needs `VITE_API_URL`, normally
+`http://localhost:3000` for local development.
 
-### 4. Create an admin user
+The example files document the optional Google, Gmail, cron, Gemini, CORS, and
+review-goal settings. Never commit `.env` files, Supabase service keys, Google
+credentials, refresh tokens, or production secrets.
 
-After migrations, register via the API (or insert directly in Supabase):
+### 4. Create the first admin
+
+Start the API, register a user, then promote that user in Supabase:
 
 ```bash
 curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"you@ucla.edu","password":"your-password","first_name":"Your","last_name":"Name"}'
+  -d '{"email":"you@ucla.edu","password":"choose-a-password","first_name":"Your","last_name":"Name"}'
 ```
-
-Then promote the user to `admin` in Supabase:
 
 ```sql
 UPDATE users SET role = 'admin' WHERE email = 'you@ucla.edu';
 ```
 
-### 5. Start the app
+### 5. Run the app
 
-Open two terminals:
-
-**API server** (from `server/`):
+In one terminal:
 
 ```bash
-npm start
-# or, with Node's built-in auto-reload:
-npm run dev
+npm --prefix server run dev
 ```
 
-**Frontend** (from `client/`):
+In another:
 
 ```bash
-npm run dev
+npm --prefix client run dev
 ```
 
-Open the URL Vite prints (usually `http://localhost:5173`) and log in.
+Open the URL printed by Vite, usually <http://localhost:5173>.
 
-## Google Forms sync (optional)
+## Google Form and resume sync
 
-Used to pull new applications from a Google Form into the active or draft recruiting cycle.
+Google integration is optional for development but required for real candidate
+imports.
 
-1. Create a GCP service account, enable the **Google Forms API**, and download the JSON key.
-2. Place the key at `server/gcp/my-service-account.json` (or set `GOOGLE_CLOUD_KEY_PATH`).
-3. Give that service account read access to the Form and uploaded Drive files. For Workspace-only files, configure `GOOGLE_DRIVE_IMPERSONATE_USER` and domain-wide delegation.
-4. In **Cycle Management**, add the Google Form URL to the target cycle, discover the fields, confirm the field mapping, and save it.
-5. Use **Sync form** for a manual import, or restart the API to run the configured in-process schedule. Set `DISABLE_FORMS_SYNC_CRON=1` when an external cron owns the schedule.
+1. Create a Google Cloud service account and enable the Forms API.
+2. Give it access to the recruiting Form and uploaded Drive files.
+3. Set `GOOGLE_CLOUD_KEY_PATH` or `GOOGLE_APPLICATION_CREDENTIALS`.
+4. In **Cycle Management**, add the Form URL, discover its fields, review the
+   mapping, and save it to that cycle.
+5. Run a manual sync or configure one cron owner.
 
-`server/form-config.json` and `FORM_CONFIG_PATH` remain available only as a legacy fallback. `npm run discover-form-fields` also uses that legacy file unless `GOOGLE_FORM_ID` is supplied.
+Do not run both the in-process cron and Vercel cron. Set
+`DISABLE_FORMS_SYNC_CRON=1` when Vercel owns the schedule. Workspace-only files
+may also require domain-wide delegation and `GOOGLE_DRIVE_IMPERSONATE_USER`.
 
 ## Roles
 
 | Role | Access |
-|------|--------|
-| `applicant` | Limited — redirected to no-access for most pages |
-| `member` | Grade resumes, view scoreboards |
-| `admin` | Full access — user/cycle management, grader scoreboard, flagged candidates, scoreboard deliberation & export |
+| --- | --- |
+| `applicant` | No internal recruiting access |
+| `member` | Assigned grading, candidate views, and scoreboards |
+| `admin` | Cycle setup, assignments, users, deliberation, overrides, and exports |
 
-## Production deployment
+## Checks
 
-Typical setup:
-
-- **Frontend** → Vercel (`client/`)
-  - Set `VITE_API_URL` to your API base URL
-  - Set `API_URL` and `CRON_SECRET` for the Vercel cron proxy ([client/api/cron/forms-sync.js](client/api/cron/forms-sync.js))
-  - Cron schedule is defined in [client/vercel.json](client/vercel.json) (currently daily at `00:00` UTC)
-- **API** → any Node host (Railway, Render, Fly.io, etc.)
-  - Set all server env vars
-  - Add your Vercel frontend URL to `CORS_ALLOWED_ORIGINS`
-  - Set `DISABLE_FORMS_SYNC_CRON=1` if using Vercel cron
-  - Set `CRON_SECRET` to match the Vercel project
-
-Build the frontend for production:
+There is not yet a backend test suite. Before opening a PR, run the available
+frontend and syntax checks:
 
 ```bash
-cd client && npm run build
+npm --prefix client run lint
+npm --prefix client run build
+node --check server/index.js
+find server/src -name '*.js' -print0 | xargs -0 -n1 node --check
 ```
 
-## Useful scripts
+If a PR changes the database, update
+[server/sql/README.md](server/sql/README.md) and state clearly whether the
+migration has actually been applied.
 
-| Command | Where | Description |
-|---------|-------|-------------|
-| `npm start` | `server/` | Start API |
-| `npm run dev` | `server/` | Start API with Node's built-in watch mode |
-| `npm run discover-form-fields` | `server/` | Print Google Form question → field map |
-| `npm run gmail-oauth-setup` | `server/` | Create a Gmail OAuth refresh token |
-| `npm run gmail-test-send` | `server/` | Send a Gmail configuration test |
-| `npm run dev` | `client/` | Start Vite dev server |
-| `npm run build` | `client/` | Production build |
-| `npm run lint` | `client/` | ESLint |
+## Deployment
 
-## API overview
+The usual split is:
 
-| Prefix | Purpose |
-|--------|---------|
-| `/auth` | Login, register |
-| `/cron` | Forms sync trigger (cron secret required) |
-| `/` | Resumes, cycles, interviews, users |
+- **Frontend:** Vercel, built from `client/`
+- **API:** a Node host such as Railway, Render, or Fly.io
+- **Database:** Supabase
 
-All protected routes expect `Authorization: Bearer <token>`.
+Set `VITE_API_URL` to the deployed API, add the frontend origin to
+`CORS_ALLOWED_ORIGINS`, and use the same `CRON_SECRET` on both sides when
+Vercel proxies the Forms sync cron. See
+[server/docs/gmail-setup.md](server/docs/gmail-setup.md) before enabling advance
+emails.
 
-## Troubleshooting
+## Common problems
 
-- **CORS errors** — Ensure `CORS_ALLOWED_ORIGINS` includes your production frontend URL. Local `localhost`, `127.0.0.1`, and IPv6 loopback origins are allowed in development.
-- **Login fails after setup** — Confirm migrations ran and the user exists with a valid `password_hash`.
-- **Grading has no resumes** — Confirm a cycle and its `resume_screen` round are active, resumes belong to that cycle, and their `file_url` values are Google Drive links.
-- **Forms sync not running** — Confirm `GOOGLE_CLOUD_KEY_PATH` points to an existing JSON file, the cycle has a saved Form configuration, and the service account can access the Form and uploaded files.
-- **Port in use** — Change `PORT` in `server/.env` and update `VITE_API_URL` in `client/.env` to match.
+- **No candidates appear for grading:** confirm the cycle and resume-screen
+  round are active, the Form sync completed, and resume records belong to the
+  current cycle.
+- **A feature exists in a merged PR but not in production:** check the PR's base
+  branch and confirm the stack has reached `main`.
+- **A page fails after deployment:** check whether its SQL migration was applied
+  to the same Supabase project used by the API.
+- **CORS errors:** add the exact frontend origin to
+  `CORS_ALLOWED_ORIGINS`.
+- **Forms sync fails:** verify the key path, Form access, field mapping, and
+  Drive permissions or impersonation settings.
