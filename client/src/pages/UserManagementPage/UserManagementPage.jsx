@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAuthedFetch } from "../../auth/AuthContext";
+import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { API } from "../../constants/config";
@@ -45,10 +45,12 @@ function RoleBadge({ role }) {
 }
 
 export default function UserManagementPage() {
+  const { user: currentUser } = useAuth();
   const authedFetch = useAuthedFetch();
   const queryClient = useQueryClient();
-  const [savingId, setSavingId] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [pendingRoles, setPendingRoles] = useState({});
+  const [saveNotice, setSaveNotice] = useState("");
   // Separate from the load error so a failed save doesn't clobber (or get
   // clobbered by) the query's own error state.
   const [saveError, setSaveError] = useState(null);
@@ -71,38 +73,61 @@ export default function UserManagementPage() {
     [users]
   );
 
-  async function handleSaveRole(user) {
-    const nextRole = pendingRoles[user.user_id];
-    if (!nextRole || nextRole === user.role) return;
+  const changedUsers = useMemo(
+    () => users.filter((user) => pendingRoles[user.user_id] && pendingRoles[user.user_id] !== user.role),
+    [pendingRoles, users]
+  );
+
+  async function handleSaveAll() {
+    if (!changedUsers.length || saving) return;
 
     try {
-      setSavingId(user.user_id);
+      setSaving(true);
       setSaveError(null);
-      const res = await authedFetch(`${API}/users/${user.user_id}/role`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: nextRole }),
-      });
+      setSaveNotice("");
+      const savedIds = [];
 
-      if (!res.ok) {
-        throw await formatResponseError(res, "updating user role");
+      for (const user of changedUsers) {
+        const nextRole = pendingRoles[user.user_id];
+        const res = await authedFetch(`${API}/users/${user.user_id}/role`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: nextRole }),
+        });
+
+        if (!res.ok) {
+          throw await formatResponseError(res, nextRole === "applicant" ? "removing a team member" : "updating user roles");
+        }
+
+        const data = await res.json();
+        queryClient.setQueryData(qk.users(), (old) =>
+          old ? { ...old, users: old.users.map((row) => (row.user_id === data.user.user_id ? data.user : row)) } : old
+        );
+        savedIds.push(user.user_id);
       }
 
-      const data = await res.json();
-      // Patch the cached list in place — snappy, no refetch, same as before.
-      queryClient.setQueryData(qk.users(), (old) =>
-        old ? { ...old, users: old.users.map((u) => (u.user_id === data.user.user_id ? data.user : u)) } : old
-      );
       setPendingRoles((prev) => {
         const next = { ...prev };
-        delete next[user.user_id];
+        savedIds.forEach((id) => delete next[id]);
         return next;
       });
+      setSaveNotice(`Saved ${savedIds.length} team ${savedIds.length === 1 ? "change" : "changes"}.`);
     } catch (err) {
       setSaveError(err);
     } finally {
-      setSavingId(null);
+      setSaving(false);
     }
+  }
+
+  function toggleRemoval(user) {
+    if (user.user_id === currentUser?.user_id || user.role === "applicant") return;
+    setSaveNotice("");
+    setPendingRoles((prev) => {
+      const next = { ...prev };
+      if (next[user.user_id] === "applicant") delete next[user.user_id];
+      else next[user.user_id] = "applicant";
+      return next;
+    });
   }
 
   return (
@@ -138,6 +163,11 @@ export default function UserManagementPage() {
             style={{ marginBottom: 16 }}
           />
         )}
+        {saveNotice ? (
+          <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8, border: "1px solid rgba(29,158,117,0.25)", background: "rgba(29,158,117,0.08)", color: css.greenDark, fontSize: 13, fontWeight: 600 }}>
+            {saveNotice}
+          </div>
+        ) : null}
 
         <div style={{
           background: css.cardWhite,
@@ -180,18 +210,21 @@ export default function UserManagementPage() {
                   <th style={thStyle}>Email</th>
                   <th style={thStyle}>Current role</th>
                   <th style={thStyle}>Last login</th>
-                  <th style={{ ...thStyle, textAlign: "right" }}>Assign role</th>
+                  <th style={{ ...thStyle, textAlign: "right" }}>Team access</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((user) => {
-                  const selectedRole = pendingRoles[user.user_id]
+                  const pendingRole = pendingRoles[user.user_id];
+                  const pendingRemoval = pendingRole === "applicant" && user.role !== "applicant";
+                  const selectedRole = pendingRemoval
+                    ? user.role
+                    : pendingRole
                     ?? (user.role === "member" || user.role === "admin" ? user.role : "");
-                  const hasChange = Boolean(selectedRole) && selectedRole !== user.role;
-                  const isSaving = savingId === user.user_id;
+                  const isSelf = user.user_id === currentUser?.user_id;
 
                   return (
-                    <tr key={user.user_id} style={{ borderBottom: `1px solid ${css.borderLight}` }}>
+                    <tr key={user.user_id} style={{ borderBottom: `1px solid ${css.borderLight}`, background: pendingRemoval ? "rgba(197,48,48,0.05)" : "transparent" }}>
                       <td style={tdStyle}>
                         <span style={{ fontWeight: 600, color: css.textDark }}>{displayName(user)}</span>
                       </td>
@@ -202,8 +235,11 @@ export default function UserManagementPage() {
                         <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                           <select
                             value={selectedRole}
-                            disabled={isSaving}
-                            onChange={(e) => setPendingRoles((prev) => ({ ...prev, [user.user_id]: e.target.value }))}
+                            disabled={saving || pendingRemoval}
+                            onChange={(e) => {
+                              setSaveNotice("");
+                              setPendingRoles((prev) => ({ ...prev, [user.user_id]: e.target.value }));
+                            }}
                             style={{
                               border: `1px solid ${css.borderLight}`,
                               borderRadius: 8,
@@ -211,7 +247,8 @@ export default function UserManagementPage() {
                               fontSize: 13,
                               color: css.textDark,
                               background: "#FFF",
-                              cursor: isSaving ? "not-allowed" : "pointer",
+                              cursor: saving || pendingRemoval ? "not-allowed" : "pointer",
+                              opacity: pendingRemoval ? 0.55 : 1,
                             }}
                           >
                             {user.role === "applicant" && (
@@ -221,24 +258,32 @@ export default function UserManagementPage() {
                               <option key={option.value} value={option.value}>{option.label}</option>
                             ))}
                           </select>
-                          <button
-                            type="button"
-                            disabled={!hasChange || isSaving}
-                            onClick={() => handleSaveRole(user)}
-                            style={{
-                              border: "none",
-                              borderRadius: 8,
-                              padding: "8px 14px",
-                              fontSize: 13,
-                              fontWeight: 700,
-                              cursor: !hasChange || isSaving ? "not-allowed" : "pointer",
-                              background: hasChange ? css.greenDark : "#E5E7EB",
-                              color: hasChange ? "#FFF" : css.textGray,
-                              opacity: isSaving ? 0.7 : 1,
-                            }}
-                          >
-                            {isSaving ? "Saving..." : "Save"}
-                          </button>
+                          {pendingRemoval ? (
+                            <span style={{ color: css.red, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>Will remove</span>
+                          ) : null}
+                          {user.role !== "applicant" ? (
+                            <button
+                              type="button"
+                              disabled={saving || isSelf}
+                              onClick={() => toggleRemoval(user)}
+                              title={isSelf ? "You cannot remove your own account from this pane" : pendingRemoval ? "Undo removal" : "Remove from team"}
+                              aria-label={pendingRemoval ? `Undo removal of ${displayName(user)}` : `Remove ${displayName(user)} from team`}
+                              style={{
+                                width: 34,
+                                height: 34,
+                                display: "grid",
+                                placeItems: "center",
+                                border: "1px solid rgba(197,48,48,0.28)",
+                                borderRadius: 8,
+                                background: pendingRemoval ? "rgba(197,48,48,0.13)" : "rgba(197,48,48,0.06)",
+                                color: css.red,
+                                cursor: saving || isSelf ? "not-allowed" : "pointer",
+                                opacity: isSelf ? 0.35 : 1,
+                              }}
+                            >
+                              {pendingRemoval ? "↶" : "🗑"}
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -247,6 +292,31 @@ export default function UserManagementPage() {
               </tbody>
             </table>
           )}
+          {!loading && users.length > 0 ? (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, padding: "14px 18px", borderTop: `1px solid ${css.borderLight}`, background: "#FAFBFA" }}>
+              <span style={{ color: changedUsers.length ? css.textDark : css.textGray, fontSize: 12, fontWeight: 600 }}>
+                {changedUsers.length ? `${changedUsers.length} unsaved ${changedUsers.length === 1 ? "change" : "changes"}` : "No unsaved changes"}
+              </span>
+              <button
+                type="button"
+                disabled={!changedUsers.length || saving}
+                onClick={handleSaveAll}
+                style={{
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "9px 18px",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: !changedUsers.length || saving ? "not-allowed" : "pointer",
+                  background: changedUsers.length ? css.greenDark : "#E5E7EB",
+                  color: changedUsers.length ? "#FFF" : css.textGray,
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                {saving ? "Saving changes…" : "Save changes"}
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
