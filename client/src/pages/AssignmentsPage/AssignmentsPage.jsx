@@ -527,7 +527,6 @@ export default function AssignmentsPage() {
 
 function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignMember, onOpenCandidate }) {
   const [dragOverTable, setDragOverTable] = useState(null);
-  const [showEmptyNoShowTable, setShowEmptyNoShowTable] = useState(false);
   const groupCount = Number(board?.context?.round?.groupCount) || 1;
   const candidates = board?.candidates || [];
   const members = board?.graders || [];
@@ -543,10 +542,7 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
     };
   });
   const noShowCandidates = candidates.filter((candidate) => candidate.groupNumber === NO_SHOW_GROUP_NUMBER);
-  const showNoShowTable = showEmptyNoShowTable || noShowCandidates.length > 0;
-  const displayedTables = showNoShowTable
-    ? [...tables, { number: NO_SHOW_GROUP_NUMBER, candidates: noShowCandidates, members: [], noShow: true }]
-    : tables;
+  const displayedTables = [...tables, { number: NO_SHOW_GROUP_NUMBER, candidates: noShowCandidates, members: [], noShow: true }];
 
   function startDrag(event, type, id, sourceGroupNumber = null) {
     event.dataTransfer.effectAllowed = "move";
@@ -622,15 +618,9 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
       </section>
 
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        {showNoShowTable ? (
-          <span style={{ padding: "8px 11px", borderRadius: 999, background: "rgba(226,75,74,0.08)", color: css.red, border: "1px solid rgba(226,75,74,0.22)", fontSize: 11, fontWeight: 700 }}>
-            No-show table active · {noShowCandidates.length} applicant{noShowCandidates.length === 1 ? "" : "s"}
-          </span>
-        ) : (
-          <button type="button" onClick={() => setShowEmptyNoShowTable(true)} style={{ ...secondaryButtonStyle, color: css.red, borderColor: "rgba(226,75,74,0.28)" }}>
-            + Add no-show table
-          </button>
-        )}
+        <span style={{ padding: "8px 11px", borderRadius: 999, background: "rgba(226,75,74,0.08)", color: css.red, border: "1px solid rgba(226,75,74,0.22)", fontSize: 11, fontWeight: 700 }}>
+          No-show table · {noShowCandidates.length} applicant{noShowCandidates.length === 1 ? "" : "s"}
+        </span>
       </div>
 
       <div className="coffee-assignment-table-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 18, alignItems: "start" }}>
