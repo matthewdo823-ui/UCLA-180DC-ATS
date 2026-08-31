@@ -1,4 +1,4 @@
-import { css } from "../../theme/colors";
+import { coffeeRatingColors, css } from "../../theme/colors";
 import { formatRoundKind } from "../../constants/rounds";
 import { formatReviewCountPair } from "../../utils/reviewCounts";
 
@@ -107,8 +107,8 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
   const segments = isInterview
     ? pipeline.ratingMode === "coffee_chat"
       ? [
-        { label: "Strong yes", value: pipeline.strongYes || 0, color: "#147D64" },
-        { label: "Yes", value: pipeline.yes || 0, color: "#53A47D" },
+        { label: "Strong yes", value: pipeline.strongYes || 0, color: coffeeRatingColors.strong_yes },
+        { label: "Yes", value: pipeline.yes || 0, color: coffeeRatingColors.yes },
         { label: "No", value: pipeline.no || 0, color: css.amber },
         { label: "Strong no", value: pipeline.strongNo || 0, color: css.red },
       ]
@@ -509,10 +509,10 @@ export function CoffeeChatPersonalStats({ total = 0, graded = 0, breakdown = {} 
   const items = [
     ["Candidates", total, css.textDark],
     ["You graded", graded, css.greenDark],
-    ["Strong no", breakdown.strongNo, css.red],
-    ["No", breakdown.no, css.amber],
-    ["Yes", breakdown.yes, "#53A47D"],
-    ["Strong yes", breakdown.strongYes, "#147D64"],
+    ["Strong no", breakdown.strongNo, coffeeRatingColors.strong_no],
+    ["No", breakdown.no, coffeeRatingColors.no],
+    ["Yes", breakdown.yes, coffeeRatingColors.yes],
+    ["Strong yes", breakdown.strongYes, coffeeRatingColors.strong_yes],
   ];
 
   return (

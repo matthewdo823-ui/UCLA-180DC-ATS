@@ -4,7 +4,7 @@ import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
-import { css } from "../../theme/colors";
+import { coffeeRatingColors, css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
@@ -283,7 +283,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
                   <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{review.resumeName}</p>
                   <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>{formatDate(review.submittedAt, { fallback: "Not yet" })}</p>
                 </div>
-                <div style={{ fontSize: 12, color: cardGreen, fontWeight: 700 }}>{modeId === "coffee" ? review.ratingLabel : `${formatNumber(review.normalizedScore ?? review.score)}%`}</div>
+                <div style={{ fontSize: 12, color: modeId === "coffee" ? (coffeeRatingColors[review.rating] || cardGreen) : cardGreen, fontWeight: 700 }}>{modeId === "coffee" ? review.ratingLabel : `${formatNumber(review.normalizedScore ?? review.score)}%`}</div>
               </div>
             ))}
             {grader.reviews?.length === 0 && (
