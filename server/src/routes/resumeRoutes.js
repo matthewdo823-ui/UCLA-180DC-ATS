@@ -15,6 +15,8 @@ router.patch('/frq-reviews/:reviewId', requireRoles('admin'), resumeController.p
 router.get('/assignments', requireRoles('admin'), assignmentController.getAssignmentBoard);
 router.post('/assignments', requireRoles('admin'), assignmentController.createAssignments);
 router.delete('/assignments', requireRoles('admin'), assignmentController.deleteAssignments);
+router.patch('/assignments/coffee-chat/candidates/:candidateId', requireRoles('admin'), assignmentController.updateCoffeeChatCandidateTable);
+router.put('/assignments/coffee-chat/members/:userId', requireRoles('admin'), assignmentController.updateCoffeeChatMemberTable);
 router.delete('/assignments/:assignmentId', requireRoles('admin'), assignmentController.deleteAssignmentById);
 router.get('/next-resume', resumeController.getNextResume);
 router.get('/resume/:id', resumeController.getResumeById);
