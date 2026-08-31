@@ -24,19 +24,34 @@ const COFFEE_RATINGS = [
   { id: "strong_yes", label: "Strong yes", color: "#147D64", bg: "rgba(20,125,100,0.14)" },
 ];
 
-function CoffeeChatCandidateCard({ candidate, busy, onSave, onOpenProfile }) {
-  const [rating, setRating] = useState(candidate.evaluation?.rating || "");
-  const [persistedRating, setPersistedRating] = useState(candidate.evaluation?.rating || "");
-  const [notes, setNotes] = useState(candidate.evaluation?.notes || "");
+function getBalancedColumnCount(candidateCount) {
+  if (candidateCount <= 1) return 1;
+  const targetColumns = Math.min(4, Math.ceil(candidateCount / 2));
+  if (candidateCount % 2 === 0) {
+    for (let columns = targetColumns; columns >= 2; columns -= 1) {
+      if (candidateCount % columns === 0) return columns;
+    }
+  }
+  return targetColumns;
+}
+
+function makeCoffeeDraft(candidate) {
+  return {
+    rating: candidate.evaluation?.rating || "",
+    notes: candidate.evaluation?.notes || "",
+  };
+}
+
+function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave, onOpenProfile, showSave = true, validationError = false, expectedRatingCount = null }) {
+  const rating = draft?.rating || "";
+  const notes = draft?.notes || "";
+  const persistedRating = candidate.evaluation?.rating || "";
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    setRating(candidate.evaluation?.rating || "");
-    setPersistedRating(candidate.evaluation?.rating || "");
-    setNotes(candidate.evaluation?.notes || "");
     setSaved(false);
-  }, [candidate]);
+  }, [candidate.id, candidate.evaluation?.rating, candidate.evaluation?.notes]);
 
   async function handleSave() {
     if (!rating && !persistedRating) return;
@@ -44,7 +59,6 @@ function CoffeeChatCandidateCard({ candidate, busy, onSave, onOpenProfile }) {
     setSaved(false);
     try {
       await onSave({ candidate_id: candidate.id, rating, notes });
-      setPersistedRating(rating);
       setSaved(true);
     } finally {
       setSaving(false);
@@ -52,7 +66,7 @@ function CoffeeChatCandidateCard({ candidate, busy, onSave, onOpenProfile }) {
   }
 
   return (
-    <article style={{ background: css.cardWhite, border: `1px solid ${rating ? "rgba(29,158,117,0.28)" : css.borderLight}`, borderRadius: 12, padding: 18, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
+    <article style={{ background: css.cardWhite, border: `1px solid ${validationError ? css.red : rating ? "rgba(29,158,117,0.28)" : css.borderLight}`, borderRadius: 12, padding: 18, boxShadow: validationError ? "0 0 0 3px rgba(226,75,74,0.08)" : "0 1px 2px rgba(0,0,0,0.02)" }}>
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 15 }}>
         <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={48} background={css.greenDark} />
         <div style={{ minWidth: 0 }}>
@@ -71,22 +85,23 @@ function CoffeeChatCandidateCard({ candidate, busy, onSave, onOpenProfile }) {
         {COFFEE_RATINGS.map((option) => {
           const selected = rating === option.id;
           return (
-            <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setRating(selected ? "" : option.id); setSaved(false); }} style={{ display: "flex", justifyContent: "center", border: `1px solid ${selected ? option.color : css.borderLight}`, borderRadius: 8, padding: "9px 7px", background: selected ? option.bg : css.cardWhite, color: selected ? option.color : css.textGray, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
+            <button key={option.id} type="button" aria-pressed={selected} onClick={() => { onDraftChange({ ...draft, rating: selected ? "" : option.id }); setSaved(false); }} style={{ display: "flex", justifyContent: "center", border: `1px solid ${selected ? option.color : css.borderLight}`, borderRadius: 8, padding: "9px 7px", background: selected ? option.bg : css.cardWhite, color: selected ? option.color : css.textGray, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
               {option.label}
             </button>
           );
         })}
       </div>
 
-      <textarea value={notes} onChange={(event) => { setNotes(event.target.value.slice(0, 1000)); setSaved(false); }} rows={3} placeholder="Coffee Chat notes…" style={{ width: "100%", boxSizing: "border-box", padding: "10px 11px", borderRadius: 8, border: `1px solid ${css.borderLight}`, resize: "vertical", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }} />
+      <textarea value={notes} onChange={(event) => { onDraftChange({ ...draft, notes: event.target.value.slice(0, 1000) }); setSaved(false); }} rows={3} placeholder="Coffee Chat notes…" style={{ width: "100%", boxSizing: "border-box", padding: "10px 11px", borderRadius: 8, border: `1px solid ${validationError ? css.red : css.borderLight}`, resize: "vertical", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }} />
+      {validationError ? <p role="alert" style={{ margin: "8px 0 0", color: css.red, fontSize: 11, fontWeight: 700 }}>Choose a rating before submitting this table.</p> : null}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 10 }}>
-        <span style={{ fontSize: 11, color: css.textGray }}>{candidate.coffeeChatEvaluationCount || 0} rating{candidate.coffeeChatEvaluationCount === 1 ? "" : "s"} submitted</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 11, color: css.textGray }}>{candidate.coffeeChatEvaluationCount || 0}{Number.isFinite(expectedRatingCount) ? ` / ${expectedRatingCount}` : ""} rating{candidate.coffeeChatEvaluationCount === 1 ? "" : "s"} submitted</span>
+        {showSave ? <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {saved ? <span style={{ fontSize: 11, color: css.greenDark, fontWeight: 700 }}>Saved</span> : null}
           <button type="button" onClick={handleSave} disabled={busy || saving || (!rating && !persistedRating)} style={{ border: "none", borderRadius: 8, background: css.greenDark, color: "#FFF", padding: "9px 13px", fontSize: 12, fontWeight: 700, cursor: busy || saving || (!rating && !persistedRating) ? "not-allowed" : "pointer", opacity: busy || saving || (!rating && !persistedRating) ? 0.5 : 1 }}>
             {saving ? "Saving…" : !rating && persistedRating ? "Clear rating" : "Save rating"}
           </button>
-        </div>
+        </div> : <span style={{ fontSize: 11, color: css.textGray, fontWeight: 600 }}>Submits with table</span>}
       </div>
     </article>
   );
@@ -246,6 +261,13 @@ export default function InterviewManagementPage() {
   const queryClient = useQueryClient();
   const { phaseLabel, activeRound, isInterviewRound, loading: cycleLoading, error: cycleError } = useActiveCycle();
   const [filter, setFilter] = useState("all");
+  const [coffeeView, setCoffeeView] = useState("scroll");
+  const [activeGroupNumber, setActiveGroupNumber] = useState(null);
+  const [coffeeDrafts, setCoffeeDrafts] = useState({});
+  const [tableSubmitting, setTableSubmitting] = useState(false);
+  const [tableSubmitError, setTableSubmitError] = useState(null);
+  const [tableSubmitNotice, setTableSubmitNotice] = useState("");
+  const [invalidCandidateIds, setInvalidCandidateIds] = useState(() => new Set());
 
   const enabled = !cycleLoading && isInterviewRound;
 
@@ -265,7 +287,7 @@ export default function InterviewManagementPage() {
   const loading = enabled && query.isPending;
   const isCoffeeChat = normalizeRoundType(activeRound?.type) === ROUND_TYPES.COFFEE_CHAT;
 
-  const saveEvaluation = useCallback(async (payload) => {
+  const persistEvaluation = useCallback(async (payload) => {
     const res = await authedFetch(`${API}/interviews/evaluations`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -274,10 +296,21 @@ export default function InterviewManagementPage() {
     if (!res.ok) {
       throw await formatResponseError(res, "saving interview evaluation");
     }
-    // A decision changes this page's list and the dashboard pipeline stats.
-    queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() });
-    queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() });
-  }, [authedFetch, queryClient]);
+    return res.json().catch(() => ({}));
+  }, [authedFetch]);
+
+  const refreshEvaluationData = useCallback(() => Promise.all([
+    queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() }),
+    queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() }),
+    queryClient.invalidateQueries({ queryKey: qk.coffeeChatGraderScoreboard() }),
+    queryClient.invalidateQueries({ queryKey: qk.assignments() }),
+  ]), [queryClient]);
+
+  const saveEvaluation = useCallback(async (payload) => {
+    const result = await persistEvaluation(payload);
+    await refreshEvaluationData();
+    return result;
+  }, [persistEvaluation, refreshEvaluationData]);
 
   const filtered = useMemo(() => {
     const list = data.candidates || [];
@@ -297,6 +330,87 @@ export default function InterviewManagementPage() {
     });
     return [...groups.entries()].sort(([a], [b]) => a - b);
   }, [data.candidates]);
+
+  useEffect(() => {
+    setCoffeeDrafts((current) => {
+      const next = {};
+      let changed = false;
+      (data.candidates || []).forEach((candidate) => {
+        if (current[candidate.id]) next[candidate.id] = current[candidate.id];
+        else {
+          next[candidate.id] = makeCoffeeDraft(candidate);
+          changed = true;
+        }
+      });
+      if (Object.keys(current).length !== Object.keys(next).length) changed = true;
+      return changed ? next : current;
+    });
+  }, [data.candidates]);
+
+  useEffect(() => {
+    const groupNumbers = coffeeGroups.map(([number]) => number);
+    if (!groupNumbers.length) {
+      setActiveGroupNumber(null);
+      return;
+    }
+    setActiveGroupNumber((current) => {
+      if (groupNumbers.includes(current)) return current;
+      const assignedStart = Number(data.context?.startingGroupNumber);
+      return groupNumbers.includes(assignedStart) ? assignedStart : groupNumbers[0];
+    });
+  }, [coffeeGroups, data.context?.startingGroupNumber]);
+
+  const updateCoffeeDraft = useCallback((candidateId, draft) => {
+    setCoffeeDrafts((current) => ({ ...current, [candidateId]: draft }));
+    setInvalidCandidateIds((current) => {
+      if (!current.has(candidateId)) return current;
+      const next = new Set(current);
+      next.delete(candidateId);
+      return next;
+    });
+    setTableSubmitError(null);
+    setTableSubmitNotice("");
+  }, []);
+
+  async function submitCoffeeTable(groupNumber, candidates) {
+    if (tableSubmitting) return;
+    const incomplete = candidates.filter((candidate) => !(coffeeDrafts[candidate.id] || makeCoffeeDraft(candidate)).rating);
+    if (incomplete.length) {
+      setInvalidCandidateIds(new Set(incomplete.map((candidate) => candidate.id)));
+      setTableSubmitError(new Error(`Rate all ${candidates.length} candidates before submitting this table. ${incomplete.length} still need${incomplete.length === 1 ? "s" : ""} a rating.`));
+      setTableSubmitNotice("");
+      return;
+    }
+
+    setTableSubmitting(true);
+    setTableSubmitError(null);
+    setTableSubmitNotice("");
+    try {
+      await Promise.all(candidates.map(async (candidate) => {
+        try {
+          const draft = coffeeDrafts[candidate.id] || makeCoffeeDraft(candidate);
+          await persistEvaluation({
+            candidate_id: candidate.id,
+            rating: draft.rating,
+            notes: draft.notes,
+          });
+        } catch (error) {
+          throw new Error(`${candidate.name}: ${error.message || "could not save rating"}`);
+        }
+      }));
+      await refreshEvaluationData();
+      const currentIndex = coffeeGroups.findIndex(([number]) => number === groupNumber);
+      const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % coffeeGroups.length : 0;
+      const nextGroupNumber = coffeeGroups[nextIndex]?.[0] ?? groupNumber;
+      setInvalidCandidateIds(new Set());
+      setActiveGroupNumber(nextGroupNumber);
+      setTableSubmitNotice(`${groupNumber ? `Table ${groupNumber}` : "Unassigned table"} submitted. Opening ${nextGroupNumber ? `Table ${nextGroupNumber}` : "the next table"}.`);
+    } catch (error) {
+      setTableSubmitError(error);
+    } finally {
+      setTableSubmitting(false);
+    }
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
@@ -334,6 +448,39 @@ export default function InterviewManagementPage() {
                 ))}
               </div>
             ) : null}
+
+            {isCoffeeChat && coffeeGroups.length ? (
+              <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: 14, marginBottom: 16, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.06em" }}>VIEW</span>
+                  {[{ id: "scroll", label: "Scroll view" }, { id: "list", label: "List view" }].map((option) => {
+                    const selected = coffeeView === option.id;
+                    return (
+                      <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setCoffeeView(option.id); setTableSubmitError(null); setTableSubmitNotice(""); setInvalidCandidateIds(new Set()); }} style={{ border: `1px solid ${selected ? css.greenDark : css.borderLight}`, background: selected ? css.greenDark : "#FFF", color: selected ? "#FFF" : css.textDark, borderRadius: 8, padding: "8px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {coffeeView === "list" ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", paddingLeft: 14, borderLeft: `1px solid ${css.borderLight}` }}>
+                    {coffeeGroups.map(([number, candidates]) => {
+                      const selected = activeGroupNumber === number;
+                      const completed = candidates.length > 0 && candidates.every((candidate) => (coffeeDrafts[candidate.id] || makeCoffeeDraft(candidate)).rating);
+                      return (
+                        <button key={number} type="button" onClick={() => { setActiveGroupNumber(number); setTableSubmitError(null); setTableSubmitNotice(""); setInvalidCandidateIds(new Set()); }} style={{ border: `1px solid ${selected ? css.greenDark : completed ? "rgba(29,158,117,0.34)" : css.borderLight}`, background: selected ? "rgba(29,158,117,0.12)" : "#FFF", color: selected ? css.greenDark : css.textGray, borderRadius: 999, padding: "7px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                          {number ? `Table ${number}` : "Unassigned"}{completed ? " · ready" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : <span style={{ color: css.textGray, fontSize: 12 }}>All tables are shown below; ratings save one candidate at a time.</span>}
+              </div>
+            ) : null}
+
+            {tableSubmitError ? <ErrorBanner error={tableSubmitError} onDismiss={() => setTableSubmitError(null)} style={{ marginBottom: 16 }} /> : null}
+            {tableSubmitNotice ? <div role="status" style={{ marginBottom: 16, padding: "11px 14px", borderRadius: 8, border: "1px solid rgba(29,158,117,0.25)", background: "rgba(29,158,117,0.08)", color: css.greenDark, fontSize: 12, fontWeight: 700 }}>{tableSubmitNotice}</div> : null}
 
             {!isCoffeeChat ? <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
               {["all", "pending", "pass", "fail", "hold"].map((id) => (
@@ -376,17 +523,45 @@ export default function InterviewManagementPage() {
               </div>
             ) : isCoffeeChat ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                {coffeeGroups.map(([number, candidates]) => (
-                  <section key={number} style={{ padding: 18, background: number ? "rgba(29,158,117,0.035)" : "rgba(239,159,39,0.05)", border: `1px solid ${css.borderLight}`, borderRadius: 14 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
-                      <h2 style={{ margin: 0, fontSize: 18, color: css.textDark }}>{number ? `Table ${number}` : "Unassigned candidates"}</h2>
-                      <span style={{ fontSize: 12, color: css.textGray }}>{candidates.length} candidate{candidates.length === 1 ? "" : "s"}</span>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
-                      {candidates.map((candidate) => <CoffeeChatCandidateCard key={candidate.id} candidate={candidate} busy={loading} onSave={saveEvaluation} onOpenProfile={() => navigate(`/scoreboard/${candidate.resumeId}/application`, { state: { resumeScreenRank: candidate.resumeScreenRank, coffeeChatScore: candidate.coffeeChatScore, coffeeChatEvaluationCount: candidate.coffeeChatEvaluationCount } })} />)}
-                    </div>
-                  </section>
-                ))}
+                {(coffeeView === "list" ? coffeeGroups.filter(([number]) => number === activeGroupNumber) : coffeeGroups).map(([number, candidates]) => {
+                  const currentIndex = coffeeGroups.findIndex(([groupNumber]) => groupNumber === number);
+                  const nextGroupNumber = coffeeGroups[(currentIndex + 1) % coffeeGroups.length]?.[0] ?? number;
+                  return (
+                    <section key={number} style={{ padding: 18, background: number ? "rgba(29,158,117,0.035)" : "rgba(239,159,39,0.05)", border: `1px solid ${css.borderLight}`, borderRadius: 14 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
+                        <h2 style={{ margin: 0, fontSize: 18, color: css.textDark }}>{number ? `Table ${number}` : "Unassigned candidates"}</h2>
+                        <span style={{ fontSize: 12, color: css.textGray }}>{candidates.length} candidate{candidates.length === 1 ? "" : "s"}</span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${getBalancedColumnCount(candidates.length)}, minmax(0, 1fr))`, gap: 12 }}>
+                        {candidates.map((candidate) => (
+                          <CoffeeChatCandidateCard
+                            key={candidate.id}
+                            candidate={candidate}
+                            draft={coffeeDrafts[candidate.id] || makeCoffeeDraft(candidate)}
+                            busy={loading || tableSubmitting}
+                            showSave={coffeeView === "scroll"}
+                            validationError={invalidCandidateIds.has(candidate.id)}
+                            expectedRatingCount={Number.isFinite(data.context?.assignedMemberCount) ? data.context.assignedMemberCount : null}
+                            onDraftChange={(draft) => updateCoffeeDraft(candidate.id, draft)}
+                            onSave={saveEvaluation}
+                            onOpenProfile={() => navigate(`/scoreboard/${candidate.resumeId}/application`, { state: { resumeScreenRank: candidate.resumeScreenRank, coffeeChatScore: candidate.coffeeChatScore, coffeeChatEvaluationCount: candidate.coffeeChatEvaluationCount } })}
+                          />
+                        ))}
+                      </div>
+                      {coffeeView === "list" ? (
+                        <div style={{ marginTop: 16, paddingTop: 15, borderTop: `1px solid ${css.borderLight}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+                          <div>
+                            <div style={{ color: css.textDark, fontSize: 13, fontWeight: 700 }}>Submit all ratings for {number ? `Table ${number}` : "this table"}</div>
+                            <div style={{ color: css.textGray, fontSize: 12, marginTop: 3 }}>After every API save succeeds, you will move to {nextGroupNumber ? `Table ${nextGroupNumber}` : "the next table"}.</div>
+                          </div>
+                          <button type="button" disabled={tableSubmitting || !candidates.length} onClick={() => submitCoffeeTable(number, candidates)} style={{ border: "none", borderRadius: 9, padding: "11px 18px", background: css.greenDark, color: "#FFF", fontSize: 13, fontWeight: 700, cursor: tableSubmitting || !candidates.length ? "not-allowed" : "pointer", opacity: tableSubmitting || !candidates.length ? 0.6 : 1 }}>
+                            {tableSubmitting ? "Submitting table…" : `Submit ${number ? `Table ${number}` : "table"} → ${nextGroupNumber ? `Table ${nextGroupNumber}` : "next"}`}
+                          </button>
+                        </div>
+                      ) : null}
+                    </section>
+                  );
+                })}
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
