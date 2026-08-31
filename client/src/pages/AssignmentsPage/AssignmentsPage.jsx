@@ -10,6 +10,7 @@ import Topbar from "../../components/Topbar/Topbar";
 import { formatReviewCount } from "../../utils/reviewCounts";
 import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
+import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle } from "../../theme/typography";
 
@@ -225,7 +226,7 @@ export default function AssignmentsPage() {
         rightSlot={<></>}
       />
 
-      <div style={{ padding: "28px 32px 40px", maxWidth: isCoffeeChatBoard ? 1520 : 1320, margin: "0 auto" }}>
+      <div style={{ padding: "28px 32px 40px", maxWidth: isCoffeeChatBoard ? 1720 : 1320, width: "100%", boxSizing: "border-box", margin: "0 auto" }}>
         <div style={{ marginBottom: 20 }}>
           <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>
             {isCoffeeChatBoard ? "Coffee Chat tables" : "Grading assignments"}
@@ -558,6 +559,14 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
 
   return (
     <>
+      <style>{`
+        @media (max-width: 1180px) {
+          .coffee-assignment-table-grid { grid-template-columns: minmax(0, 1fr) !important; }
+        }
+        @media (max-width: 760px) {
+          .coffee-assignment-table-body { grid-template-columns: minmax(0, 1fr) !important; }
+        }
+      `}</style>
       {!memberAssignmentsReady ? (
         <Banner tone="warning">
           Candidate tables can be rearranged now. Run <strong>add_interview_group_member_assignments.sql</strong> before assigning participant starting tables.
@@ -600,7 +609,7 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
         </div>
       </section>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14, alignItems: "start" }}>
+      <div className="coffee-assignment-table-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 18, alignItems: "start" }}>
         {tables.map((table) => {
           const activeDrop = dragOverTable === table.number;
           return (
@@ -619,30 +628,39 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                 <span style={{ ...metaPillStyle, ...assignedPillStyle }}>{table.members.length} starting</span>
               </div>
 
-              <div style={{ padding: "12px 14px", borderBottom: `1px solid ${css.borderLight}`, minHeight: 38 }}>
-                <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 7 }}>Starting participants</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {table.members.length ? table.members.map((member) => (
-                    <span key={member.id} draggable={memberAssignmentsReady} onDragStart={(event) => startDrag(event, "member", member.id)} style={{ ...metaPillStyle, ...assignedPillStyle, cursor: "grab" }}>{member.name}</span>
-                  )) : <span style={{ color: css.textGray, fontSize: 12 }}>Drop a participant here or use the selector above.</span>}
+              <div className="coffee-assignment-table-body" style={{ display: "grid", gridTemplateColumns: "minmax(150px, 0.65fr) minmax(0, 1.35fr)", minHeight: 190 }}>
+                <div style={{ padding: 14, borderRight: `1px solid ${css.borderLight}`, background: "rgba(248,250,246,0.7)" }}>
+                  <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }}>Members / admins</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    {table.members.length ? table.members.map((member) => (
+                      <div key={member.id} draggable={memberAssignmentsReady} onDragStart={(event) => startDrag(event, "member", member.id)} style={{ padding: "8px 9px", borderRadius: 8, border: `1px solid ${css.borderLight}`, background: "#FFF", color: css.textDark, fontSize: 12, fontWeight: 700, cursor: "grab" }}>
+                        <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.name}</div>
+                        <div style={{ marginTop: 2, color: css.textGray, fontSize: 10, fontWeight: 600, textTransform: "capitalize" }}>{member.role}</div>
+                      </div>
+                    )) : <span style={{ color: css.textGray, fontSize: 12, lineHeight: 1.45 }}>Drop a member or admin here.</span>}
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, minHeight: 110 }}>
-                {table.candidates.length ? table.candidates.map((candidate) => {
-                  const busy = busyKey === `candidate:${candidate.id}`;
-                  return (
-                    <div key={candidate.id} draggable={!busy} onDragStart={(event) => startDrag(event, "candidate", candidate.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 11px", border: `1px solid ${css.borderLight}`, borderRadius: 9, background: "#FFF", cursor: busy ? "wait" : "grab" }}>
-                      <button type="button" onClick={() => candidate.resumeId && onOpenCandidate(candidate.resumeId)} style={{ flex: 1, minWidth: 0, padding: 0, border: "none", background: "transparent", color: css.greenDark, textAlign: "left", cursor: candidate.resumeId ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
-                        <span style={{ display: "block", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{candidate.name}</span>
-                        <span style={{ display: "block", fontSize: 11, color: css.textGray, marginTop: 2 }}>{[candidate.year, candidate.major].filter(Boolean).join(" · ") || "—"}</span>
-                      </button>
-                      <select value={candidate.groupNumber} disabled={busy} onChange={(event) => onMoveCandidate(candidate.id, Number(event.target.value))} style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "7px 8px", background: "#FFF", color: css.textDark, fontSize: 12 }}>
-                        {tables.map((target) => <option key={target.number} value={target.number}>Table {target.number}</option>)}
-                      </select>
-                    </div>
-                  );
-                }) : <div style={{ padding: "20px 8px", textAlign: "center", color: css.textGray, fontSize: 12 }}>Drop candidates here.</div>}
+                <div style={{ padding: 14 }}>
+                  <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }}>Applicants</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {table.candidates.length ? table.candidates.map((candidate) => {
+                      const busy = busyKey === `candidate:${candidate.id}`;
+                      return (
+                        <div key={candidate.id} draggable={!busy} onDragStart={(event) => startDrag(event, "candidate", candidate.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", border: `1px solid ${css.borderLight}`, borderRadius: 9, background: "#FFF", cursor: busy ? "wait" : "grab" }}>
+                          <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={38} background={css.greenDark} />
+                          <button type="button" onClick={() => candidate.resumeId && onOpenCandidate(candidate.resumeId)} style={{ flex: 1, minWidth: 0, padding: 0, border: "none", background: "transparent", color: css.greenDark, textAlign: "left", cursor: candidate.resumeId ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
+                            <span style={{ display: "block", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{candidate.name}</span>
+                            <span style={{ display: "block", fontSize: 11, color: css.textGray, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[candidate.year, candidate.major].filter(Boolean).join(" · ") || "—"}</span>
+                          </button>
+                          <select value={candidate.groupNumber} disabled={busy} onChange={(event) => onMoveCandidate(candidate.id, Number(event.target.value))} style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "7px 8px", background: "#FFF", color: css.textDark, fontSize: 12 }}>
+                            {tables.map((target) => <option key={target.number} value={target.number}>Table {target.number}</option>)}
+                          </select>
+                        </div>
+                      );
+                    }) : <div style={{ padding: "20px 8px", textAlign: "center", color: css.textGray, fontSize: 12 }}>Drop applicants here.</div>}
+                  </div>
+                </div>
               </div>
             </section>
           );
