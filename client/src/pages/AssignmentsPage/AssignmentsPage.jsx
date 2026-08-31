@@ -608,12 +608,6 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
         </div>
       </section>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        <span style={{ padding: "8px 11px", borderRadius: 999, background: "rgba(226,75,74,0.08)", color: css.red, border: "1px solid rgba(226,75,74,0.22)", fontSize: 11, fontWeight: 700 }}>
-          No-show table · {noShowCandidates.length} applicant{noShowCandidates.length === 1 ? "" : "s"}
-        </span>
-      </div>
-
       <div className="coffee-assignment-table-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 18, alignItems: "start" }}>
         {displayedTables.map((table) => {
           const activeDrop = dragOverTable === table.number;
