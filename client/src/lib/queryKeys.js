@@ -24,6 +24,7 @@ export const qk = {
 
   graderScoreboard: () => ["grader-scoreboard"],
   frqGraderScoreboard: () => ["frq-grader-scoreboard"],
+  coffeeChatGraderScoreboard: () => ["coffee-chat-grader-scoreboard"],
   interviewCandidates: () => ["interviews", "candidates"],
   demographics: () => ["demographics"],
   users: () => ["users"],

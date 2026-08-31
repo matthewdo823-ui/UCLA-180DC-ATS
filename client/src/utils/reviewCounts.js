@@ -17,6 +17,9 @@ function normalizeCount(value) {
 
 export function formatReviewCount(count, type) {
   const normalized = normalizeCount(count);
+  if (type === "coffee chat") {
+    return `${normalized} Coffee Chat grade${normalized === 1 ? "" : "s"}`;
+  }
   const label = type === "free response" || type === "fr" ? "FR" : type;
   return `${normalized} ${label} review${normalized === 1 ? "" : "s"}`;
 }
