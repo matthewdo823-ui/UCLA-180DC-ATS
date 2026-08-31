@@ -232,30 +232,21 @@ export default function AssignmentsPage() {
           <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>
             {isCoffeeChatBoard ? "Coffee Chat tables" : "Grading assignments"}
           </h1>
-          <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5, maxWidth: 720 }}>
-            {isCoffeeChatBoard
-              ? "Move applicants between tables and choose where each member or admin begins. Participants rotate after submitting, with the last table cycling back to Table 1."
-              : "Pin specific candidates to specific graders. Assigned candidates are served first in the screener; once a grader clears their assignments they drop back into the shared priority queue automatically."}
-          </p>
+          {!isCoffeeChatBoard ? (
+            <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5, maxWidth: 720 }}>
+              Pin specific candidates to specific graders. Assigned candidates are served first in the screener; once a grader clears their assignments they drop back into the shared priority queue automatically.
+            </p>
+          ) : null}
         </div>
 
-        <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-          {isCoffeeChatBoard ? (
-            <>
-              <StatCard label="Tables" value={board?.stats?.tables ?? 0} />
-              <StatCard label="Candidates" value={board?.stats?.candidates ?? 0} />
-              <StatCard label="Participants" value={board?.stats?.graders ?? 0} />
-              <StatCard label="Starting tables set" value={board?.stats?.assignedGraders ?? 0} />
-            </>
-          ) : (
-            <>
+        {!isCoffeeChatBoard ? (
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
               <StatCard label="Candidates" value={board?.stats?.candidates ?? 0} />
               <StatCard label="Graders" value={board?.stats?.graders ?? 0} />
               <StatCard label="Assignments" value={board?.stats?.assignments ?? 0} />
               <StatCard label="Pending" value={board?.stats?.pendingAssignments ?? 0} />
-            </>
-          )}
-        </div>
+          </div>
+        ) : null}
 
         {error && (
           <ErrorBanner
