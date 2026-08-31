@@ -36,11 +36,14 @@ function GradingModeToggle({ mode, onChange, disabled = false }) {
     <div
       style={{
         display: "inline-flex",
-        borderRadius: 20,
+        alignSelf: "flex-start",
+        width: "fit-content",
+        maxWidth: "100%",
+        padding: 3,
+        gap: 2,
+        borderRadius: 999,
         border: `1px solid ${css.borderLight}`,
-        overflow: "hidden",
-        background: css.cardWhite,
-        marginRight: 8,
+        background: "rgba(40, 98, 65, 0.05)",
       }}
     >
       {options.map(({ id, label }) => {
@@ -54,19 +57,20 @@ function GradingModeToggle({ mode, onChange, disabled = false }) {
             style={{
               ...topbarGhostButtonStyle,
               border: "none",
-              borderRadius: 0,
+              borderRadius: 999,
               margin: 0,
-              boxShadow: active ? "0 1px 4px rgba(40,98,65,0.16)" : "none",
-              padding: "10px 14px",
-              fontSize: 12,
+              boxShadow: active ? "0 1px 3px rgba(40,98,65,0.14)" : "none",
+              padding: "5px 10px",
+              minHeight: 28,
+              fontSize: 11,
               background: active ? css.cardWhite : "transparent",
               color: active ? css.greenDark : css.textGray,
               cursor: disabled ? "not-allowed" : "pointer",
               opacity: disabled ? 0.65 : 1,
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
+              justifyContent: "center",
+              whiteSpace: "nowrap",
             }}
           >
             {label}
