@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { qk } from "../../lib/queryKeys";
@@ -634,6 +634,7 @@ function rowIconBtnStyle(theme, primary) {
 const EMPTY_SCOREBOARD = { stats: null, candidates: [], metrics: [], maxPerCategory: 4, context: null };
 
 export default function ScoreboardPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const cycleId = searchParams.get("cycleId") || null;
@@ -725,8 +726,10 @@ export default function ScoreboardPage() {
 
   const openCandidateWorkspace = useCallback((candidate) => {
     const cycleQuery = cycleId ? `?cycleId=${encodeURIComponent(cycleId)}` : "";
-    navigate(`/scoreboard/${candidate.id}/application${cycleQuery}`, {
+    navigate(`/candidates/${candidate.id}${cycleQuery}`, {
       state: {
+        returnTo: `${location.pathname}${location.search}`,
+        returnLabel: "scoreboard",
         candidateRank: candidate.rank,
         candidateCount: data.stats?.applicants,
         resumeScreenRank: candidate.resumeScreenRank,
@@ -734,7 +737,7 @@ export default function ScoreboardPage() {
         coffeeChatEvaluationCount: candidate.coffeeChatEvaluationCount,
       },
     });
-  }, [cycleId, data.stats?.applicants, navigate]);
+  }, [cycleId, data.stats?.applicants, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (scoreboardQuery.error) {

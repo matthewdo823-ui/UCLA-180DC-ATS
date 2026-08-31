@@ -10,6 +10,7 @@ import {
   Panel,
   ActionItemList,
   GraderProgressRows,
+  CoffeeChatPersonalStats,
   RoundTimeline,
   PipelineBreakdown,
   twoColumnGridStyle,
@@ -248,6 +249,16 @@ export default function AdminDashboard() {
               <ActionItemList items={sortedActionItems} onNavigate={navigate} limit={4} />
             </Panel>
 
+            {pipeline?.ratingMode === "coffee_chat" && pipeline.personalStats ? (
+              <Panel title="Your Coffee Chat grading">
+                <CoffeeChatPersonalStats
+                  total={pipeline.personalStats.total}
+                  graded={pipeline.personalStats.graded}
+                  breakdown={pipeline.personalStats}
+                />
+              </Panel>
+            ) : null}
+
             <div style={twoColumnGridStyle}>
               <Panel title={isInterview ? "Evaluation pipeline" : "Pipeline"}>
                 <PipelineBreakdown pipeline={pipeline} isInterview={isInterview} />
@@ -261,11 +272,11 @@ export default function AdminDashboard() {
                 ) : (
                   <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: "18px 20px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 16, paddingBottom: 14, marginBottom: 4, borderBottom: `1px solid ${css.borderLight}`, fontSize: 13 }}>
-                      <span style={{ color: css.textDark, fontWeight: 700 }}>{graderSummary.activeGraders} resume-active <span style={{ color: css.textGray, fontWeight: 500 }}>of {graderSummary.graders} graders</span></span>
-                      <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} with no resume reviews</span>
+                      <span style={{ color: css.textDark, fontWeight: 700 }}>{graderSummary.activeGraders} {graderSummary.mode === "coffee_chat" ? "active" : "resume-active"} <span style={{ color: css.textGray, fontWeight: 500 }}>of {graderSummary.graders} {graderSummary.mode === "coffee_chat" ? "participants" : "graders"}</span></span>
+                      <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} with no {graderSummary.mode === "coffee_chat" ? "Coffee Chat grades" : "resume reviews"}</span>
                     </div>
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: "10px 0 12px", color: css.textGray, fontSize: 12 }}>
-                      <span>{formatReviewCountPair(graderSummary.totalResumeGrades, graderSummary.totalFrqGrades)}</span>
+                      <span>{graderSummary.mode === "coffee_chat" ? `${graderSummary.totalReviews} Coffee Chat grade${graderSummary.totalReviews === 1 ? "" : "s"}` : formatReviewCountPair(graderSummary.totalResumeGrades, graderSummary.totalFrqGrades)}</span>
                     </div>
                     {graderSummary.graderProgress?.length > 0 ? (
                       <>
@@ -277,6 +288,7 @@ export default function AdminDashboard() {
                             graders={graderSummary.graderProgress}
                             expectedReviews={graderSummary.expectedReviews}
                             expectedFrqReviews={graderSummary.expectedFrqReviews}
+                            mode={graderSummary.mode}
                           />
                         </div>
                       </>
