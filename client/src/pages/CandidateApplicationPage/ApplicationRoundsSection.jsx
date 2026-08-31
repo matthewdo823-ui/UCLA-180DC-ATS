@@ -149,24 +149,29 @@ const COFFEE_RATING_LABELS = {
   strong_no: "Strong no",
 };
 
-function CoffeeChatEvaluationRow({ evaluation, isFirst }) {
+function InterviewEvaluationRow({ evaluation, isFirst, round }) {
   const score = Number(evaluation.weightedScore);
-  const scoreColor = coffeeRatingColors[evaluation.rating]
-    || (score > 0 ? cardGreen : score < 0 ? css.red : css.textGray);
+  const isCoffeeChat = round?.roundType === "coffee_chat" || Boolean(COFFEE_RATING_LABELS[evaluation.rating]);
+  const scoreColor = isCoffeeChat
+    ? coffeeRatingColors[evaluation.rating] || (score > 0 ? cardGreen : score < 0 ? css.red : css.textGray)
+    : evaluation.decision === "pass" ? cardGreen : evaluation.decision === "fail" ? css.red : evaluation.decision === "hold" ? css.amber : css.textGray;
+  const resultLabel = isCoffeeChat
+    ? COFFEE_RATING_LABELS[evaluation.rating] || "Submitted"
+    : titleCase(evaluation.decision || "submitted");
 
   return (
     <div style={{ borderTop: isFirst ? "none" : `1px solid ${css.borderLight}`, padding: "16px 0" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: css.textDark }}>
-            {evaluation.reviewerName || evaluation.reviewerEmail || "Coffee Chat evaluator"}
+            {evaluation.reviewerName || evaluation.reviewerEmail || `${round?.roundName || "Interview"} evaluator`}
           </p>
           <span style={{ fontSize: 12, color: css.textGray }}>
             {formatDate(evaluation.submittedAt, { style: "short" })}
           </span>
         </div>
         <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: scoreColor, whiteSpace: "nowrap" }}>
-          {COFFEE_RATING_LABELS[evaluation.rating] || "Submitted"}
+          {resultLabel}
         </p>
       </div>
       {hasText(evaluation.notes) && (
@@ -189,6 +194,7 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
   const resumeReviews = scoring?.reviews || [];
   const frqReviews = scoring?.frqReviews || [];
   const coffeeChatEvaluations = scoring?.coffeeChatEvaluations || [];
+  const roundGrades = scoring?.roundGrades || [];
 
   return (
     <SectionCard title="Rounds">
@@ -266,8 +272,11 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
           )}
         </div>
 
-        {UPCOMING_EVALUATION_ROUNDS.map((round, roundIndex) => (
-          <div key={round.id} style={{ borderTop: `1px solid ${css.borderLight}`, paddingTop: 20 }}>
+        {UPCOMING_EVALUATION_ROUNDS.map((round, roundIndex) => {
+          const roundGrade = roundGrades.find((entry) => entry.roundType === round.type);
+          const evaluations = roundGrade?.evaluations || (roundIndex === 0 ? coffeeChatEvaluations : []);
+          return (
+          <div key={roundGrade?.roundId || round.id} style={{ borderTop: `1px solid ${css.borderLight}`, paddingTop: 20 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
               <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: css.textDark }}>{round.label}</p>
               <span
@@ -282,18 +291,18 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
                   color: css.textGray,
                 }}
               >
-                {roundIndex === 0 && coffeeChatEvaluations.length ? "In progress" : "Upcoming"}
+                {evaluations.length ? titleCase(roundGrade?.roundStatus || "in progress") : "Upcoming"}
               </span>
             </div>
-            {roundIndex === 0 && coffeeChatEvaluations.length ? (
+            {evaluations.length ? (
               <>
                 <p style={{ margin: "0 0 2px", fontSize: 13, color: css.textGray }}>
-                  {formatScore(scoring.coffeeChatScore || 0)} points from {coffeeChatEvaluations.length}
-                  {Number.isFinite(scoring.coffeeChatExpectedEvaluationCount) ? ` / ${scoring.coffeeChatExpectedEvaluationCount}` : ""} {coffeeChatEvaluations.length === 1 ? "rating" : "ratings"}
+                  {roundIndex === 0 ? `${formatScore(scoring.coffeeChatScore || 0)} points from ` : ""}{evaluations.length}
+                  {roundIndex === 0 && Number.isFinite(scoring.coffeeChatExpectedEvaluationCount) ? ` / ${scoring.coffeeChatExpectedEvaluationCount}` : ""} {evaluations.length === 1 ? "rating" : "ratings"}
                 </p>
                 <div>
-                  {coffeeChatEvaluations.map((evaluation, index) => (
-                    <CoffeeChatEvaluationRow key={evaluation.id} evaluation={evaluation} isFirst={index === 0} />
+                  {evaluations.map((evaluation, index) => (
+                    <InterviewEvaluationRow key={evaluation.id} evaluation={evaluation} isFirst={index === 0} round={roundGrade} />
                   ))}
                 </div>
               </>
@@ -303,7 +312,8 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
               </p>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </SectionCard>
   );

@@ -33,7 +33,6 @@ export default function CandidateApplicationPage() {
   const coffeeChatScore = Number(location.state?.coffeeChatScore ?? scoring?.coffeeChatScore) || 0;
   const coffeeChatEvaluationCount = Number(location.state?.coffeeChatEvaluationCount ?? scoring?.coffeeChatEvaluationCount) || 0;
   const returnTo = location.state?.returnTo || null;
-  const returnLabel = location.state?.returnLabel || "previous page";
 
   function returnToSource() {
     if (returnTo) {
@@ -70,7 +69,7 @@ export default function CandidateApplicationPage() {
             cursor: "pointer",
           }}
         >
-          ← Back to {returnLabel}
+          ← Back
         </button>
 
         {loading && (
