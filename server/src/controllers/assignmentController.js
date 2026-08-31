@@ -1,8 +1,15 @@
 const supabase = require('../config/supabase');
-const { getActiveCycleRow, getResumeScreenRoundForCycle } = require('../utils/cycleContext');
+const {
+    getActiveCycleRow,
+    getActiveRoundForCycle,
+    getResumeScreenRoundForCycle,
+    requireActiveInterviewRound,
+} = require('../utils/cycleContext');
 const { firstRel } = require('../utils/supabaseHelpers');
 const { getUserName } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
+const { isMissingSchemaError } = require('../utils/schemaCompatibility');
+const { ROUND_TYPES, normalizeRoundType } = require('../utils/rounds');
 const {
     normalizeGraderIds,
     normalizeResumeIds,
@@ -61,12 +68,126 @@ async function loadAssignmentBoardData(cycleId) {
     };
 }
 
+async function loadCoffeeChatAssignmentBoard(cycle, round) {
+    const [candidateRes, resumeRes, userRes, groupRes, memberRes, evaluationRes] = await Promise.all([
+        supabase
+            .from('candidates')
+            .select('id, name, year, major, headshot')
+            .eq('cycle_id', cycle.id)
+            .order('name', { ascending: true }),
+        supabase
+            .from('resumes')
+            .select('id, candidate_id')
+            .eq('cycle_id', cycle.id),
+        supabase
+            .from('users')
+            .select('user_id, email, role, first_name, last_name')
+            .eq('role', 'member')
+            .order('first_name', { ascending: true }),
+        supabase
+            .from('interview_group_assignments')
+            .select('id, candidate_id, group_number, assigned_at')
+            .eq('round_id', round.id),
+        supabase
+            .from('interview_group_member_assignments')
+            .select('id, user_id, group_number, assigned_at, updated_at')
+            .eq('round_id', round.id),
+        supabase
+            .from('interview_evaluations')
+            .select('candidate_id, evaluated_by, rating')
+            .eq('round_id', round.id)
+            .not('rating', 'is', null),
+    ]);
+
+    if (candidateRes.error) throw candidateRes.error;
+    if (resumeRes.error) throw resumeRes.error;
+    if (userRes.error) throw userRes.error;
+    if (groupRes.error) throw groupRes.error;
+    if (memberRes.error && !isMissingSchemaError(memberRes.error)) throw memberRes.error;
+    if (evaluationRes.error) throw evaluationRes.error;
+
+    const candidateById = Object.fromEntries((candidateRes.data || []).map((candidate) => [candidate.id, candidate]));
+    const resumeByCandidate = Object.fromEntries((resumeRes.data || []).map((resume) => [resume.candidate_id, resume.id]));
+    const memberAssignmentByUser = Object.fromEntries(
+        (memberRes.error ? [] : memberRes.data || []).map((assignment) => [assignment.user_id, assignment])
+    );
+    const assignedMemberIds = new Set((memberRes.error ? [] : memberRes.data || []).map((assignment) => assignment.user_id));
+    const assignedMemberEvaluations = memberRes.error
+        ? evaluationRes.data || []
+        : (evaluationRes.data || []).filter((evaluation) => assignedMemberIds.has(evaluation.evaluated_by));
+    const ratingsByCandidate = {};
+    const ratingsByMember = {};
+    assignedMemberEvaluations.forEach((evaluation) => {
+        ratingsByCandidate[evaluation.candidate_id] = (ratingsByCandidate[evaluation.candidate_id] || 0) + 1;
+        ratingsByMember[evaluation.evaluated_by] = (ratingsByMember[evaluation.evaluated_by] || 0) + 1;
+    });
+
+    const candidates = (groupRes.data || [])
+        .map((assignment) => {
+            const candidate = candidateById[assignment.candidate_id];
+            if (!candidate) return null;
+            return {
+                id: candidate.id,
+                resumeId: resumeByCandidate[candidate.id] || null,
+                name: candidate.name,
+                year: candidate.year || null,
+                major: candidate.major || null,
+                headshot: candidate.headshot || '',
+                groupNumber: Number(assignment.group_number) || 0,
+                assignmentId: assignment.id,
+                submittedRatingCount: ratingsByCandidate[candidate.id] || 0,
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.groupNumber - b.groupNumber || a.name.localeCompare(b.name));
+
+    const graders = (userRes.data || []).map((user) => ({
+        id: user.user_id,
+        name: getUserName(user),
+        email: user.email || '',
+        role: user.role,
+        startingGroupNumber: Number(memberAssignmentByUser[user.user_id]?.group_number) || null,
+        submittedRatingCount: ratingsByMember[user.user_id] || 0,
+    }));
+
+    const groupCount = Number(round.interview_group_count) || 1;
+    return {
+        mode: 'coffee_chat',
+        context: {
+            cycle: { id: cycle.id, name: cycle.name },
+            round: {
+                id: round.id,
+                name: round.name,
+                status: round.status,
+                type: normalizeRoundType(round.type),
+                groupCount,
+            },
+            memberAssignmentsReady: !memberRes.error,
+        },
+        candidates,
+        graders,
+        assignments: [],
+        stats: {
+            candidates: candidates.length,
+            graders: graders.length,
+            tables: groupCount,
+            assignedGraders: graders.filter((grader) => grader.startingGroupNumber).length,
+            submittedRatings: assignedMemberEvaluations.length,
+        },
+    };
+}
+
 /** Admin assignment board: candidates, graders, and every current assignment. */
 exports.getAssignmentBoard = async (req, res) => {
     try {
         const cycle = await getActiveCycleRow();
         if (!cycle) {
             return res.status(503).json({ error: 'No active recruiting cycle' });
+        }
+
+        const activeRound = await getActiveRoundForCycle(cycle.id);
+        if (normalizeRoundType(activeRound?.type) === ROUND_TYPES.COFFEE_CHAT) {
+            return res.json(await loadCoffeeChatAssignmentBoard(cycle, activeRound));
         }
 
         const round = await getResumeScreenRoundForCycle(cycle.id);
@@ -165,6 +286,113 @@ exports.getAssignmentBoard = async (req, res) => {
         });
     } catch (err) {
         return respondWithServerError(res, err, 'getAssignmentBoard');
+    }
+};
+
+/** Move one candidate between tables in the active Coffee Chat round. */
+exports.updateCoffeeChatCandidateTable = async (req, res) => {
+    const candidateId = String(req.params.candidateId || '').trim();
+    const groupNumber = Number(req.body?.groupNumber);
+
+    if (!candidateId) return res.status(400).json({ error: 'candidateId is required' });
+
+    try {
+        const ctx = await requireActiveInterviewRound();
+        if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
+        if (normalizeRoundType(ctx.round.type) !== ROUND_TYPES.COFFEE_CHAT) {
+            return res.status(400).json({ error: 'Candidate tables can only be changed during Coffee Chats' });
+        }
+
+        const groupCount = Number(ctx.round.interview_group_count) || 1;
+        if (!Number.isInteger(groupNumber) || groupNumber < 1 || groupNumber > groupCount) {
+            return res.status(400).json({ error: `groupNumber must be between 1 and ${groupCount}` });
+        }
+
+        const { data, error } = await supabase
+            .from('interview_group_assignments')
+            .update({ group_number: groupNumber, assigned_by: req.user?.user_id, assigned_at: new Date().toISOString() })
+            .eq('candidate_id', candidateId)
+            .eq('round_id', ctx.round.id)
+            .select('id, candidate_id, group_number')
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!data) return res.status(404).json({ error: 'Candidate does not have a Coffee Chat table assignment' });
+        return res.json({ candidateId: data.candidate_id, groupNumber: data.group_number });
+    } catch (err) {
+        return respondWithServerError(res, err, 'updateCoffeeChatCandidateTable');
+    }
+};
+
+/** Assign or unassign a member's starting table for the active Coffee Chat round. */
+exports.updateCoffeeChatMemberTable = async (req, res) => {
+    const userId = Number(req.params.userId);
+    const rawGroupNumber = req.body?.groupNumber;
+    const unassign = rawGroupNumber == null || rawGroupNumber === '';
+    const groupNumber = Number(rawGroupNumber);
+
+    if (!Number.isInteger(userId) || userId < 1) {
+        return res.status(400).json({ error: 'userId must be a valid member id' });
+    }
+
+    try {
+        const ctx = await requireActiveInterviewRound();
+        if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
+        if (normalizeRoundType(ctx.round.type) !== ROUND_TYPES.COFFEE_CHAT) {
+            return res.status(400).json({ error: 'Member tables can only be changed during Coffee Chats' });
+        }
+
+        const { data: member, error: memberError } = await supabase
+            .from('users')
+            .select('user_id, role')
+            .eq('user_id', userId)
+            .eq('role', 'member')
+            .maybeSingle();
+        if (memberError) throw memberError;
+        if (!member) return res.status(404).json({ error: 'Member not found' });
+
+        if (unassign) {
+            const { error } = await supabase
+                .from('interview_group_member_assignments')
+                .delete()
+                .eq('round_id', ctx.round.id)
+                .eq('user_id', userId);
+            if (error) {
+                if (isMissingSchemaError(error)) {
+                    return res.status(503).json({ error: 'Member table assignments require migration #23.' });
+                }
+                throw error;
+            }
+            return res.json({ userId, groupNumber: null });
+        }
+
+        const groupCount = Number(ctx.round.interview_group_count) || 1;
+        if (!Number.isInteger(groupNumber) || groupNumber < 1 || groupNumber > groupCount) {
+            return res.status(400).json({ error: `groupNumber must be between 1 and ${groupCount}` });
+        }
+
+        const { data, error } = await supabase
+            .from('interview_group_member_assignments')
+            .upsert({
+                cycle_id: ctx.cycle.id,
+                round_id: ctx.round.id,
+                user_id: userId,
+                group_number: groupNumber,
+                assigned_by: req.user?.user_id,
+                updated_at: new Date().toISOString(),
+            }, { onConflict: 'round_id,user_id' })
+            .select('user_id, group_number')
+            .single();
+
+        if (error) {
+            if (isMissingSchemaError(error)) {
+                return res.status(503).json({ error: 'Member table assignments require migration #23.' });
+            }
+            throw error;
+        }
+        return res.json({ userId: data.user_id, groupNumber: data.group_number });
+    } catch (err) {
+        return respondWithServerError(res, err, 'updateCoffeeChatMemberTable');
     }
 };
 
