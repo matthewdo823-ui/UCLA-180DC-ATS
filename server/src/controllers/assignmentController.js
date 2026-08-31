@@ -10,6 +10,7 @@ const { getUserName } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
 const { isMissingSchemaError } = require('../utils/schemaCompatibility');
 const { ROUND_TYPES, normalizeRoundType } = require('../utils/rounds');
+const { NO_SHOW_GROUP_NUMBER } = require('../utils/interviewGroups');
 const {
     normalizeGraderIds,
     normalizeResumeIds,
@@ -285,8 +286,8 @@ exports.updateCoffeeChatCandidateTable = async (req, res) => {
         }
 
         const groupCount = Number(ctx.round.interview_group_count) || 1;
-        if (!Number.isInteger(groupNumber) || groupNumber < 1 || groupNumber > groupCount) {
-            return res.status(400).json({ error: `groupNumber must be between 1 and ${groupCount}` });
+        if (!Number.isInteger(groupNumber) || (groupNumber !== NO_SHOW_GROUP_NUMBER && (groupNumber < 1 || groupNumber > groupCount))) {
+            return res.status(400).json({ error: `groupNumber must be between 1 and ${groupCount}, or the reserved no-show table` });
         }
 
         const { data, error } = await supabase
