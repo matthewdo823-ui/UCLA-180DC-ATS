@@ -599,12 +599,12 @@ export default function InterviewManagementPage() {
                   const currentIndex = coffeeGroups.findIndex(([groupNumber]) => groupNumber === number);
                   const nextGroupNumber = coffeeGroups[(currentIndex + 1) % coffeeGroups.length]?.[0] ?? number;
                   return (
-                    <section key={number} style={{ padding: 22, background: number ? "rgba(29,158,117,0.035)" : "rgba(239,159,39,0.05)", border: `1px solid ${css.borderLight}`, borderRadius: 14 }}>
+                    <section key={number} style={{ padding: coffeeView === "list" ? 28 : 22, background: number ? "rgba(29,158,117,0.035)" : "rgba(239,159,39,0.05)", border: `1px solid ${css.borderLight}`, borderRadius: 14 }}>
                       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
                         <h2 style={{ margin: 0, fontSize: 20, color: css.textDark }}>{number ? `Table ${number}` : "Unassigned candidates"}</h2>
                         <span style={{ fontSize: 13, color: css.textGray }}>{candidates.length} candidate{candidates.length === 1 ? "" : "s"}</span>
                       </div>
-                      <div className="coffee-candidate-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${getBalancedColumnCount(candidates.length)}, minmax(0, 1fr))`, gap: 14 }}>
+                      <div className="coffee-candidate-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${getBalancedColumnCount(candidates.length)}, minmax(0, 1fr))`, gap: coffeeView === "list" ? 20 : 14 }}>
                         {candidates.map((candidate) => (
                           <CoffeeChatCandidateCard
                             key={candidate.id}
@@ -612,7 +612,7 @@ export default function InterviewManagementPage() {
                             draft={coffeeDrafts[candidate.id] || makeCoffeeDraft(candidate)}
                             busy={loading || tableSubmitting}
                             showSave={false}
-                            autoSave={coffeeView === "scroll"}
+                            autoSave
                             validationError={invalidCandidateIds.has(candidate.id)}
                             expectedRatingCount={Number.isFinite(data.context?.assignedMemberCount) ? data.context.assignedMemberCount : null}
                             onDraftChange={(draft) => updateCoffeeDraft(candidate.id, draft)}
