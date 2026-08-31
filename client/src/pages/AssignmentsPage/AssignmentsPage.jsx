@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { API } from "../../constants/config";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
@@ -62,11 +63,13 @@ function useSelection() {
 
 export default function AssignmentsPage() {
   const authedFetch = useAuthedFetch();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   // Separate from the query's load error so a failed assign doesn't wipe the board.
   const [mutationError, setMutationError] = useState(null);
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
+  const [tableMutationKey, setTableMutationKey] = useState("");
   const [search, setSearch] = useState("");
   const [candidateFilter, setCandidateFilter] = useState("all");
 
@@ -163,31 +166,92 @@ export default function AssignmentsPage() {
     }
   }
 
+  async function moveCoffeeChatCandidate(candidateId, groupNumber) {
+    const mutationKey = `candidate:${candidateId}`;
+    try {
+      setTableMutationKey(mutationKey);
+      setMutationError(null);
+      setNotice("");
+      const res = await authedFetch(`${API}/assignments/coffee-chat/candidates/${encodeURIComponent(candidateId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groupNumber }),
+      });
+      if (!res.ok) throw await formatResponseError(res, "moving the candidate to another table");
+      setNotice(`Candidate moved to Table ${groupNumber}.`);
+      await Promise.all([
+        reloadBoard(),
+        queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() }),
+      ]);
+    } catch (err) {
+      setMutationError(err);
+    } finally {
+      setTableMutationKey("");
+    }
+  }
+
+  async function assignCoffeeChatMember(userId, groupNumber) {
+    const mutationKey = `member:${userId}`;
+    try {
+      setTableMutationKey(mutationKey);
+      setMutationError(null);
+      setNotice("");
+      const res = await authedFetch(`${API}/assignments/coffee-chat/members/${encodeURIComponent(userId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groupNumber: groupNumber || null }),
+      });
+      if (!res.ok) throw await formatResponseError(res, "assigning the member's starting table");
+      setNotice(groupNumber ? `Member will start at Table ${groupNumber}.` : "Member starting table cleared.");
+      await Promise.all([
+        reloadBoard(),
+        queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() }),
+      ]);
+    } catch (err) {
+      setMutationError(err);
+    } finally {
+      setTableMutationKey("");
+    }
+  }
+
+  const isCoffeeChatBoard = board?.mode === "coffee_chat";
+
   return (
     <div style={{ minHeight: "100%", background: css.bgLight, fontFamily: "'DM Sans', sans-serif" }}>
       <Topbar
         phaseLabel={board?.context?.cycle?.name ? `Admin · ${board.context.cycle.name}` : "Admin · Assignments"}
-        activeLabel="Assignments"
+        activeLabel={isCoffeeChatBoard ? "Tables" : "Assignments"}
         rightSlot={<></>}
       />
 
-      <div style={{ padding: "28px 32px 40px", maxWidth: 1320, margin: "0 auto" }}>
+      <div style={{ padding: "28px 32px 40px", maxWidth: isCoffeeChatBoard ? 1520 : 1320, margin: "0 auto" }}>
         <div style={{ marginBottom: 20 }}>
           <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>
-            Grading assignments
+            {isCoffeeChatBoard ? "Coffee Chat tables" : "Grading assignments"}
           </h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5, maxWidth: 720 }}>
-            Pin specific candidates to specific graders. Assigned candidates are served first in the
-            screener; once a grader clears their assignments they drop back into the shared priority
-            queue automatically.
+            {isCoffeeChatBoard
+              ? "Move applicants between tables and choose the table where each member begins. Members rotate to the next table after submitting, with the last table cycling back to Table 1."
+              : "Pin specific candidates to specific graders. Assigned candidates are served first in the screener; once a grader clears their assignments they drop back into the shared priority queue automatically."}
           </p>
         </div>
 
         <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-          <StatCard label="Candidates" value={board?.stats?.candidates ?? 0} />
-          <StatCard label="Graders" value={board?.stats?.graders ?? 0} />
-          <StatCard label="Assignments" value={board?.stats?.assignments ?? 0} />
-          <StatCard label="Pending" value={board?.stats?.pendingAssignments ?? 0} />
+          {isCoffeeChatBoard ? (
+            <>
+              <StatCard label="Tables" value={board?.stats?.tables ?? 0} />
+              <StatCard label="Candidates" value={board?.stats?.candidates ?? 0} />
+              <StatCard label="Members" value={board?.stats?.graders ?? 0} />
+              <StatCard label="Starting tables set" value={board?.stats?.assignedGraders ?? 0} />
+            </>
+          ) : (
+            <>
+              <StatCard label="Candidates" value={board?.stats?.candidates ?? 0} />
+              <StatCard label="Graders" value={board?.stats?.graders ?? 0} />
+              <StatCard label="Assignments" value={board?.stats?.assignments ?? 0} />
+              <StatCard label="Pending" value={board?.stats?.pendingAssignments ?? 0} />
+            </>
+          )}
         </div>
 
         {error && (
@@ -206,6 +270,14 @@ export default function AssignmentsPage() {
             <p style={{ margin: "0 0 12px" }}>Could not load the assignment board.</p>
             <button type="button" onClick={() => boardQuery.refetch()} style={secondaryButtonStyle}>Retry</button>
           </div>
+        ) : isCoffeeChatBoard ? (
+          <CoffeeChatAssignmentsBoard
+            board={board}
+            busyKey={tableMutationKey}
+            onMoveCandidate={moveCoffeeChatCandidate}
+            onAssignMember={assignCoffeeChatMember}
+            onOpenCandidate={(resumeId) => navigate(`/scoreboard/${resumeId}/application`)}
+          />
         ) : (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)", gap: 16 }}>
@@ -448,6 +520,137 @@ export default function AssignmentsPage() {
   );
 }
 
+function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignMember, onOpenCandidate }) {
+  const [dragOverTable, setDragOverTable] = useState(null);
+  const groupCount = Number(board?.context?.round?.groupCount) || 1;
+  const candidates = board?.candidates || [];
+  const members = board?.graders || [];
+  const memberAssignmentsReady = board?.context?.memberAssignmentsReady !== false;
+
+  const tables = useMemo(() => Array.from({ length: groupCount }, (_, index) => {
+    const number = index + 1;
+    return {
+      number,
+      candidates: candidates.filter((candidate) => candidate.groupNumber === number),
+      members: members.filter((member) => member.startingGroupNumber === number),
+    };
+  }), [candidates, groupCount, members]);
+
+  function startDrag(event, type, id) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/json", JSON.stringify({ type, id }));
+  }
+
+  function dropAtTable(event, groupNumber) {
+    event.preventDefault();
+    setDragOverTable(null);
+    try {
+      const payload = JSON.parse(event.dataTransfer.getData("application/json"));
+      if (payload.type === "candidate") onMoveCandidate(payload.id, groupNumber);
+      if (payload.type === "member" && memberAssignmentsReady) onAssignMember(payload.id, groupNumber);
+    } catch {
+      // Ignore drops from outside this table board.
+    }
+  }
+
+  return (
+    <>
+      {!memberAssignmentsReady ? (
+        <Banner tone="warning">
+          Candidate tables can be rearranged now. Run <strong>add_interview_group_member_assignments.sql</strong> before assigning member starting tables.
+        </Banner>
+      ) : null}
+
+      <section style={{ ...cardStyle, marginBottom: 16, overflow: "hidden" }}>
+        <div style={{ ...panelHeaderStyle, borderBottom: `1px solid ${css.borderLight}` }}>
+          <div>
+            <span style={panelTitleStyle}>Members and starting tables</span>
+            <span style={panelCountStyle}>{members.filter((member) => member.startingGroupNumber).length} of {members.length} assigned</span>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 10, padding: 14 }}>
+          {members.length ? members.map((member) => {
+            const busy = busyKey === `member:${member.id}`;
+            return (
+              <div
+                key={member.id}
+                draggable={memberAssignmentsReady && !busy}
+                onDragStart={(event) => startDrag(event, "member", member.id)}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: `1px solid ${css.borderLight}`, borderRadius: 10, background: "#FFF", cursor: memberAssignmentsReady ? "grab" : "default" }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: css.textDark, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.name}</div>
+                  <div style={{ color: css.textGray, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.email}</div>
+                  <div style={{ color: css.greenDark, fontSize: 11, fontWeight: 700, marginTop: 3 }}>{member.submittedRatingCount || 0} / {candidates.length} Coffee Chat grades</div>
+                </div>
+                <select
+                  value={member.startingGroupNumber || ""}
+                  disabled={!memberAssignmentsReady || busy}
+                  onChange={(event) => onAssignMember(member.id, event.target.value ? Number(event.target.value) : null)}
+                  style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "7px 9px", background: "#FFF", color: css.textDark, fontSize: 12 }}
+                >
+                  <option value="">Unassigned</option>
+                  {tables.map((table) => <option key={table.number} value={table.number}>Table {table.number}</option>)}
+                </select>
+              </div>
+            );
+          }) : <div style={{ padding: 20, color: css.textGray }}>No members are available to assign.</div>}
+        </div>
+      </section>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14, alignItems: "start" }}>
+        {tables.map((table) => {
+          const activeDrop = dragOverTable === table.number;
+          return (
+            <section
+              key={table.number}
+              onDragOver={(event) => { event.preventDefault(); setDragOverTable(table.number); }}
+              onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDragOverTable(null); }}
+              onDrop={(event) => dropAtTable(event, table.number)}
+              style={{ ...cardStyle, overflow: "hidden", borderColor: activeDrop ? css.greenDark : css.borderLight, boxShadow: activeDrop ? "0 0 0 3px rgba(29,158,117,0.12)" : cardStyle.boxShadow }}
+            >
+              <div style={{ ...panelHeaderStyle, borderBottom: `1px solid ${css.borderLight}`, background: activeDrop ? "rgba(29,158,117,0.07)" : "rgba(29,158,117,0.035)" }}>
+                <div>
+                  <span style={{ ...panelTitleStyle, fontSize: 17 }}>Table {table.number}</span>
+                  <span style={panelCountStyle}>{table.candidates.length} candidate{table.candidates.length === 1 ? "" : "s"}</span>
+                </div>
+                <span style={{ ...metaPillStyle, ...assignedPillStyle }}>{table.members.length} starting</span>
+              </div>
+
+              <div style={{ padding: "12px 14px", borderBottom: `1px solid ${css.borderLight}`, minHeight: 38 }}>
+                <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 7 }}>Starting members</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {table.members.length ? table.members.map((member) => (
+                    <span key={member.id} draggable={memberAssignmentsReady} onDragStart={(event) => startDrag(event, "member", member.id)} style={{ ...metaPillStyle, ...assignedPillStyle, cursor: "grab" }}>{member.name}</span>
+                  )) : <span style={{ color: css.textGray, fontSize: 12 }}>Drop a member here or use the selector above.</span>}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, minHeight: 110 }}>
+                {table.candidates.length ? table.candidates.map((candidate) => {
+                  const busy = busyKey === `candidate:${candidate.id}`;
+                  return (
+                    <div key={candidate.id} draggable={!busy} onDragStart={(event) => startDrag(event, "candidate", candidate.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 11px", border: `1px solid ${css.borderLight}`, borderRadius: 9, background: "#FFF", cursor: busy ? "wait" : "grab" }}>
+                      <button type="button" onClick={() => candidate.resumeId && onOpenCandidate(candidate.resumeId)} style={{ flex: 1, minWidth: 0, padding: 0, border: "none", background: "transparent", color: css.greenDark, textAlign: "left", cursor: candidate.resumeId ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
+                        <span style={{ display: "block", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{candidate.name}</span>
+                        <span style={{ display: "block", fontSize: 11, color: css.textGray, marginTop: 2 }}>{[candidate.year, candidate.major].filter(Boolean).join(" · ") || "—"}</span>
+                        <span style={{ display: "block", fontSize: 11, color: css.greenDark, fontWeight: 700, marginTop: 3 }}>{candidate.submittedRatingCount || 0}{memberAssignmentsReady ? ` / ${members.filter((member) => member.startingGroupNumber).length}` : ""} ratings submitted</span>
+                      </button>
+                      <select value={candidate.groupNumber} disabled={busy} onChange={(event) => onMoveCandidate(candidate.id, Number(event.target.value))} style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "7px 8px", background: "#FFF", color: css.textDark, fontSize: 12 }}>
+                        {tables.map((target) => <option key={target.number} value={target.number}>Table {target.number}</option>)}
+                      </select>
+                    </div>
+                  );
+                }) : <div style={{ padding: "20px 8px", textAlign: "center", color: css.textGray, fontSize: 12 }}>Drop candidates here.</div>}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 function AssignmentTable({ graders, assignments, candidates, onRemove }) {
   const candidateNames = useMemo(() => {
     const lookup = {};
@@ -557,7 +760,9 @@ function StatCard({ label, value }) {
 function Banner({ tone, children }) {
   const palette = tone === "error"
     ? { bg: "rgba(226,75,74,0.08)", border: "rgba(226,75,74,0.22)", color: "#C0392B" }
-    : { bg: "rgba(29,158,117,0.08)", border: "rgba(29,158,117,0.22)", color: "#1D7A5B" };
+    : tone === "warning"
+      ? { bg: "rgba(239,159,39,0.10)", border: "rgba(239,159,39,0.30)", color: "#9A6700" }
+      : { bg: "rgba(29,158,117,0.08)", border: "rgba(29,158,117,0.22)", color: "#1D7A5B" };
 
   return (
     <div
