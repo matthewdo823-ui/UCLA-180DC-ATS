@@ -6,7 +6,7 @@ import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { API } from "../../constants/config";
-import { css } from "../../theme/colors";
+import { coffeeRatingColors, css } from "../../theme/colors";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
@@ -18,10 +18,10 @@ import { formatReviewCount } from "../../utils/reviewCounts";
 import { ROUND_TYPES, normalizeRoundType } from "../../constants/rounds";
 
 const COFFEE_RATINGS = [
-  { id: "strong_no", label: "Strong no", color: "#E24B4A", bg: "rgba(226,75,74,0.10)" },
-  { id: "no", label: "No", color: "#C47D12", bg: "rgba(239,159,39,0.12)" },
-  { id: "yes", label: "Yes", color: "#53A47D", bg: "rgba(83,164,125,0.12)" },
-  { id: "strong_yes", label: "Strong yes", color: "#147D64", bg: "rgba(20,125,100,0.14)" },
+  { id: "strong_no", label: "Strong no", color: coffeeRatingColors.strong_no, bg: "rgba(226,75,74,0.10)" },
+  { id: "no", label: "No", color: coffeeRatingColors.no, bg: "rgba(239,159,39,0.12)" },
+  { id: "yes", label: "Yes", color: coffeeRatingColors.yes, bg: "rgba(83,164,125,0.12)" },
+  { id: "strong_yes", label: "Strong yes", color: coffeeRatingColors.strong_yes, bg: "rgba(6,78,59,0.16)" },
 ];
 
 function getBalancedColumnCount(candidateCount) {
@@ -594,7 +594,7 @@ export default function InterviewManagementPage() {
                   : "No candidates ready for interviews yet. Complete resume screening first, or use Scoreboard deliberation to advance candidates."}
               </div>
             ) : isCoffeeChat ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: coffeeView === "scroll" ? 72 : 20 }}>
                 {(coffeeView === "list" ? coffeeGroups.filter(([number]) => number === activeGroupNumber) : coffeeGroups).map(([number, candidates]) => {
                   const currentIndex = coffeeGroups.findIndex(([groupNumber]) => groupNumber === number);
                   const nextGroupNumber = coffeeGroups[(currentIndex + 1) % coffeeGroups.length]?.[0] ?? number;

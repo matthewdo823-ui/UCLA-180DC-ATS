@@ -1,5 +1,5 @@
 import { FRQ_METRIC } from "../../constants/frq";
-import { css } from "../../theme/colors";
+import { coffeeRatingColors, css } from "../../theme/colors";
 import { formatDate, formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 import { formatReviewCount, formatReviewCountPairStacked } from "../../utils/reviewCounts";
 import { hasText } from "./applicationUtils";
@@ -135,6 +135,8 @@ function CoffeeChatEvaluationCard({ evaluation, index }) {
   const ratingLabel = COFFEE_RATING_LABELS[evaluation.rating] || "Submitted";
   const positive = Number(evaluation.weightedScore) > 0;
   const negative = Number(evaluation.weightedScore) < 0;
+  const ratingColor = coffeeRatingColors[evaluation.rating]
+    || (positive ? cardGreen : negative ? css.red : css.textGray);
 
   return (
     <article style={{ padding: "16px 18px", background: "#F8FAF6", borderRadius: 10, border: `1px solid ${css.borderLight}` }}>
@@ -153,7 +155,7 @@ function CoffeeChatEvaluationCard({ evaluation, index }) {
             </p>
           </div>
         </div>
-        <p style={{ margin: 0, color: positive ? cardGreen : negative ? "#E24B4A" : css.textGray, fontSize: 15, fontWeight: 700 }}>
+        <p style={{ margin: 0, color: ratingColor, fontSize: 15, fontWeight: 700 }}>
           {ratingLabel}
         </p>
       </div>
