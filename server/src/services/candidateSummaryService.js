@@ -33,20 +33,6 @@ const FRQ_FIELDS = [
   ["Why social impact?", "whySocialImpact"],
 ];
 
-function formatReviewNotes(reviews = []) {
-  return reviews
-    .filter((review) => String(review.notes || "").trim())
-    .map((review, index) => {
-      const reviewer = review.reviewerName || review.reviewerEmail || `Reviewer ${index + 1}`;
-      return `- ${reviewer}: ${trimText(review.notes, 500)}`;
-    })
-    .join("\n");
-}
-
-function hasReviewNotes(reviews = []) {
-  return reviews.some((review) => String(review.notes || "").trim());
-}
-
 function formatFrqBlocks(candidate = {}) {
   return FRQ_FIELDS
     .filter(([, key]) => String(candidate[key] || "").trim())
@@ -54,27 +40,15 @@ function formatFrqBlocks(candidate = {}) {
     .join("\n\n");
 }
 
-function buildSummarySourceHash({ candidate, scoring }) {
-  const reviews = (scoring?.reviews || [])
-    .map((review) => ({
-      id: review.id,
-      notes: review.notes || "",
-    }))
-    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-
-  const payload = hasReviewNotes(reviews)
-    ? {
-        model: getModel(),
-        source: "reviewer_notes",
-        reviews,
-      }
-    : {
-        model: getModel(),
-        source: "frqs",
-        frqs: Object.fromEntries(
-          FRQ_FIELDS.map(([, key]) => [key, candidate?.[key] || ""])
-        ),
-      };
+function buildSummarySourceHash({ candidate }) {
+  const payload = {
+    model: getModel(),
+    promptVersion: "two-sentence-frq-v2",
+    source: "frqs",
+    frqs: Object.fromEntries(
+      FRQ_FIELDS.map(([, key]) => [key, candidate?.[key] || ""])
+    ),
+  };
 
   return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
@@ -86,36 +60,19 @@ function isCacheValid(cachedRow, sourceHash, nowMs = Date.now()) {
   return (nowMs - generatedAtMs) < getCacheTtlMs();
 }
 
-function buildSummaryPrompt({ candidate, scoring, context }) {
-  const reviewNotes = formatReviewNotes(scoring?.reviews || []);
+function buildSummaryPrompt({ candidate, context }) {
   const frqBlocks = formatFrqBlocks(candidate);
   const candidateLine = `Candidate: ${candidate?.name || "Unknown"}`;
   const cycleLine = `Cycle: ${context?.cycle?.name || "Current cycle"} · ${context?.round?.name || "Resume screen"}`;
 
-  if (reviewNotes) {
-    return `You are helping UCLA 180 Degrees Consulting recruiters quickly understand a candidate before interviews or committee discussion.
-
-Write a concise candidate briefing (2–4 short paragraphs, plain prose, no bullet lists) based ONLY on the reviewer notes below.
-
-Synthesize themes, agreements, concerns, and standout observations across reviewers. Do not use application essays, scores, profile details, or any information not present in these notes.
-
-Be factual, neutral, and specific. Do not invent details.
-
-${candidateLine}
-${cycleLine}
-
-Reviewer notes:
-${reviewNotes}`;
-  }
-
   if (frqBlocks) {
     return `You are helping UCLA 180 Degrees Consulting recruiters quickly understand a candidate before interviews or committee discussion.
 
-Write a concise candidate briefing (2–4 short paragraphs, plain prose, no bullet lists) based ONLY on the candidate's free-response application answers below.
+Write exactly two concise sentences based ONLY on the candidate's free-response application answers below. Use plain prose with no heading or bullet list.
 
-Identify key themes, motivation, and standout points. Do not use reviewer notes, scores, profile details, or any information not present in these answers.
+In the first sentence, summarize the candidate's motivation for consulting and 180 Degrees Consulting. In the second sentence, summarize their social-impact perspective and the most distinctive theme from their answers. If an answer does not provide one of these details, summarize the strongest available themes instead without mentioning that information is missing.
 
-Be factual, neutral, and specific. Do not invent details.
+Be factual, neutral, specific, and concise. Do not use reviewer notes, scores, profile details, or any information not present in these answers. Do not invent details.
 
 ${candidateLine}
 ${cycleLine}
@@ -140,49 +97,73 @@ async function generateCandidateSummary(applicationPayload) {
 
   if (!prompt) {
     return {
-      summary: "No summary available yet — add reviewer notes or wait for free-response answers to be submitted.",
+      summary: "No summary is available yet because the candidate has not submitted free-response answers.",
       model: null,
       generatedAt: new Date().toISOString(),
     };
   }
 
-  const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      systemInstruction: {
-        parts: [{
-          text: "You write clear, professional recruiting briefings for a student consulting organization. Summarize only the source material provided — never add outside context. Use complete sentences and short paragraphs.",
+  async function requestSummary(retry = false) {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        systemInstruction: {
+          parts: [{
+            text: "You write clear, professional recruiting briefings for a student consulting organization. Summarize only the supplied free-response answers, never add outside context, and always return exactly two concise sentences.",
+          }],
+        },
+        contents: [{
+          role: "user",
+          parts: [{ text: retry
+            ? `${prompt}\n\nYour previous response did not contain exactly two complete sentences. Return only two short, complete sentences and end both with punctuation.`
+            : prompt }],
         }],
+        generationConfig: {
+          temperature: retry ? 0.2 : 0.4,
+          maxOutputTokens: 320,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
+        },
       },
-      contents: [{
-        role: "user",
-        parts: [{ text: prompt }],
-      }],
-      generationConfig: {
-        temperature: 0.4,
-        maxOutputTokens: 700,
-      },
-    },
-    {
-      params: { key: apiKey },
-      headers: { "Content-Type": "application/json" },
-      timeout: 45000,
-    }
-  );
+      {
+        params: { key: apiKey },
+        headers: { "Content-Type": "application/json" },
+        timeout: 45000,
+      }
+    );
 
-  const summary = String(
-    response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || ""
-  ).trim();
+    const candidate = response.data?.candidates?.[0];
+    const summary = String(
+      candidate?.content?.parts?.map((part) => part.text || "").join("") || ""
+    ).trim();
+    return { summary, finishReason: candidate?.finishReason || "" };
+  }
 
-  if (!summary) {
-    throw new Error("AI returned an empty summary");
+  let result = await requestSummary(false);
+  if (result.finishReason !== "STOP" || !isCompleteTwoSentenceSummary(result.summary)) {
+    result = await requestSummary(true);
+  }
+
+  if (result.finishReason !== "STOP") {
+    throw new Error(`AI summary generation stopped before completion (${result.finishReason || "unknown reason"})`);
+  }
+  if (!isCompleteTwoSentenceSummary(result.summary)) {
+    throw new Error("AI did not return exactly two complete sentences");
   }
 
   return {
-    summary,
+    summary: result.summary,
     model,
     generatedAt: new Date().toISOString(),
   };
+}
+
+function isCompleteTwoSentenceSummary(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  const sentenceEndings = text.match(/[.!?](?=\s|$)/g) || [];
+  return sentenceEndings.length === 2 && /[.!?]$/.test(text);
 }
 
 async function resolveCandidateSummary(supabase, {
@@ -248,6 +229,7 @@ module.exports = {
   buildSummarySourceHash,
   isCacheValid,
   getCacheTtlMs,
+  isCompleteTwoSentenceSummary,
   generateCandidateSummary,
   resolveCandidateSummary,
 };
