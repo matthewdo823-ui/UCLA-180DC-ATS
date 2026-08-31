@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { css } from "../../theme/colors";
+import { coffeeRatingColors, css } from "../../theme/colors";
 import { formatDate, formatScore, titleCase } from "../../utils/format";
 import { hasText } from "./applicationUtils";
 import CategoryRow from "./components/CategoryRow";
@@ -151,7 +151,8 @@ const COFFEE_RATING_LABELS = {
 
 function CoffeeChatEvaluationRow({ evaluation, isFirst }) {
   const score = Number(evaluation.weightedScore);
-  const scoreColor = score > 0 ? cardGreen : score < 0 ? "#E24B4A" : css.textGray;
+  const scoreColor = coffeeRatingColors[evaluation.rating]
+    || (score > 0 ? cardGreen : score < 0 ? css.red : css.textGray);
 
   return (
     <div style={{ borderTop: isFirst ? "none" : `1px solid ${css.borderLight}`, padding: "16px 0" }}>

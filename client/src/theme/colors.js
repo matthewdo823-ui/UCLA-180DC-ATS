@@ -21,3 +21,10 @@ export const css = {
   red:     "#E24B4A",
   amber:   "#EF9F27",
 };
+
+export const coffeeRatingColors = Object.freeze({
+  strong_yes: "#064E3B",
+  yes: "#53A47D",
+  no: "#C47D12",
+  strong_no: "#E24B4A",
+});
