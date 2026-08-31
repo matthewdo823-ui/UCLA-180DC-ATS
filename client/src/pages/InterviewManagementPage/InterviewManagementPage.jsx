@@ -612,7 +612,7 @@ export default function InterviewManagementPage() {
                             draft={coffeeDrafts[candidate.id] || makeCoffeeDraft(candidate)}
                             busy={loading || tableSubmitting}
                             showSave={false}
-                            autoSave
+                            autoSave={coffeeView === "scroll"}
                             validationError={invalidCandidateIds.has(candidate.id)}
                             expectedRatingCount={Number.isFinite(data.context?.assignedMemberCount) ? data.context.assignedMemberCount : null}
                             onDraftChange={(draft) => updateCoffeeDraft(candidate.id, draft)}
