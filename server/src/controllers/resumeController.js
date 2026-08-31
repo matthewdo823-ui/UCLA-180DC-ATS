@@ -3027,6 +3027,10 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     const coffeeChatEvaluations = interviewEvaluations.filter(
         (evaluation) => evaluation.roundType === ROUND_TYPES.COFFEE_CHAT
     );
+    const compositeCandidate = applyCompositeScoringToCandidate(candidateWithOverrides, {
+        frqReviews,
+        rubricConfig: resumeRound.rubric_config,
+    });
     const roundGrades = [
         {
             roundId: resumeRound.id,
@@ -3047,10 +3051,6 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
             evaluations: interviewEvaluations.filter((evaluation) => evaluation.roundId === round.id),
         })),
     ];
-    const compositeCandidate = applyCompositeScoringToCandidate(candidateWithOverrides, {
-        frqReviews,
-        rubricConfig: resumeRound.rubric_config,
-    });
 
     return {
         context: {
