@@ -92,33 +92,33 @@ function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave
   }
 
   return (
-    <article style={{ background: css.cardWhite, border: `1px solid ${validationError ? css.red : rating ? "rgba(29,158,117,0.28)" : css.borderLight}`, borderRadius: 12, padding: 18, boxShadow: validationError ? "0 0 0 3px rgba(226,75,74,0.08)" : "0 1px 2px rgba(0,0,0,0.02)" }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 15 }}>
-        <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={48} background={css.greenDark} />
+    <article style={{ background: css.cardWhite, border: `1px solid ${validationError ? css.red : rating ? "rgba(29,158,117,0.28)" : css.borderLight}`, borderRadius: 14, padding: 22, boxShadow: validationError ? "0 0 0 3px rgba(226,75,74,0.08)" : "0 1px 3px rgba(0,0,0,0.035)" }}>
+      <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 18 }}>
+        <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={56} background={css.greenDark} />
         <div style={{ minWidth: 0 }}>
           <button
             type="button"
             onClick={onOpenProfile}
-            style={{ border: "none", background: "transparent", padding: 0, margin: 0, fontFamily: sansFont, fontSize: 16, fontWeight: 700, color: css.greenDark, cursor: "pointer", textAlign: "left" }}
+            style={{ border: "none", background: "transparent", padding: 0, margin: 0, fontFamily: sansFont, fontSize: 18, fontWeight: 700, color: css.greenDark, cursor: "pointer", textAlign: "left" }}
           >
             {candidate.name}
           </button>
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>{[candidate.major, candidate.year].filter(Boolean).join(" · ")}</p>
+          <p style={{ margin: "5px 0 0", fontSize: 13, color: css.textGray }}>{[candidate.major, candidate.year].filter(Boolean).join(" · ")}</p>
         </div>
       </div>
 
-      <div role="group" aria-label={`Coffee Chat rating for ${candidate.name}`} style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 7, marginBottom: 12 }}>
+      <div role="group" aria-label={`Coffee Chat rating for ${candidate.name}`} style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, marginBottom: 15 }}>
         {COFFEE_RATINGS.map((option) => {
           const selected = rating === option.id;
           return (
-            <button key={option.id} type="button" disabled={busy || saving} aria-pressed={selected} onClick={() => handleRatingChange(selected ? "" : option.id)} style={{ display: "flex", justifyContent: "center", border: `1px solid ${selected ? option.color : css.borderLight}`, borderRadius: 8, padding: "9px 7px", background: selected ? option.bg : css.cardWhite, color: selected ? option.color : css.textGray, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: busy || saving ? "wait" : "pointer", opacity: busy || saving ? 0.65 : 1 }}>
+            <button key={option.id} type="button" disabled={busy || saving} aria-pressed={selected} onClick={() => handleRatingChange(selected ? "" : option.id)} style={{ display: "flex", justifyContent: "center", border: `1px solid ${selected ? option.color : css.borderLight}`, borderRadius: 9, padding: "11px 8px", background: selected ? option.bg : css.cardWhite, color: selected ? option.color : css.textGray, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", cursor: busy || saving ? "wait" : "pointer", opacity: busy || saving ? 0.65 : 1 }}>
               {option.label}
             </button>
           );
         })}
       </div>
 
-      <textarea value={notes} onChange={(event) => { onDraftChange({ ...draft, notes: event.target.value.slice(0, 1000) }); setSaved(false); }} onBlur={handleNotesBlur} rows={3} placeholder="Coffee Chat notes…" style={{ width: "100%", boxSizing: "border-box", padding: "10px 11px", borderRadius: 8, border: `1px solid ${validationError ? css.red : css.borderLight}`, resize: "vertical", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }} />
+      <textarea value={notes} onChange={(event) => { onDraftChange({ ...draft, notes: event.target.value.slice(0, 1000) }); setSaved(false); }} onBlur={handleNotesBlur} rows={5} placeholder="Coffee Chat notes…" style={{ width: "100%", boxSizing: "border-box", padding: "12px 13px", borderRadius: 9, border: `1px solid ${validationError ? css.red : css.borderLight}`, resize: "vertical", fontFamily: "'DM Sans', sans-serif", fontSize: 13, lineHeight: 1.5 }} />
       {validationError ? <p role="alert" style={{ margin: "8px 0 0", color: css.red, fontSize: 11, fontWeight: 700 }}>Choose a rating before submitting this table.</p> : null}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 10 }}>
         <span style={{ fontSize: 11, color: css.textGray }}>{candidate.coffeeChatEvaluationCount || 0}{Number.isFinite(expectedRatingCount) ? ` / ${expectedRatingCount}` : ""} rating{candidate.coffeeChatEvaluationCount === 1 ? "" : "s"} submitted</span>
@@ -468,9 +468,17 @@ export default function InterviewManagementPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
+      <style>{`
+        @media (max-width: 1180px) {
+          .coffee-candidate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        }
+        @media (max-width: 820px) {
+          .coffee-candidate-grid { grid-template-columns: minmax(0, 1fr) !important; }
+        }
+      `}</style>
       <Topbar phaseLabel={phaseLabel} activeLabel={roundLabel} rightSlot={<></>} />
 
-      <div style={{ maxWidth: 1380, margin: "0 auto", width: "100%", boxSizing: "border-box", padding: "24px 32px 40px" }}>
+      <div style={{ maxWidth: 1500, margin: "0 auto", width: "100%", boxSizing: "border-box", padding: "24px 32px 40px" }}>
         {!isCoffeeChat ? <div style={{ marginBottom: 20 }}>
           <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>{roundLabel}</h1>
           <p style={{ margin: 0, color: css.textGray, lineHeight: 1.5 }}>
@@ -591,12 +599,12 @@ export default function InterviewManagementPage() {
                   const currentIndex = coffeeGroups.findIndex(([groupNumber]) => groupNumber === number);
                   const nextGroupNumber = coffeeGroups[(currentIndex + 1) % coffeeGroups.length]?.[0] ?? number;
                   return (
-                    <section key={number} style={{ padding: 18, background: number ? "rgba(29,158,117,0.035)" : "rgba(239,159,39,0.05)", border: `1px solid ${css.borderLight}`, borderRadius: 14 }}>
+                    <section key={number} style={{ padding: 22, background: number ? "rgba(29,158,117,0.035)" : "rgba(239,159,39,0.05)", border: `1px solid ${css.borderLight}`, borderRadius: 14 }}>
                       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
-                        <h2 style={{ margin: 0, fontSize: 18, color: css.textDark }}>{number ? `Table ${number}` : "Unassigned candidates"}</h2>
-                        <span style={{ fontSize: 12, color: css.textGray }}>{candidates.length} candidate{candidates.length === 1 ? "" : "s"}</span>
+                        <h2 style={{ margin: 0, fontSize: 20, color: css.textDark }}>{number ? `Table ${number}` : "Unassigned candidates"}</h2>
+                        <span style={{ fontSize: 13, color: css.textGray }}>{candidates.length} candidate{candidates.length === 1 ? "" : "s"}</span>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${getBalancedColumnCount(candidates.length)}, minmax(0, 1fr))`, gap: 12 }}>
+                      <div className="coffee-candidate-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${getBalancedColumnCount(candidates.length)}, minmax(0, 1fr))`, gap: 14 }}>
                         {candidates.map((candidate) => (
                           <CoffeeChatCandidateCard
                             key={candidate.id}
@@ -614,12 +622,8 @@ export default function InterviewManagementPage() {
                         ))}
                       </div>
                       {coffeeView === "list" ? (
-                        <div style={{ marginTop: 16, paddingTop: 15, borderTop: `1px solid ${css.borderLight}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
-                          <div>
-                            <div style={{ color: css.textDark, fontSize: 13, fontWeight: 700 }}>Submit all ratings for {number ? `Table ${number}` : "this table"}</div>
-                            <div style={{ color: css.textGray, fontSize: 12, marginTop: 3 }}>After every API save succeeds, you will move to {nextGroupNumber ? `Table ${nextGroupNumber}` : "the next table"}.</div>
-                          </div>
-                          <button type="button" disabled={tableSubmitting || !candidates.length} onClick={() => submitCoffeeTable(number, candidates)} style={{ border: "none", borderRadius: 9, padding: "11px 18px", background: css.greenDark, color: "#FFF", fontSize: 13, fontWeight: 700, cursor: tableSubmitting || !candidates.length ? "not-allowed" : "pointer", opacity: tableSubmitting || !candidates.length ? 0.6 : 1 }}>
+                        <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${css.borderLight}`, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+                          <button type="button" disabled={tableSubmitting || !candidates.length} onClick={() => submitCoffeeTable(number, candidates)} style={{ border: "none", borderRadius: 10, padding: "12px 20px", background: css.greenDark, color: "#FFF", fontSize: 14, fontWeight: 700, cursor: tableSubmitting || !candidates.length ? "not-allowed" : "pointer", opacity: tableSubmitting || !candidates.length ? 0.6 : 1 }}>
                             {tableSubmitting ? "Submitting table…" : `Submit ${number ? `Table ${number}` : "table"} → ${nextGroupNumber ? `Table ${nextGroupNumber}` : "next"}`}
                           </button>
                         </div>
