@@ -529,16 +529,17 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
   const groupCount = Number(board?.context?.round?.groupCount) || 1;
   const candidates = board?.candidates || [];
   const members = board?.graders || [];
+  const unassignedMembers = members.filter((member) => !member.startingGroupNumber);
   const memberAssignmentsReady = board?.context?.memberAssignmentsReady !== false;
 
-  const tables = useMemo(() => Array.from({ length: groupCount }, (_, index) => {
+  const tables = Array.from({ length: groupCount }, (_, index) => {
     const number = index + 1;
     return {
       number,
       candidates: candidates.filter((candidate) => candidate.groupNumber === number),
       members: members.filter((member) => member.startingGroupNumber === number),
     };
-  }), [candidates, groupCount, members]);
+  });
 
   function startDrag(event, type, id) {
     event.dataTransfer.effectAllowed = "move";
@@ -576,12 +577,12 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
       <section style={{ ...cardStyle, marginBottom: 16, overflow: "hidden" }}>
         <div style={{ ...panelHeaderStyle, borderBottom: `1px solid ${css.borderLight}` }}>
           <div>
-            <span style={panelTitleStyle}>Participants and starting tables</span>
-            <span style={panelCountStyle}>{members.filter((member) => member.startingGroupNumber).length} of {members.length} assigned</span>
+            <span style={panelTitleStyle}>Unassigned members / admins</span>
+            <span style={panelCountStyle}>{unassignedMembers.length} unassigned · {members.length - unassignedMembers.length} assigned</span>
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 10, padding: 14 }}>
-          {members.length ? members.map((member) => {
+          {unassignedMembers.length ? unassignedMembers.map((member) => {
             const busy = busyKey === `member:${member.id}`;
             return (
               <div
@@ -592,7 +593,7 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ color: css.textDark, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.name}</div>
-                  <div style={{ color: css.textGray, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.email}</div>
+                  <div style={{ color: css.textGray, fontSize: 11, fontWeight: 600, textTransform: "capitalize", marginTop: 2 }}>{member.role}</div>
                 </div>
                 <select
                   value={member.startingGroupNumber || ""}
@@ -605,7 +606,7 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                 </select>
               </div>
             );
-          }) : <div style={{ padding: 20, color: css.textGray }}>No participants are available to assign.</div>}
+          }) : <div style={{ padding: 20, color: css.textGray }}>Everyone has a starting table.</div>}
         </div>
       </section>
 
@@ -636,6 +637,16 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                       <div key={member.id} draggable={memberAssignmentsReady} onDragStart={(event) => startDrag(event, "member", member.id)} style={{ padding: "8px 9px", borderRadius: 8, border: `1px solid ${css.borderLight}`, background: "#FFF", color: css.textDark, fontSize: 12, fontWeight: 700, cursor: "grab" }}>
                         <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.name}</div>
                         <div style={{ marginTop: 2, color: css.textGray, fontSize: 10, fontWeight: 600, textTransform: "capitalize" }}>{member.role}</div>
+                        <select
+                          value={member.startingGroupNumber || ""}
+                          disabled={!memberAssignmentsReady || busyKey === `member:${member.id}`}
+                          onChange={(event) => onAssignMember(member.id, event.target.value ? Number(event.target.value) : null)}
+                          onClick={(event) => event.stopPropagation()}
+                          style={{ width: "100%", marginTop: 7, border: `1px solid ${css.borderLight}`, borderRadius: 7, padding: "6px 7px", background: "#FFF", color: css.textDark, fontSize: 11 }}
+                        >
+                          <option value="">Unassigned</option>
+                          {tables.map((target) => <option key={target.number} value={target.number}>Table {target.number}</option>)}
+                        </select>
                       </div>
                     )) : <span style={{ color: css.textGray, fontSize: 12, lineHeight: 1.45 }}>Drop a member or admin here.</span>}
                   </div>
