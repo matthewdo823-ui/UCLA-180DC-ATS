@@ -287,7 +287,8 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
             {roundIndex === 0 && coffeeChatEvaluations.length ? (
               <>
                 <p style={{ margin: "0 0 2px", fontSize: 13, color: css.textGray }}>
-                  {formatScore(scoring.coffeeChatScore || 0)} points from {coffeeChatEvaluations.length} {coffeeChatEvaluations.length === 1 ? "rating" : "ratings"}
+                  {formatScore(scoring.coffeeChatScore || 0)} points from {coffeeChatEvaluations.length}
+                  {Number.isFinite(scoring.coffeeChatExpectedEvaluationCount) ? ` / ${scoring.coffeeChatExpectedEvaluationCount}` : ""} {coffeeChatEvaluations.length === 1 ? "rating" : "ratings"}
                 </p>
                 <div>
                   {coffeeChatEvaluations.map((evaluation, index) => (

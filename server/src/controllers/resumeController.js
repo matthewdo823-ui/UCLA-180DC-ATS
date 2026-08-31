@@ -1847,6 +1847,7 @@ exports.getScoreboard = async (req, res) => {
             reviewResult,
             frqResult,
             interviewEvaluationResult,
+            coffeeMemberAssignmentResult,
         ] = await Promise.all([
             supabase
                 .from('resumes')
@@ -1934,6 +1935,12 @@ exports.getScoreboard = async (req, res) => {
                     .eq("cycle_id", activeCycleId)
                     .eq("round_id", deliberationRound.id)
                 : Promise.resolve({ data: [], error: null }),
+            normalizeRoundType(deliberationRound.type) === ROUND_TYPES.COFFEE_CHAT
+                ? supabase
+                    .from("interview_group_member_assignments")
+                    .select("user_id")
+                    .eq("round_id", deliberationRound.id)
+                : Promise.resolve({ data: [], error: null }),
         ]);
 
         const { data: resumes, error: resumeError } = resumeResult;
@@ -1942,12 +1949,14 @@ exports.getScoreboard = async (req, res) => {
         const { data: reviews, error: reviewError } = reviewResult;
         const { data: frqRows, error: frqError } = frqResult;
         const { data: interviewEvaluationRows, error: interviewEvaluationError } = interviewEvaluationResult;
+        const { data: coffeeMemberAssignments, error: coffeeMemberAssignmentError } = coffeeMemberAssignmentResult;
         if (resumeError) throw resumeError;
         if (cycleCandError) throw cycleCandError;
         if (decisionError) throw decisionError;
         if (reviewError) throw reviewError;
         if (frqError) throw frqError;
         if (interviewEvaluationError && !isMissingSchemaError(interviewEvaluationError)) throw interviewEvaluationError;
+        if (coffeeMemberAssignmentError && !isMissingSchemaError(coffeeMemberAssignmentError)) throw coffeeMemberAssignmentError;
 
         const candidateLinkLookups = buildCandidateLinkLookups(cycleCandidates);
         const decisionLookup = buildDecisionLookup(roundDecisionRows);
@@ -2162,8 +2171,12 @@ exports.getScoreboard = async (req, res) => {
             c.resumeScreenRank = index + 1;
         });
 
+        const assignedCoffeeMemberIds = new Set((coffeeMemberAssignmentError ? [] : coffeeMemberAssignments || []).map((row) => row.user_id));
+        const coffeeChatEvaluationRowsForScoring = coffeeMemberAssignmentError
+            ? interviewEvaluationRows || []
+            : (interviewEvaluationRows || []).filter((row) => assignedCoffeeMemberIds.has(row.evaluated_by));
         const coffeeChatEvaluationsByCandidate = {};
-        (interviewEvaluationError ? [] : interviewEvaluationRows || []).forEach((row) => {
+        (interviewEvaluationError ? [] : coffeeChatEvaluationRowsForScoring).forEach((row) => {
             if (!Number.isFinite(Number(row.weighted_score))) return;
             if (!coffeeChatEvaluationsByCandidate[row.candidate_id]) coffeeChatEvaluationsByCandidate[row.candidate_id] = [];
             coffeeChatEvaluationsByCandidate[row.candidate_id].push(row);
@@ -2172,6 +2185,7 @@ exports.getScoreboard = async (req, res) => {
             const evaluations = coffeeChatEvaluationsByCandidate[candidate.candidateId] || [];
             candidate.coffeeChatScore = evaluations.reduce((sum, row) => sum + Number(row.weighted_score), 0);
             candidate.coffeeChatEvaluationCount = evaluations.length;
+            candidate.coffeeChatExpectedEvaluationCount = coffeeMemberAssignmentError ? null : assignedCoffeeMemberIds.size;
         });
 
         const isCoffeeChatScoreboard = normalizeRoundType(deliberationRound.type) === ROUND_TYPES.COFFEE_CHAT;
@@ -2228,6 +2242,7 @@ exports.getScoreboard = async (req, res) => {
                 incompleteCount: incompleteSummary.incompleteCount,
                 notification,
                 rankingMode: isCoffeeChatScoreboard ? "coffee_chat" : "resume_screen",
+                assignedMemberCount: coffeeMemberAssignmentError ? null : assignedCoffeeMemberIds.size,
             },
             metrics: metricsWithFrq,
             maxPerCategory,
@@ -2698,7 +2713,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
         throw err;
     }
 
-    const [reviewResult, frqResult, coffeeChatResult] = await Promise.all([
+    const [reviewResult, frqResult, coffeeChatResult, coffeeMemberAssignmentResult] = await Promise.all([
         supabase
             .from('resume_reviews')
             .select('id, scores, notes, submitted_at, graded_by, rubric_snapshot, decision')
@@ -2721,6 +2736,12 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
                 .eq('round_id', coffeeChatRound.id)
                 .order('submitted_at', { ascending: true })
             : Promise.resolve({ data: [], error: null }),
+        coffeeChatRound
+            ? supabase
+                .from('interview_group_member_assignments')
+                .select('user_id')
+                .eq('round_id', coffeeChatRound.id)
+            : Promise.resolve({ data: [], error: null }),
     ]);
     const { data: reviews, error: reviewError } = reviewResult;
 
@@ -2732,6 +2753,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
 
     const { data: frqRows, error: frqError } = frqResult;
     const { data: coffeeChatRows, error: coffeeChatError } = coffeeChatResult;
+    const { data: coffeeMemberAssignments, error: coffeeMemberAssignmentError } = coffeeMemberAssignmentResult;
     if (frqError) {
         const err = new Error(frqError.message || 'Failed to load FRQ reviews');
         err.cause = frqError;
@@ -2742,6 +2764,16 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
         err.cause = coffeeChatError;
         throw err;
     }
+    if (coffeeMemberAssignmentError && !isMissingSchemaError(coffeeMemberAssignmentError)) {
+        const err = new Error(coffeeMemberAssignmentError.message || 'Failed to load Coffee Chat member assignments');
+        err.cause = coffeeMemberAssignmentError;
+        throw err;
+    }
+
+    const assignedCoffeeMemberIds = new Set((coffeeMemberAssignmentError ? [] : coffeeMemberAssignments || []).map((row) => row.user_id));
+    const coffeeChatRowsForScoring = coffeeMemberAssignmentError
+        ? coffeeChatRows || []
+        : (coffeeChatRows || []).filter((row) => assignedCoffeeMemberIds.has(row.evaluated_by));
 
     // Resume and FRQ grader identities come from the same users table, and the
     // review overrides are independent of that lookup. Run both enrichments in
@@ -2749,7 +2781,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     const graderIds = [
         ...(reviews || []).map((review) => review.graded_by),
         ...(frqRows || []).map((row) => row.graded_by),
-        ...(coffeeChatRows || []).map((row) => row.evaluated_by),
+        ...coffeeChatRowsForScoring.map((row) => row.evaluated_by),
     ];
     const [gradedByUserLookup, reviewOverrideLookup] = await Promise.all([
         getGradedByUserLookup(graderIds),
@@ -2834,7 +2866,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     );
 
     const frqReviews = (frqRows || []).map((row) => mapFrqReviewRow(row, gradedByUserLookup));
-    const coffeeChatEvaluations = (coffeeChatError ? [] : coffeeChatRows || []).map((row) => ({
+    const coffeeChatEvaluations = (coffeeChatError ? [] : coffeeChatRowsForScoring).map((row) => ({
         id: row.id,
         rating: row.rating,
         weightedScore: Number(row.weighted_score),
@@ -2895,6 +2927,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
             frqReviews: compositeCandidate.frqReviews,
             coffeeChatScore: coffeeChatEvaluations.reduce((sum, row) => sum + (Number.isFinite(row.weightedScore) ? row.weightedScore : 0), 0),
             coffeeChatEvaluationCount: coffeeChatEvaluations.length,
+            coffeeChatExpectedEvaluationCount: coffeeMemberAssignmentError ? null : assignedCoffeeMemberIds.size,
             coffeeChatEvaluations,
         },
     };
