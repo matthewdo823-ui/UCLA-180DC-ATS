@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { API } from "../../constants/config";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
@@ -64,6 +64,7 @@ function useSelection() {
 export default function AssignmentsPage() {
   const authedFetch = useAuthedFetch();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   // Separate from the query's load error so a failed assign doesn't wipe the board.
   const [mutationError, setMutationError] = useState(null);
@@ -201,8 +202,8 @@ export default function AssignmentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ groupNumber: groupNumber || null }),
       });
-      if (!res.ok) throw await formatResponseError(res, "assigning the member's starting table");
-      setNotice(groupNumber ? `Member will start at Table ${groupNumber}.` : "Member starting table cleared.");
+      if (!res.ok) throw await formatResponseError(res, "assigning the participant's starting table");
+      setNotice(groupNumber ? `Participant will start at Table ${groupNumber}.` : "Participant starting table cleared.");
       await Promise.all([
         reloadBoard(),
         queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() }),
@@ -231,7 +232,7 @@ export default function AssignmentsPage() {
           </h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5, maxWidth: 720 }}>
             {isCoffeeChatBoard
-              ? "Move applicants between tables and choose the table where each member begins. Members rotate to the next table after submitting, with the last table cycling back to Table 1."
+              ? "Move applicants between tables and choose where each member or admin begins. Participants rotate after submitting, with the last table cycling back to Table 1."
               : "Pin specific candidates to specific graders. Assigned candidates are served first in the screener; once a grader clears their assignments they drop back into the shared priority queue automatically."}
           </p>
         </div>
@@ -241,7 +242,7 @@ export default function AssignmentsPage() {
             <>
               <StatCard label="Tables" value={board?.stats?.tables ?? 0} />
               <StatCard label="Candidates" value={board?.stats?.candidates ?? 0} />
-              <StatCard label="Members" value={board?.stats?.graders ?? 0} />
+              <StatCard label="Participants" value={board?.stats?.graders ?? 0} />
               <StatCard label="Starting tables set" value={board?.stats?.assignedGraders ?? 0} />
             </>
           ) : (
@@ -276,7 +277,9 @@ export default function AssignmentsPage() {
             busyKey={tableMutationKey}
             onMoveCandidate={moveCoffeeChatCandidate}
             onAssignMember={assignCoffeeChatMember}
-            onOpenCandidate={(resumeId) => navigate(`/scoreboard/${resumeId}/application`)}
+            onOpenCandidate={(resumeId) => navigate(`/candidates/${resumeId}`, {
+              state: { returnTo: `${location.pathname}${location.search}`, returnLabel: "assignments" },
+            })}
           />
         ) : (
           <>
@@ -557,14 +560,14 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
     <>
       {!memberAssignmentsReady ? (
         <Banner tone="warning">
-          Candidate tables can be rearranged now. Run <strong>add_interview_group_member_assignments.sql</strong> before assigning member starting tables.
+          Candidate tables can be rearranged now. Run <strong>add_interview_group_member_assignments.sql</strong> before assigning participant starting tables.
         </Banner>
       ) : null}
 
       <section style={{ ...cardStyle, marginBottom: 16, overflow: "hidden" }}>
         <div style={{ ...panelHeaderStyle, borderBottom: `1px solid ${css.borderLight}` }}>
           <div>
-            <span style={panelTitleStyle}>Members and starting tables</span>
+            <span style={panelTitleStyle}>Participants and starting tables</span>
             <span style={panelCountStyle}>{members.filter((member) => member.startingGroupNumber).length} of {members.length} assigned</span>
           </div>
         </div>
@@ -581,7 +584,6 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ color: css.textDark, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.name}</div>
                   <div style={{ color: css.textGray, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.email}</div>
-                  <div style={{ color: css.greenDark, fontSize: 11, fontWeight: 700, marginTop: 3 }}>{member.submittedRatingCount || 0} / {candidates.length} Coffee Chat grades</div>
                 </div>
                 <select
                   value={member.startingGroupNumber || ""}
@@ -594,7 +596,7 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                 </select>
               </div>
             );
-          }) : <div style={{ padding: 20, color: css.textGray }}>No members are available to assign.</div>}
+          }) : <div style={{ padding: 20, color: css.textGray }}>No participants are available to assign.</div>}
         </div>
       </section>
 
@@ -618,11 +620,11 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
               </div>
 
               <div style={{ padding: "12px 14px", borderBottom: `1px solid ${css.borderLight}`, minHeight: 38 }}>
-                <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 7 }}>Starting members</div>
+                <div style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 7 }}>Starting participants</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {table.members.length ? table.members.map((member) => (
                     <span key={member.id} draggable={memberAssignmentsReady} onDragStart={(event) => startDrag(event, "member", member.id)} style={{ ...metaPillStyle, ...assignedPillStyle, cursor: "grab" }}>{member.name}</span>
-                  )) : <span style={{ color: css.textGray, fontSize: 12 }}>Drop a member here or use the selector above.</span>}
+                  )) : <span style={{ color: css.textGray, fontSize: 12 }}>Drop a participant here or use the selector above.</span>}
                 </div>
               </div>
 
@@ -634,7 +636,6 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                       <button type="button" onClick={() => candidate.resumeId && onOpenCandidate(candidate.resumeId)} style={{ flex: 1, minWidth: 0, padding: 0, border: "none", background: "transparent", color: css.greenDark, textAlign: "left", cursor: candidate.resumeId ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
                         <span style={{ display: "block", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{candidate.name}</span>
                         <span style={{ display: "block", fontSize: 11, color: css.textGray, marginTop: 2 }}>{[candidate.year, candidate.major].filter(Boolean).join(" · ") || "—"}</span>
-                        <span style={{ display: "block", fontSize: 11, color: css.greenDark, fontWeight: 700, marginTop: 3 }}>{candidate.submittedRatingCount || 0}{memberAssignmentsReady ? ` / ${members.filter((member) => member.startingGroupNumber).length}` : ""} ratings submitted</span>
                       </button>
                       <select value={candidate.groupNumber} disabled={busy} onChange={(event) => onMoveCandidate(candidate.id, Number(event.target.value))} style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "7px 8px", background: "#FFF", color: css.textDark, fontSize: 12 }}>
                         {tables.map((target) => <option key={target.number} value={target.number}>Table {target.number}</option>)}

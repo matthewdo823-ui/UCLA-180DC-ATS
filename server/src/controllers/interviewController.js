@@ -563,6 +563,45 @@ exports.getInterviewStats = async (req, res) => {
   }
 };
 
+exports.setMyCoffeeChatStartingTable = async (req, res) => {
+  const groupNumber = Number(req.body?.groupNumber);
+  try {
+    const ctx = await requireActiveInterviewRound();
+    if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
+    if (normalizeRoundType(ctx.round.type) !== ROUND_TYPES.COFFEE_CHAT) {
+      return res.status(400).json({ error: "Starting tables can only be selected during Coffee Chats" });
+    }
+
+    const groupCount = Number(ctx.round.interview_group_count) || 1;
+    if (!Number.isInteger(groupNumber) || groupNumber < 1 || groupNumber > groupCount) {
+      return res.status(400).json({ error: `groupNumber must be between 1 and ${groupCount}` });
+    }
+
+    const { data, error } = await supabase
+      .from("interview_group_member_assignments")
+      .upsert({
+        cycle_id: ctx.cycle.id,
+        round_id: ctx.round.id,
+        user_id: req.user.user_id,
+        group_number: groupNumber,
+        assigned_by: req.user.user_id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "round_id,user_id" })
+      .select("user_id, group_number")
+      .single();
+
+    if (error) {
+      if (isMissingSchemaError(error)) {
+        return res.status(503).json({ error: "Starting-table selection requires database migration #23." });
+      }
+      throw error;
+    }
+    return res.json({ userId: data.user_id, groupNumber: data.group_number });
+  } catch (err) {
+    return respondWithServerError(res, err, "setMyCoffeeChatStartingTable");
+  }
+};
+
 exports.getCoffeeChatGraderScoreboard = async (req, res) => {
   try {
     const ctx = await requireActiveInterviewRound();
@@ -584,7 +623,7 @@ exports.getCoffeeChatGraderScoreboard = async (req, res) => {
 
     if (memberAssignmentRes.error) {
       if (isMissingSchemaError(memberAssignmentRes.error)) {
-        return res.status(503).json({ error: "Coffee Chat grader progress requires member assignment migration #23." });
+        return res.status(503).json({ error: "Coffee Chat grader progress requires participant assignment migration #23." });
       }
       throw memberAssignmentRes.error;
     }
@@ -599,7 +638,7 @@ exports.getCoffeeChatGraderScoreboard = async (req, res) => {
         ? supabase
           .from("users")
           .select("user_id, email, role, first_name, last_name, created_at, last_login")
-          .eq("role", "member")
+          .in("role", ["admin", "member"])
           .in("user_id", memberIds)
         : { data: [], error: null },
       candidateIds.length

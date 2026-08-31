@@ -35,6 +35,20 @@ export default function CandidateApplicationPage() {
   const resumeScreenRank = Number(location.state?.resumeScreenRank ?? cachedCandidate?.resumeScreenRank) || candidateRank;
   const coffeeChatScore = Number(location.state?.coffeeChatScore ?? scoring?.coffeeChatScore) || 0;
   const coffeeChatEvaluationCount = Number(location.state?.coffeeChatEvaluationCount ?? scoring?.coffeeChatEvaluationCount) || 0;
+  const returnTo = location.state?.returnTo || null;
+  const returnLabel = location.state?.returnLabel || "previous page";
+
+  function returnToSource() {
+    if (returnTo) {
+      navigate(returnTo);
+      return;
+    }
+    if ((window.history.state?.idx ?? 0) > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate(cycleId ? `/scoreboard?cycleId=${encodeURIComponent(cycleId)}` : "/scoreboard");
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
@@ -43,7 +57,7 @@ export default function CandidateApplicationPage() {
       <div style={{ flex: 1, padding: "18px 20px 36px", width: "100%", boxSizing: "border-box" }}>
         <button
           type="button"
-          onClick={() => navigate(cycleId ? `/scoreboard?cycleId=${encodeURIComponent(cycleId)}` : "/scoreboard")}
+          onClick={returnToSource}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -59,7 +73,7 @@ export default function CandidateApplicationPage() {
             cursor: "pointer",
           }}
         >
-          ← Back to scoreboard
+          ← Back to {returnLabel}
         </button>
 
         {loading && (

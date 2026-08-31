@@ -69,7 +69,7 @@ async function loadAssignmentBoardData(cycleId) {
 }
 
 async function loadCoffeeChatAssignmentBoard(cycle, round) {
-    const [candidateRes, resumeRes, userRes, groupRes, memberRes, evaluationRes] = await Promise.all([
+    const [candidateRes, resumeRes, userRes, groupRes, memberRes] = await Promise.all([
         supabase
             .from('candidates')
             .select('id, name, year, major, headshot')
@@ -82,7 +82,7 @@ async function loadCoffeeChatAssignmentBoard(cycle, round) {
         supabase
             .from('users')
             .select('user_id, email, role, first_name, last_name')
-            .eq('role', 'member')
+            .in('role', ['admin', 'member'])
             .order('first_name', { ascending: true }),
         supabase
             .from('interview_group_assignments')
@@ -92,11 +92,6 @@ async function loadCoffeeChatAssignmentBoard(cycle, round) {
             .from('interview_group_member_assignments')
             .select('id, user_id, group_number, assigned_at, updated_at')
             .eq('round_id', round.id),
-        supabase
-            .from('interview_evaluations')
-            .select('candidate_id, evaluated_by, rating')
-            .eq('round_id', round.id)
-            .not('rating', 'is', null),
     ]);
 
     if (candidateRes.error) throw candidateRes.error;
@@ -104,23 +99,12 @@ async function loadCoffeeChatAssignmentBoard(cycle, round) {
     if (userRes.error) throw userRes.error;
     if (groupRes.error) throw groupRes.error;
     if (memberRes.error && !isMissingSchemaError(memberRes.error)) throw memberRes.error;
-    if (evaluationRes.error) throw evaluationRes.error;
 
     const candidateById = Object.fromEntries((candidateRes.data || []).map((candidate) => [candidate.id, candidate]));
     const resumeByCandidate = Object.fromEntries((resumeRes.data || []).map((resume) => [resume.candidate_id, resume.id]));
     const memberAssignmentByUser = Object.fromEntries(
         (memberRes.error ? [] : memberRes.data || []).map((assignment) => [assignment.user_id, assignment])
     );
-    const assignedMemberIds = new Set((memberRes.error ? [] : memberRes.data || []).map((assignment) => assignment.user_id));
-    const assignedMemberEvaluations = memberRes.error
-        ? evaluationRes.data || []
-        : (evaluationRes.data || []).filter((evaluation) => assignedMemberIds.has(evaluation.evaluated_by));
-    const ratingsByCandidate = {};
-    const ratingsByMember = {};
-    assignedMemberEvaluations.forEach((evaluation) => {
-        ratingsByCandidate[evaluation.candidate_id] = (ratingsByCandidate[evaluation.candidate_id] || 0) + 1;
-        ratingsByMember[evaluation.evaluated_by] = (ratingsByMember[evaluation.evaluated_by] || 0) + 1;
-    });
 
     const candidates = (groupRes.data || [])
         .map((assignment) => {
@@ -135,7 +119,6 @@ async function loadCoffeeChatAssignmentBoard(cycle, round) {
                 headshot: candidate.headshot || '',
                 groupNumber: Number(assignment.group_number) || 0,
                 assignmentId: assignment.id,
-                submittedRatingCount: ratingsByCandidate[candidate.id] || 0,
             };
         })
         .filter(Boolean)
@@ -147,7 +130,6 @@ async function loadCoffeeChatAssignmentBoard(cycle, round) {
         email: user.email || '',
         role: user.role,
         startingGroupNumber: Number(memberAssignmentByUser[user.user_id]?.group_number) || null,
-        submittedRatingCount: ratingsByMember[user.user_id] || 0,
     }));
 
     const groupCount = Number(round.interview_group_count) || 1;
@@ -172,7 +154,6 @@ async function loadCoffeeChatAssignmentBoard(cycle, round) {
             graders: graders.length,
             tables: groupCount,
             assignedGraders: graders.filter((grader) => grader.startingGroupNumber).length,
-            submittedRatings: assignedMemberEvaluations.length,
         },
     };
 }
@@ -324,7 +305,7 @@ exports.updateCoffeeChatCandidateTable = async (req, res) => {
     }
 };
 
-/** Assign or unassign a member's starting table for the active Coffee Chat round. */
+/** Assign or unassign a participant's starting table for the active Coffee Chat round. */
 exports.updateCoffeeChatMemberTable = async (req, res) => {
     const userId = Number(req.params.userId);
     const rawGroupNumber = req.body?.groupNumber;
@@ -332,24 +313,24 @@ exports.updateCoffeeChatMemberTable = async (req, res) => {
     const groupNumber = Number(rawGroupNumber);
 
     if (!Number.isInteger(userId) || userId < 1) {
-        return res.status(400).json({ error: 'userId must be a valid member id' });
+        return res.status(400).json({ error: 'userId must be a valid participant id' });
     }
 
     try {
         const ctx = await requireActiveInterviewRound();
         if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
         if (normalizeRoundType(ctx.round.type) !== ROUND_TYPES.COFFEE_CHAT) {
-            return res.status(400).json({ error: 'Member tables can only be changed during Coffee Chats' });
+            return res.status(400).json({ error: 'Participant tables can only be changed during Coffee Chats' });
         }
 
         const { data: member, error: memberError } = await supabase
             .from('users')
             .select('user_id, role')
             .eq('user_id', userId)
-            .eq('role', 'member')
+            .in('role', ['admin', 'member'])
             .maybeSingle();
         if (memberError) throw memberError;
-        if (!member) return res.status(404).json({ error: 'Member not found' });
+        if (!member) return res.status(404).json({ error: 'Coffee Chat participant not found' });
 
         if (unassign) {
             const { error } = await supabase
@@ -359,7 +340,7 @@ exports.updateCoffeeChatMemberTable = async (req, res) => {
                 .eq('user_id', userId);
             if (error) {
                 if (isMissingSchemaError(error)) {
-                    return res.status(503).json({ error: 'Member table assignments require migration #23.' });
+                    return res.status(503).json({ error: 'Participant table assignments require migration #23.' });
                 }
                 throw error;
             }
@@ -386,7 +367,7 @@ exports.updateCoffeeChatMemberTable = async (req, res) => {
 
         if (error) {
             if (isMissingSchemaError(error)) {
-                return res.status(503).json({ error: 'Member table assignments require migration #23.' });
+                return res.status(503).json({ error: 'Participant table assignments require migration #23.' });
             }
             throw error;
         }
