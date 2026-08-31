@@ -43,6 +43,7 @@ export default function GraderDashboard() {
   const progressPct = personal?.progressPct ?? 0;
   const goalComplete = personal?.goalComplete;
   const lastActivity = relativeLastActivity(personal?.lastActivityAt);
+  const coffeeChatMode = personal?.ratingMode === "coffee_chat";
 
   const goalLabel = isInterview
     ? goal > 0
@@ -62,7 +63,7 @@ export default function GraderDashboard() {
 
   return (
     <div style={pageStyle}>
-      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+      <div style={{ maxWidth: coffeeChatMode ? 1200 : 720, width: "100%", margin: "0 auto" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: 32 }}>
           <img
             src={logo180}
