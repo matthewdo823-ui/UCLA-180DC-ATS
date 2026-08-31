@@ -210,7 +210,7 @@ export default function ApplicationEvaluationsSection({ scoring }) {
         <StatTile label="Average resume" value={hasNumericScore(averageScore) ? `${formatScore(averageScore)}%` : "—"} detail={formatReviewCount(reviews.length, "resume")} />
         <StatTile label="Average free response" value={hasNumericScore(freeResponsePercent) ? `${formatScore(freeResponsePercent)}%` : "—"} detail={formatReviewCount(frqReviews.length, "free response")} />
         <StatTile label="Reviews" value={reviews.length + frqReviews.length} detail={<span style={{ whiteSpace: "pre-line" }}>{formatReviewCountPairStacked(reviews.length, frqReviews.length)}</span>} />
-        <StatTile label="Coffee Chat points" value={`${scoring?.coffeeChatScore || 0} pts`} detail={`${coffeeChatEvaluations.length} submitted rating${coffeeChatEvaluations.length === 1 ? "" : "s"}`} />
+        <StatTile label="Coffee Chat points" value={`${scoring?.coffeeChatScore || 0} pts`} detail={`${coffeeChatEvaluations.length}${Number.isFinite(scoring?.coffeeChatExpectedEvaluationCount) ? ` / ${scoring.coffeeChatExpectedEvaluationCount}` : ""} submitted rating${coffeeChatEvaluations.length === 1 ? "" : "s"}`} />
       </div>
 
       {allMetrics.length > 0 && (
@@ -233,7 +233,7 @@ export default function ApplicationEvaluationsSection({ scoring }) {
       <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${css.borderLight}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
           <h3 style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>Previous grades</h3>
-          <span style={{ color: css.textGray, fontSize: 12, lineHeight: 1.45, textAlign: "right", whiteSpace: "pre-line" }}>{formatReviewCountPairStacked(reviews.length, frqReviews.length)}{coffeeChatEvaluations.length ? `\n${coffeeChatEvaluations.length} Coffee Chat rating${coffeeChatEvaluations.length === 1 ? "" : "s"}` : ""}</span>
+          <span style={{ color: css.textGray, fontSize: 12, lineHeight: 1.45, textAlign: "right", whiteSpace: "pre-line" }}>{formatReviewCountPairStacked(reviews.length, frqReviews.length)}{coffeeChatEvaluations.length || Number.isFinite(scoring?.coffeeChatExpectedEvaluationCount) ? `\n${coffeeChatEvaluations.length}${Number.isFinite(scoring?.coffeeChatExpectedEvaluationCount) ? ` / ${scoring.coffeeChatExpectedEvaluationCount}` : ""} Coffee Chat rating${coffeeChatEvaluations.length === 1 ? "" : "s"}` : ""}</span>
         </div>
 
         {previousGrades.length > 0 ? (
