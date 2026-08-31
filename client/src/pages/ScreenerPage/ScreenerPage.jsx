@@ -26,7 +26,7 @@ const GRADING_MODES = {
   FRQ: "frq",
 };
 
-function GradingModeToggle({ mode, onChange }) {
+function GradingModeToggle({ mode, onChange, disabled = false }) {
   const options = [
     { id: GRADING_MODES.RESUME, label: "Resume" },
     { id: GRADING_MODES.FRQ, label: "Free response" },
@@ -49,17 +49,24 @@ function GradingModeToggle({ mode, onChange }) {
           <button
             key={id}
             type="button"
+            disabled={disabled}
             onClick={() => onChange(id)}
             style={{
               ...topbarGhostButtonStyle,
               border: "none",
               borderRadius: 0,
               margin: 0,
-              boxShadow: "none",
-              padding: "6px 12px",
-              fontSize: 11,
-              background: active ? css.greenDark : css.cardWhite,
-              color: active ? css.cardWhite : css.textGray,
+              boxShadow: active ? "0 1px 4px rgba(40,98,65,0.16)" : "none",
+              padding: "10px 14px",
+              fontSize: 12,
+              background: active ? css.cardWhite : "transparent",
+              color: active ? css.greenDark : css.textGray,
+              cursor: disabled ? "not-allowed" : "pointer",
+              opacity: disabled ? 0.65 : 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
             }}
           >
             {label}
@@ -85,6 +92,7 @@ export default function ScreenerPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [myReviews, setMyReviews] = useState([]);
   const [myFrqReviews, setMyFrqReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -92,6 +100,8 @@ export default function ScreenerPage() {
   const [pastReviewDetail, setPastReviewDetail] = useState(null);
   const [editingReviewId, setEditingReviewId] = useState(null);
   const [celebrationKey, setCelebrationKey] = useState(0);
+  const [submittingAction, setSubmittingAction] = useState(null);
+  const submittingRef = useRef(false);
   const panelRef = useRef(null);
 
   const graderName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim();
@@ -332,8 +342,18 @@ export default function ScreenerPage() {
   }, [celebrationKey, specialCelebrationName]);
 
   async function handleResumeAction(type) {
-    if (!resumeScoringComplete) return;
+    if (submittingRef.current) return;
+
+    if (!resumeScoringComplete) {
+      setShowValidationErrors(true);
+      setSubmitError("Complete every resume rubric category before submitting.");
+      return;
+    }
+
+    setShowValidationErrors(false);
     setSubmitError("");
+    submittingRef.current = true;
+    setSubmittingAction(type);
 
     const payload = { scores, notes, decision: type };
 
@@ -355,34 +375,47 @@ export default function ScreenerPage() {
         setSubmitError(message);
         throw new Error(message);
       }
+      // The API only responds successfully after Supabase has accepted the
+      // review. Celebrate that confirmed result, never the click itself.
+      setCelebrationKey((key) => key + 1);
       setEditingReviewId(null);
       await fetchMyReviews({ showLoading: false });
       // This review changes the scoreboard, the dashboard counts and this
       // grader's coverage — expire them so those pages don't serve a cached
       // number that's now one review out of date.
       invalidateAfterReview(queryClient);
-      setCelebrationKey((key) => key + 1);
+
+      if (panelRef.current) panelRef.current.style.animation = "cardFlyOut 0.28s ease forwards";
+      await new Promise((r) => setTimeout(r, 280));
+      await fetchNextResume();
+      if (panelRef.current) {
+        panelRef.current.style.animation = "";
+        void panelRef.current?.offsetWidth;
+        panelRef.current.style.animation = "cardFlyIn 0.28s ease forwards";
+        setTimeout(() => {
+          if (panelRef.current) panelRef.current.style.animation = "";
+        }, 300);
+      }
     } catch (e) {
       console.warn("Could not save review:", e);
-      return;
-    }
-
-    if (panelRef.current) panelRef.current.style.animation = "cardFlyOut 0.28s ease forwards";
-    await new Promise((r) => setTimeout(r, 280));
-    await fetchNextResume();
-    if (panelRef.current) {
-      panelRef.current.style.animation = "";
-      void panelRef.current?.offsetWidth;
-      panelRef.current.style.animation = "cardFlyIn 0.28s ease forwards";
-      setTimeout(() => {
-        if (panelRef.current) panelRef.current.style.animation = "";
-      }, 300);
+    } finally {
+      submittingRef.current = false;
+      setSubmittingAction(null);
     }
   }
 
   async function handleFrqComplete() {
-    if (!frqScoringComplete) return;
+    if (submittingRef.current) return;
+
+    if (!frqScoringComplete) {
+      setShowValidationErrors(true);
+      setSubmitError("Complete the free-response grade before submitting.");
+      return;
+    }
+    setShowValidationErrors(false);
     setSubmitError("");
+    submittingRef.current = true;
+    setSubmittingAction("frq");
 
     const payload = { score: frqScore, notes };
 
@@ -407,21 +440,23 @@ export default function ScreenerPage() {
       setEditingReviewId(null);
       await fetchMyFrqReviews({ showLoading: false });
       invalidateAfterReview(queryClient);
+
+      if (panelRef.current) panelRef.current.style.animation = "cardFlyOut 0.28s ease forwards";
+      await new Promise((r) => setTimeout(r, 280));
+      await fetchNextFrq();
+      if (panelRef.current) {
+        panelRef.current.style.animation = "";
+        void panelRef.current?.offsetWidth;
+        panelRef.current.style.animation = "cardFlyIn 0.28s ease forwards";
+        setTimeout(() => {
+          if (panelRef.current) panelRef.current.style.animation = "";
+        }, 300);
+      }
     } catch (e) {
       console.warn("Could not save FRQ grade:", e);
-      return;
-    }
-
-    if (panelRef.current) panelRef.current.style.animation = "cardFlyOut 0.28s ease forwards";
-    await new Promise((r) => setTimeout(r, 280));
-    await fetchNextFrq();
-    if (panelRef.current) {
-      panelRef.current.style.animation = "";
-      void panelRef.current?.offsetWidth;
-      panelRef.current.style.animation = "cardFlyIn 0.28s ease forwards";
-      setTimeout(() => {
-        if (panelRef.current) panelRef.current.style.animation = "";
-      }, 300);
+    } finally {
+      submittingRef.current = false;
+      setSubmittingAction(null);
     }
   }
 
@@ -429,6 +464,7 @@ export default function ScreenerPage() {
     setScores({});
     setNotes("");
     setSubmitError("");
+    setShowValidationErrors(false);
   }
 
   function handleGradingModeChange(nextMode) {
@@ -441,6 +477,7 @@ export default function ScreenerPage() {
     setEditingReviewId(null);
     setFetchError("");
     setSubmitError("");
+    setShowValidationErrors(false);
     setDrawerOpen(false);
     setPastReviewDetail(null);
   }
@@ -450,9 +487,6 @@ export default function ScreenerPage() {
 
   const topbarRightSlot = (
     <>
-      {isAdmin && isResumeRound && !screeningBlocked ? (
-        <GradingModeToggle mode={gradingMode} onChange={handleGradingModeChange} />
-      ) : null}
       <button type="button" onClick={() => setDrawerOpen(true)} style={topbarGhostButtonStyle}>
         📋 {isFrqMode ? "Past FRQ Grades" : "Past Reviews"}
         <span style={{ background: css.greenDark, color: css.cardWhite, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: "2px 7px" }}>
@@ -490,6 +524,29 @@ export default function ScreenerPage() {
 
       <div style={{ flex: 1, overflow: "hidden", padding: "14px 22px 0", display: "flex", flexDirection: "column", gap: 12 }}>
         <CandidateRow resume={resume} />
+        {isAdmin && isResumeRound && !screeningBlocked ? (
+          <GradingModeToggle
+            mode={gradingMode}
+            onChange={handleGradingModeChange}
+            disabled={Boolean(submittingAction)}
+          />
+        ) : null}
+        {showValidationErrors && submitError ? (
+          <div
+            role="alert"
+            style={{
+              padding: "10px 14px",
+              borderRadius: 9,
+              border: `1px solid ${css.red}`,
+              background: "rgba(197,48,48,0.07)",
+              color: css.red,
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            {submitError}
+          </div>
+        ) : null}
 
         {screeningBlocked ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -533,6 +590,7 @@ export default function ScreenerPage() {
                       onComplete={handleFrqComplete}
                       scoringComplete={frqScoringComplete}
                       submitError={submitError}
+                      submitting={Boolean(submittingAction)}
                     />
                   ) : (
                     <ScoringPanel
@@ -545,6 +603,7 @@ export default function ScreenerPage() {
                       onReset={handleResumeReset}
                       scoringComplete={resumeScoringComplete}
                       submitError={submitError}
+                      submittingAction={submittingAction}
                     />
                   )}
                 </div>

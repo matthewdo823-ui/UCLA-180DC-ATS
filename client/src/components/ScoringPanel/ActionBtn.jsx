@@ -1,12 +1,13 @@
 import { useState } from "react";
 
-export default function ActionBtn({ label, style, onClick, disabled = false, title }) {
+export default function ActionBtn({ label, style, onClick, disabled = false, busy = false, title }) {
   const [hover, setHover] = useState(false);
   const activeHover = hover && !disabled;
   return (
     <button
       type="button"
       disabled={disabled}
+      aria-busy={busy || undefined}
       title={title}
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
@@ -28,7 +29,7 @@ export default function ActionBtn({ label, style, onClick, disabled = false, tit
         boxShadow: activeHover ? `0 4px 18px ${style.borderColor}33` : "none",
         transform: activeHover ? "translateY(-1px)" : "none",
         transition: "all 0.15s",
-        opacity: disabled ? 0.45 : 1,
+        opacity: busy ? 0.78 : disabled ? 0.45 : 1,
       }}
     >
       {label}
