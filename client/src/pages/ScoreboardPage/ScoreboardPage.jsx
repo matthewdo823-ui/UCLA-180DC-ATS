@@ -58,48 +58,27 @@ const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
 const cardLime = "#C0DD97";
 
-const PAGE_THEME = {
-  light: {
-    pageBg: css.bgLight,
-    text: css.textDark,
-    textMuted: css.textGray,
-    cardBg: css.cardWhite,
-    border: css.borderLight,
-    accent: css.greenDark,
-    titleAccent: css.greenDark,
-    rowBg: css.cardWhite,
-    rowFocus: "rgba(40, 98, 65, 0.06)",
-    statValue: css.textDark,
-    btnGhostBg: "#FFF",
-    btnGhostText: css.textDark,
-    selectBg: "#FFF",
-    selectText: css.textDark,
-    chipActiveBg: "rgba(40, 98, 65, 0.1)",
-    infoBg: "rgba(40, 98, 65, 0.06)",
-    infoBorder: "rgba(40, 98, 65, 0.18)",
-  },
-  dark: {
-    pageBg: "#0B1628",
-    text: "#E8EEF4",
-    textMuted: "#8FA3B8",
-    cardBg: "#141F33",
-    border: "rgba(255,255,255,0.09)",
-    accent: "#3DCF9A",
-    titleAccent: "#6EE7B8",
-    rowBg: "#141F33",
-    rowFocus: "rgba(61,207,154,0.14)",
-    statValue: "#F3F7FB",
-    btnGhostBg: "#1C2A42",
-    btnGhostText: "#E8EEF4",
-    selectBg: "#1C2A42",
-    selectText: "#E8EEF4",
-    chipActiveBg: "rgba(61,207,154,0.18)",
-    infoBg: "rgba(61,207,154,0.08)",
-    infoBorder: "rgba(61,207,154,0.22)",
-  },
+const SCOREBOARD_THEME = {
+  pageBg: css.bgLight,
+  text: css.textDark,
+  textMuted: css.textGray,
+  cardBg: css.cardWhite,
+  border: css.borderLight,
+  accent: css.greenDark,
+  titleAccent: css.greenDark,
+  rowBg: css.cardWhite,
+  rowFocus: "rgba(40, 98, 65, 0.06)",
+  statValue: css.textDark,
+  btnGhostBg: "#FFF",
+  btnGhostText: css.textDark,
+  selectBg: "#FFF",
+  selectText: css.textDark,
+  chipActiveBg: "rgba(40, 98, 65, 0.1)",
+  infoBg: "rgba(40, 98, 65, 0.06)",
+  infoBorder: "rgba(40, 98, 65, 0.18)",
 };
 
-function DecisionReadonlyBadge({ status, dark }) {
+function DecisionReadonlyBadge({ status, dark, label }) {
   const style = DECISION_STYLE[status] || DECISION_STYLE.pending;
   return (
     <span
@@ -118,7 +97,7 @@ function DecisionReadonlyBadge({ status, dark }) {
         opacity: dark ? 0.95 : 1,
       }}
     >
-      {style.label}
+      {label || style.label}
     </span>
   );
 }
@@ -158,7 +137,7 @@ function DecisionButtons({ status, disabled, saving, onSelect, dark }) {
               border: "none",
               borderRight: index < options.length - 1 ? `1px solid ${divider}` : "none",
               background: selected ? style.color : "transparent",
-              color: selected ? "#FFF" : idleColor,
+              color: selected ? style.selectedText || "#FFF" : idleColor,
               padding: "7px 12px",
               fontSize: 11,
               fontWeight: 700,
@@ -178,11 +157,13 @@ function DecisionButtons({ status, disabled, saving, onSelect, dark }) {
   );
 }
 
-function FilterField({ label, theme, children }) {
+function FilterField({ label, theme, fillRow = false, children }) {
   return (
     <label style={{
       display: "flex",
       flexDirection: "column",
+      flex: fillRow ? "1 1 0" : undefined,
+      minWidth: fillRow ? 0 : undefined,
       gap: 4,
       fontSize: 11,
       fontWeight: 700,
@@ -229,6 +210,7 @@ function buildActiveFilterPills(filters, deliberationMode) {
       advance: "Advanced",
       hold: "Hold",
       reject: "Rejected",
+      not_advanced: "Cut this round",
     };
     pills.push({
       key: "decision",
@@ -832,6 +814,8 @@ export default function ScoreboardPage() {
   const maxPerCategory = data.maxPerCategory ?? 4;
   const activeRound = data.context?.round;
   const isCoffeeChatRanking = data.context?.rankingMode === "coffee_chat";
+  const viewingFinalizedRound = viewingHistorical && activeRound?.status === "closed";
+  const historicalCutLabel = `Cut at ${activeRound?.name || "this round"}`;
   const liveActiveRound = data.context?.activeRound;
   const nextRound = data.context?.nextRound;
   const allRounds = data.context?.allRounds ?? [];
@@ -861,10 +845,21 @@ export default function ScoreboardPage() {
   const scoreCutoffs = useMemo(() => computeScoreCutoffs(candidates), [candidates]);
 
   const filteredCandidates = useMemo(() => {
-    const effectiveFilters = deliberationMode ? filters : { ...filters, decision: "all" };
+    const effectiveFilters = {
+      ...filters,
+      ...(!deliberationMode ? { decision: "all" } : {}),
+      ...(isCoffeeChatRanking ? { reviews: "all" } : {}),
+    };
     const filtered = filterCandidates(candidates, effectiveFilters, searchQuery, scoreCutoffs);
     return [...filtered].sort((a, b) => compareCandidates(a, b, sortBy));
-  }, [candidates, filters, searchQuery, sortBy, deliberationMode, scoreCutoffs]);
+  }, [candidates, filters, searchQuery, sortBy, deliberationMode, isCoffeeChatRanking, scoreCutoffs]);
+
+  useEffect(() => {
+    if (!isCoffeeChatRanking) return;
+    setFilters(current => (
+      current.reviews === "all" ? current : { ...current, reviews: "all" }
+    ));
+  }, [isCoffeeChatRanking]);
 
   const saveDecision = useCallback(async (candidate, decision) => {
     if (!canEditDeliberations || !deliberationMode) return;
@@ -1097,15 +1092,15 @@ export default function ScoreboardPage() {
 
       const key = event.key.toLowerCase();
       const currentStatus = getCandidateDecisionStatus(focused);
-      if (key === "g") {
+      if (key === "y") {
         event.preventDefault();
         saveDecision(focused, currentStatus === "advance" ? "pending" : "advance");
-      } else if (key === "y") {
-        event.preventDefault();
-        saveDecision(focused, currentStatus === "hold" ? "pending" : "hold");
-      } else if (key === "r") {
+      } else if (key === "n") {
         event.preventDefault();
         saveDecision(focused, currentStatus === "reject" ? "pending" : "reject");
+      } else if (key === "h") {
+        event.preventDefault();
+        saveDecision(focused, currentStatus === "hold" ? "pending" : "hold");
       }
     }
 
@@ -1130,16 +1125,47 @@ export default function ScoreboardPage() {
     }
   }, [deliberationMode, filteredCandidates, focusedCandidateId]);
 
-  const activeFilterCount = countActiveFilters(
-    deliberationMode ? filters : { ...filters, decision: "all" }
-  );
+  const effectiveSummaryFilters = {
+    ...filters,
+    ...(!deliberationMode ? { decision: "all" } : {}),
+    ...(isCoffeeChatRanking ? { reviews: "all" } : {}),
+  };
+  const activeFilterCount = countActiveFilters(effectiveSummaryFilters);
   const hasActiveSearch = searchQuery.trim().length > 0;
   const hasActiveNarrowing = activeFilterCount > 0 || hasActiveSearch;
   const activeFilterPills = useMemo(
-    () => buildActiveFilterPills(filters, deliberationMode),
-    [filters, deliberationMode]
+    () => buildActiveFilterPills(
+      { ...filters, ...(isCoffeeChatRanking ? { reviews: "all" } : {}) },
+      deliberationMode
+    ),
+    [filters, deliberationMode, isCoffeeChatRanking]
   );
-  const t = deliberationMode ? PAGE_THEME.dark : PAGE_THEME.light;
+  const summaryCandidates = hasActiveNarrowing ? filteredCandidates : candidates;
+  const scopedDecisionStats = useMemo(
+    () => recomputeDecisionStats(summaryCandidates),
+    [summaryCandidates]
+  );
+  const summaryStats = useMemo(() => {
+    if (!hasActiveNarrowing) return displayStats;
+
+    const { avgScore } = recomputeEqualizedStats(summaryCandidates);
+    const coffeeChatAverage = summaryCandidates.length
+      ? Number((summaryCandidates.reduce((sum, candidate) => sum + Number(candidate.coffeeChatScore || 0), 0) / summaryCandidates.length).toFixed(1))
+      : null;
+
+    return {
+      ...displayStats,
+      applicants: summaryCandidates.length,
+      advanced: scopedDecisionStats.advance,
+      hold: scopedDecisionStats.hold,
+      rejected: scopedDecisionStats.reject,
+      pending: scopedDecisionStats.pending,
+      avgScore,
+      coffeeChatAverage,
+    };
+  }, [displayStats, hasActiveNarrowing, scopedDecisionStats, summaryCandidates]);
+  const t = SCOREBOARD_THEME;
+  const showingLiveDeliberation = deliberationMode && !viewingHistorical && !cycleId;
   const gridColumns = deliberationMode
     ? `16px 36px minmax(180px, 2.2fr) ${isCoffeeChatRanking ? "165px" : "100px"} minmax(196px, 0.9fr) minmax(108px, auto)`
     : `48px minmax(220px, 2.2fr) ${isCoffeeChatRanking ? "165px" : "108px"} minmax(100px, auto)`;
@@ -1233,41 +1259,68 @@ export default function ScoreboardPage() {
     }
   }, [viewingHistorical, deliberationMode]);
 
-  const resumeReviewedApplicants = candidates.filter((candidate) => getResumeReviewCount(candidate) > 0).length;
-  const freeResponseReviewedApplicants = candidates.filter((candidate) => getFreeResponseReviewCount(candidate) > 0).length;
-  const coffeeChatEvaluatedApplicants = candidates.filter((candidate) => (candidate.coffeeChatEvaluationCount || 0) > 0).length;
-  const coffeeChatRatings = candidates.reduce((total, candidate) => total + (candidate.coffeeChatEvaluationCount || 0), 0);
+  const resumeReviewedApplicants = summaryCandidates.filter((candidate) => getResumeReviewCount(candidate) > 0).length;
+  const freeResponseReviewedApplicants = summaryCandidates.filter((candidate) => getFreeResponseReviewCount(candidate) > 0).length;
+  const coffeeChatEvaluatedApplicants = summaryCandidates.filter((candidate) => (candidate.coffeeChatEvaluationCount || 0) > 0).length;
+  const coffeeChatRatings = summaryCandidates.reduce((total, candidate) => total + (candidate.coffeeChatEvaluationCount || 0), 0);
+
+  const historicalCutCount = (summaryStats?.pending ?? 0) + (summaryStats?.hold ?? 0) + (summaryStats?.rejected ?? 0);
 
   const statRows = !deliberationMode && isCoffeeChatRanking
     ? [
-        { label: "CANDIDATES", value: statCount(displayStats?.applicants), clickable: false },
+        { label: "CANDIDATES", value: statCount(summaryStats?.applicants), clickable: false },
         { label: "EVALUATED", value: statCount(coffeeChatEvaluatedApplicants), clickable: false },
         { label: "RATINGS SUBMITTED", value: statCount(coffeeChatRatings), clickable: false },
-        { label: "AWAITING A RATING", value: statCount(Math.max(0, (displayStats?.applicants || 0) - coffeeChatEvaluatedApplicants)), clickable: false },
+        { label: "AWAITING A RATING", value: statCount(Math.max(0, (summaryStats?.applicants || 0) - coffeeChatEvaluatedApplicants)), clickable: false },
+      ]
+    : deliberationMode && viewingFinalizedRound
+    ? [
+        { label: "ADVANCED", value: statCount(summaryStats?.advanced ?? 0), clickable: true, color: DECISION_STYLE.advance.color },
+        { label: historicalCutLabel.toUpperCase(), value: statCount(historicalCutCount), clickable: false, color: DECISION_STYLE.reject.color },
+        ...(!isCoffeeChatRanking ? [
+          { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
+          { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
+        ] : []),
+        { label: "APPLICANTS", value: statCount(summaryStats?.applicants), clickable: true },
       ]
     : deliberationMode
     ? [
-        { label: "PENDING", value: statCount(displayStats?.pending ?? (displayStats?.applicants != null ? displayStats?.applicants : null)), clickable: true },
-        { label: "ADVANCED", value: statCount(displayStats?.advanced ?? 0), clickable: true },
-        { label: "HOLD", value: statCount(displayStats?.hold ?? 0), clickable: true },
-        { label: "REJECTED", value: statCount(displayStats?.rejected ?? 0), clickable: true },
-        { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
-        { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
-        { label: "APPLICANTS", value: statCount(displayStats?.applicants), clickable: true },
+        { label: "PENDING", value: statCount(summaryStats?.pending ?? (summaryStats?.applicants != null ? summaryStats?.applicants : null)), clickable: true, color: DECISION_STYLE.pending.color },
+        { label: "ADVANCED", value: statCount(summaryStats?.advanced ?? 0), clickable: true, color: DECISION_STYLE.advance.color },
+        { label: "HOLD", value: statCount(summaryStats?.hold ?? 0), clickable: true, color: DECISION_STYLE.hold.color },
+        { label: "REJECTED", value: statCount(summaryStats?.rejected ?? 0), clickable: true, color: DECISION_STYLE.reject.color },
+        ...(!isCoffeeChatRanking ? [
+          { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
+          { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
+        ] : []),
+        { label: "APPLICANTS", value: statCount(summaryStats?.applicants), clickable: true },
       ]
     : [
-        { label: "APPLICANTS", value: statCount(displayStats?.applicants), clickable: true },
+        { label: "APPLICANTS", value: statCount(summaryStats?.applicants), clickable: true },
         { label: "RESUME REVIEWED", value: statCount(resumeReviewedApplicants), clickable: true },
         { label: "FREE RESPONSE REVIEWED", value: statCount(freeResponseReviewedApplicants), clickable: false },
-        { label: "ADVANCED", value: statCount(displayStats?.advanced), clickable: true },
-        { label: isCoffeeChatRanking ? "AVG COFFEE CHAT" : "AVG SCORE", value: statCount(isCoffeeChatRanking ? displayStats?.coffeeChatAverage : displayStats?.avgScore), clickable: false },
+        { label: "ADVANCED", value: statCount(summaryStats?.advanced), clickable: true },
+        { label: isCoffeeChatRanking ? "AVG COFFEE CHAT" : "AVG SCORE", value: statCount(isCoffeeChatRanking ? summaryStats?.coffeeChatAverage : summaryStats?.avgScore), clickable: false },
       ];
 
   const decidedCount = deliberationMode
-    ? (displayStats?.advanced ?? 0) + (displayStats?.hold ?? 0) + (displayStats?.rejected ?? 0)
+    ? viewingFinalizedRound
+      ? (summaryStats?.applicants ?? 0)
+      : (summaryStats?.advanced ?? 0) + (summaryStats?.hold ?? 0) + (summaryStats?.rejected ?? 0)
     : 0;
-  const totalApplicants = displayStats?.applicants ?? 0;
+  const totalApplicants = summaryStats?.applicants ?? 0;
   const decisionProgress = totalApplicants > 0 ? Math.round((decidedCount / totalApplicants) * 100) : 0;
+  const decisionMix = viewingFinalizedRound
+    ? [
+        { label: "Advanced", value: Number(summaryStats?.advanced) || 0, color: DECISION_STYLE.advance.color },
+        { label: historicalCutLabel, value: historicalCutCount, color: DECISION_STYLE.reject.color },
+      ]
+    : [
+        { label: "Advanced", value: Number(summaryStats?.advanced) || 0, color: DECISION_STYLE.advance.color },
+        { label: "Hold", value: Number(summaryStats?.hold) || 0, color: DECISION_STYLE.hold.color },
+        { label: "Rejected", value: Number(summaryStats?.rejected) || 0, color: DECISION_STYLE.reject.color },
+        { label: "Pending", value: Number(summaryStats?.pending) || 0, color: "#D1D5DB" },
+      ];
 
   const barSelectStyle = {
     ...selectStyle,
@@ -1281,13 +1334,17 @@ export default function ScoreboardPage() {
     letterSpacing: "normal",
   };
 
+  const filterSelectStyle = deliberationMode
+    ? { ...barSelectStyle, width: "100%", minWidth: 0 }
+    : barSelectStyle;
+
   // Major names can be long enough to push the bar onto a second line, so the
   // closed control is capped to the same width as the others and clips its
   // label with an ellipsis. The opened dropdown list still shows full names.
   const majorSelectStyle = {
-    ...barSelectStyle,
-    width: 132,
-    maxWidth: 132,
+    ...filterSelectStyle,
+    width: deliberationMode ? "100%" : 132,
+    maxWidth: deliberationMode ? "none" : 132,
     textOverflow: "ellipsis",
   };
 
@@ -1363,7 +1420,9 @@ export default function ScoreboardPage() {
                       cursor: "pointer",
                     }}
                   >
-                    <option value="">{cycleId ? "Resume Screen overview" : "Current round"}</option>
+                    <option value="">
+                      Current round ({liveActiveRound?.name || activeRound?.name || "Unknown"})
+                    </option>
                     {pastRounds.map((round) => (
                       <option key={round.id} value={round.id}>
                         {round.name}{round.status === "closed" ? " (closed)" : ""}
@@ -1372,26 +1431,6 @@ export default function ScoreboardPage() {
                   </select>
                 </label>
               ) : null}
-              <button
-                type="button"
-                onClick={cycleId ? () => navigate("/cycle-management?view=past") : viewingHistorical ? handleReturnToCurrentRound : toggleDeliberationMode}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  cursor: "pointer",
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  background: deliberationMode ? t.accent : t.btnGhostBg,
-                  color: deliberationMode ? "#0B1628" : t.btnGhostText,
-                  border: `1px solid ${deliberationMode ? t.accent : t.border}`,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                {cycleId ? "Back to cycles" : viewingHistorical ? "Back to current" : deliberationMode ? "Exit" : "Deliberation"}
-              </button>
               {isAdmin && deliberationMode && !viewingHistorical && (automaticDecisionPlan.advancePercent > 0 || automaticDecisionPlan.rejectPercent > 0) ? (
                 <button
                   type="button"
@@ -1419,27 +1458,29 @@ export default function ScoreboardPage() {
                     : `Apply cutoffs · ${automaticDecisionPlan.advanceCount} pass / ${automaticDecisionPlan.rejectCount} reject`}
                 </button>
               ) : null}
-              <button
-                type="button"
-                onClick={() => setEqualizeActive(on => !on)}
-                title="Adjust for consistently strict or lenient graders using per-category z-scores"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  cursor: "pointer",
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  background: equalizeActive ? t.accent : t.btnGhostBg,
-                  color: equalizeActive ? "#FFFFFF" : t.btnGhostText,
-                  border: `1px solid ${equalizeActive ? t.accent : t.border}`,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                {equalizeActive ? "Unadjusted scores" : "Bias adjust"}
-              </button>
+              {!isCoffeeChatRanking && (!deliberationMode || !isAdmin) ? (
+                <button
+                  type="button"
+                  onClick={() => setEqualizeActive(on => !on)}
+                  title="Adjust for consistently strict or lenient graders using per-category z-scores"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    cursor: "pointer",
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    background: equalizeActive ? t.accent : t.btnGhostBg,
+                    color: equalizeActive ? "#FFFFFF" : t.btnGhostText,
+                    border: `1px solid ${equalizeActive ? t.accent : t.border}`,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    fontFamily: "'DM Sans', sans-serif",
+                  }}
+                >
+                  {equalizeActive ? "Unadjusted scores" : "Bias adjust"}
+                </button>
+              ) : null}
             </>
           ) : null}
           {isAdmin && deliberationMode ? (
@@ -1484,6 +1525,16 @@ export default function ScoreboardPage() {
                     animation: "scoreboardPanelIn 0.18s ease-out",
                   }}
                 >
+                  {!isCoffeeChatRanking ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setEqualizeActive(on => !on); setAdminMenuOpen(false); }}
+                      style={adminMenuItemStyle(t)}
+                    >
+                      {equalizeActive ? "Show unadjusted scores" : "Use bias-adjusted scores"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     role="menuitem"
@@ -1510,37 +1561,67 @@ export default function ScoreboardPage() {
                   >
                     Advance email
                   </button>
-                  {canDeliberate && activeRound?.id && !viewingHistorical ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      disabled={advanceRoundBusy || !canCloseRound}
-                      title={
-                        !canCloseRound
-                          ? `Mark all ${undecidedCount || "remaining"} candidates Advance or Reject before closing`
-                          : nextRound
-                            ? `Close ${activeRound.name} and open ${nextRound.name}`
-                            : "Close this round"
-                      }
-                      onClick={() => { handleAdvanceRound(); setAdminMenuOpen(false); }}
-                      style={{
-                        ...adminMenuItemStyle(t),
-                        color: t.accent,
-                        fontWeight: 700,
-                        opacity: advanceRoundBusy || !canCloseRound ? 0.55 : 1,
-                      }}
-                    >
-                      {advanceRoundBusy
-                        ? "Advancing…"
-                        : !canCloseRound
-                          ? `Close round (${undecidedCount} undecided)`
-                          : nextRound
-                            ? `Close & open ${nextRound.name}`
-                            : "Close round"}
-                    </button>
-                  ) : null}
                 </div>
               ) : null}
+            </div>
+          ) : null}
+          {(cycleId || viewingHistorical || isAdmin) ? (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {isAdmin && deliberationMode && !viewingHistorical && canDeliberate && activeRound?.id ? (
+              <button
+              type="button"
+              onClick={handleAdvanceRound}
+              disabled={advanceRoundBusy}
+              title={
+                canCloseRound
+                  ? nextRound
+                    ? `Confirm all decisions, close ${activeRound.name}, and open ${nextRound.name}`
+                    : `Confirm all decisions and close ${activeRound.name}`
+                  : `Resolve all candidates first — ${undecidedCount || "some"} still need Advance or Reject`
+              }
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                cursor: advanceRoundBusy ? "wait" : "pointer",
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: canCloseRound ? t.accent : t.btnGhostBg,
+                color: canCloseRound ? "#FFFFFF" : t.textMuted,
+                border: `1px solid ${canCloseRound ? t.accent : t.border}`,
+                fontSize: 12,
+                fontWeight: 700,
+                opacity: advanceRoundBusy ? 0.6 : 1,
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              {advanceRoundBusy
+                ? "Confirming…"
+                : canCloseRound
+                  ? "Confirm decisions"
+                  : `Confirm decisions · ${undecidedCount} left`}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={cycleId ? () => navigate("/cycle-management?view=past") : viewingHistorical ? handleReturnToCurrentRound : toggleDeliberationMode}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                cursor: "pointer",
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: showingLiveDeliberation ? "rgba(226,75,74,0.08)" : deliberationMode ? t.accent : t.btnGhostBg,
+                color: showingLiveDeliberation ? css.red : deliberationMode ? "#FFFFFF" : t.btnGhostText,
+                border: `1px solid ${showingLiveDeliberation ? css.red : deliberationMode ? t.accent : t.border}`,
+                fontSize: 12,
+                fontWeight: showingLiveDeliberation ? 700 : 600,
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              {cycleId ? "Back to cycles" : viewingHistorical ? "Back to current" : deliberationMode ? "Exit" : "Deliberation"}
+            </button>
             </div>
           ) : null}
           </div>
@@ -1656,29 +1737,31 @@ export default function ScoreboardPage() {
         aria-label="Filter and sort scoreboard"
         style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}
       >
-        <FilterField label="Major" theme={t}>
+        <FilterField label="Major" theme={t} fillRow={deliberationMode}>
           <select value={filters.major} onChange={e => setFilters(f => ({ ...f, major: e.target.value }))} style={majorSelectStyle}>
             <option value="all">All majors</option>
             {majorOptions.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </FilterField>
-        <FilterField label="Year" theme={t}>
-          <select value={filters.year} onChange={e => setFilters(f => ({ ...f, year: e.target.value }))} style={barSelectStyle}>
+        <FilterField label="Year" theme={t} fillRow={deliberationMode}>
+          <select value={filters.year} onChange={e => setFilters(f => ({ ...f, year: e.target.value }))} style={filterSelectStyle}>
             <option value="all">All years</option>
             {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </FilterField>
-        <FilterField label="Resume reviews" theme={t}>
-          <select value={filters.reviews} onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))} style={barSelectStyle}>
-            <option value="all">Any count</option>
-            <option value="0">None yet (0)</option>
-            <option value="1">Exactly 1</option>
-            <option value="1+">At least 1 resume review</option>
-            <option value="2+">2 or more</option>
-          </select>
-        </FilterField>
-        <FilterField label="Score" theme={t}>
-          <select value={filters.scoreBand} onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))} style={barSelectStyle}>
+        {!isCoffeeChatRanking ? (
+          <FilterField label="Resume reviews" theme={t} fillRow={deliberationMode}>
+            <select value={filters.reviews} onChange={e => setFilters(f => ({ ...f, reviews: e.target.value }))} style={filterSelectStyle}>
+              <option value="all">Any count</option>
+              <option value="0">None yet (0)</option>
+              <option value="1">Exactly 1</option>
+              <option value="1+">At least 1 resume review</option>
+              <option value="2+">2 or more</option>
+            </select>
+          </FilterField>
+        ) : null}
+        <FilterField label="Score" theme={t} fillRow={deliberationMode}>
+          <select value={filters.scoreBand} onChange={e => setFilters(f => ({ ...f, scoreBand: e.target.value }))} style={filterSelectStyle}>
             <option value="all">All scores</option>
             <option value="top">Top 20%</option>
             <option value="strong">Top 30%</option>
@@ -1686,27 +1769,37 @@ export default function ScoreboardPage() {
             <option value="pending">No score</option>
           </select>
         </FilterField>
-        <FilterField label="Flags / referrals" theme={t}>
-          <select value={filters.signals} onChange={e => setFilters(f => ({ ...f, signals: e.target.value }))} style={barSelectStyle}>
+        <FilterField label="Flags / referrals" theme={t} fillRow={deliberationMode}>
+          <select value={filters.signals} onChange={e => setFilters(f => ({ ...f, signals: e.target.value }))} style={filterSelectStyle}>
             <option value="all">All candidates</option>
             <option value="referred">Referred only</option>
             <option value="flagged">Flagged only</option>
           </select>
         </FilterField>
         {deliberationMode ? (
-          <FilterField label="Committee decision" theme={t}>
-            <select value={filters.decision} onChange={e => setFilters(f => ({ ...f, decision: e.target.value }))} style={barSelectStyle}>
-              <option value="all">All decisions</option>
-              <option value="undecided">Undecided (pending + hold)</option>
-              <option value="pending">Pending only</option>
-              <option value="advance">Advanced</option>
-              <option value="hold">Hold</option>
-              <option value="reject">Rejected</option>
+          <FilterField label={viewingFinalizedRound ? "Round outcome" : "Committee decision"} theme={t} fillRow>
+            <select value={filters.decision} onChange={e => setFilters(f => ({ ...f, decision: e.target.value }))} style={filterSelectStyle}>
+              {viewingFinalizedRound ? (
+                <>
+                  <option value="all">All outcomes</option>
+                  <option value="advance">Advanced</option>
+                  <option value="not_advanced">{historicalCutLabel}</option>
+                </>
+              ) : (
+                <>
+                  <option value="all">All decisions</option>
+                  <option value="undecided">Undecided (pending + hold)</option>
+                  <option value="pending">Pending only</option>
+                  <option value="advance">Advanced</option>
+                  <option value="hold">Hold</option>
+                  <option value="reject">Rejected</option>
+                </>
+              )}
             </select>
           </FilterField>
         ) : null}
-        <FilterField label="Sort" theme={t}>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={barSelectStyle}>
+        <FilterField label="Sort" theme={t} fillRow={deliberationMode}>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={filterSelectStyle}>
             {SORT_TABS.map(tab => (
               <option key={tab.id} value={tab.id}>{tab.label}</option>
             ))}
@@ -1775,7 +1868,7 @@ export default function ScoreboardPage() {
         </div>
       ) : null}
 
-      {equalizeActive ? (
+      {equalizeActive && !deliberationMode && !isCoffeeChatRanking ? (
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${deliberationMode ? t.infoBorder : css.greenDark}`, background: deliberationMode ? t.infoBg : css.greenDark, fontSize: 13, color: deliberationMode ? t.text : "#FFFFFF", lineHeight: 1.45 }}>
           <strong style={{ color: deliberationMode ? t.accent : "#FFFFFF" }}>Bias-adjusted scores</strong> — each grader is normalized against their own scoring pattern, then mapped to the team distribution per rubric category. Toggle “Unadjusted scores” to compare.
         </div>
@@ -1785,9 +1878,9 @@ export default function ScoreboardPage() {
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "8px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.btnGhostBg, fontSize: 12, color: t.textMuted, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
           <span style={{ fontWeight: 700, color: t.text, letterSpacing: "0.04em" }}>Shortcuts</span>
           <span>↑↓ navigate</span>
-          <span><kbd style={kbdStyle(t)}>G</kbd> advance</span>
-          <span><kbd style={kbdStyle(t)}>Y</kbd> hold</span>
-          <span><kbd style={kbdStyle(t)}>R</kbd> reject</span>
+          <span><kbd style={kbdStyle(t)}>Y</kbd> advance</span>
+          <span><kbd style={kbdStyle(t)}>N</kbd> reject</span>
+          <span><kbd style={kbdStyle(t)}>H</kbd> hold</span>
           {isInterviewRoundType(activeRound?.type) ? (
             <span style={{ marginLeft: "auto", fontSize: 11 }}>Interview pool — advanced candidates only</span>
           ) : null}
@@ -1813,8 +1906,8 @@ export default function ScoreboardPage() {
               fontFamily: "'DM Sans', sans-serif",
             }}
           >
-            <div style={{ fontSize: 24, color: t.statValue, lineHeight: 1.1, fontWeight: 700 }}>{stat.value}</div>
-            <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 700, letterSpacing: "0.06em", marginTop: 4 }}>{stat.label}</div>
+            <div style={{ fontSize: 24, color: stat.color || t.statValue, lineHeight: 1.1, fontWeight: 700 }}>{stat.value}</div>
+            <div style={{ fontSize: 10, color: stat.color || t.textMuted, fontWeight: 700, letterSpacing: "0.06em", marginTop: 4 }}>{stat.label}</div>
           </button>
         ))}
         </div>
@@ -1824,8 +1917,27 @@ export default function ScoreboardPage() {
               <span>Decision progress</span>
               <span style={{ fontWeight: 600, color: t.text }}>{decidedCount} / {totalApplicants} decided ({decisionProgress}%)</span>
             </div>
-            <div style={{ height: 6, borderRadius: 999, background: t.btnGhostBg, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: "100%", background: t.accent, transformOrigin: "left", transform: `scaleX(${Math.max(0, Math.min(100, decisionProgress)) / 100})`, transition: "transform 0.3s ease" }} />
+            <div style={{ height: 10, borderRadius: 999, background: "#E5E7EB", overflow: "hidden", display: "flex" }}>
+              {decisionMix.map((segment) => (
+                <div
+                  key={segment.label}
+                  title={`${segment.label}: ${segment.value}`}
+                  style={{
+                    height: "100%",
+                    width: `${totalApplicants > 0 ? (segment.value / totalApplicants) * 100 : 0}%`,
+                    background: segment.color,
+                    transition: "width 0.3s ease",
+                  }}
+                />
+              ))}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "7px 16px", marginTop: 9 }}>
+              {decisionMix.map((segment) => (
+                <span key={segment.label} style={{ display: "inline-flex", alignItems: "center", gap: 5, color: t.textMuted, fontSize: 11 }}>
+                  <span aria-hidden style={{ width: 8, height: 8, borderRadius: "50%", background: segment.color }} />
+                  {segment.label} {segment.value}
+                </span>
+              ))}
             </div>
           </div>
         ) : null}
@@ -1870,7 +1982,9 @@ export default function ScoreboardPage() {
 
         {!loading && filteredCandidates.map((c, index) => {
           const decisionStatus = getCandidateDecisionStatus(c);
-          const decisionStyle = DECISION_STYLE[decisionStatus];
+          const isHistoricalCut = viewingFinalizedRound && decisionStatus !== "advance";
+          const displayDecisionStatus = isHistoricalCut ? "reject" : decisionStatus;
+          const decisionStyle = DECISION_STYLE[displayDecisionStatus];
           const isFocused = deliberationMode && focusedCandidateId != null && String(focusedCandidateId) === String(c.id);
           const rowSaving = savingDecisionId === c.id;
           const headlineScore = getHeadlineScore(c);
@@ -1902,7 +2016,7 @@ export default function ScoreboardPage() {
             }}
           >
             {deliberationMode ? (
-              <div style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: decisionStatus === "pending" ? "transparent" : decisionStyle.color, minHeight: 40 }} aria-hidden />
+              <div style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: displayDecisionStatus === "pending" ? "transparent" : decisionStyle.color, minHeight: 40 }} aria-hidden />
             ) : null}
 
             <div style={{ color: isFocused ? t.accent : t.textMuted, fontWeight: 700, fontSize: 13 }}>{index + 1}</div>
@@ -1935,11 +2049,6 @@ export default function ScoreboardPage() {
                   >
                     {c.name}
                   </button>
-                  {decisionStatus === "advance" ? (
-                    <span title="Advanced to the next stage" aria-label="Advanced to the next stage" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, height: 18, borderRadius: 999, flexShrink: 0, background: DECISION_STYLE.advance.bg, border: `1px solid ${DECISION_STYLE.advance.bd}`, color: DECISION_STYLE.advance.color, fontSize: 11, fontWeight: 900 }}>
-                      ✓
-                    </span>
-                  ) : null}
                 </div>
                 <span style={{ fontSize: 12, color: t.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {[c.major, c.year].filter(Boolean).join(" · ")}
@@ -1949,7 +2058,7 @@ export default function ScoreboardPage() {
                     {getCommitteeLinkWarning(c)}
                   </span>
                 ) : null}
-                <CandidateSignalBadges flagCount={c.flagCount} referralCount={c.referralCount} dark={deliberationMode} />
+                <CandidateSignalBadges flagCount={c.flagCount} referralCount={c.referralCount} dark={false} />
               </div>
             </div>
 
@@ -1975,13 +2084,17 @@ export default function ScoreboardPage() {
                 {canEditDeliberations ? (
                   <DecisionButtons
                     status={decisionStatus}
-                    dark={deliberationMode}
+                    dark={false}
                     disabled={!canRecordCommitteeDecision(c)}
                     saving={rowSaving}
                     onSelect={decision => saveDecision(c, decision)}
                   />
                 ) : isStaff ? (
-                  <DecisionReadonlyBadge status={decisionStatus} dark={deliberationMode} />
+                  <DecisionReadonlyBadge
+                    status={displayDecisionStatus}
+                    dark={false}
+                    label={isHistoricalCut ? historicalCutLabel : undefined}
+                  />
                 ) : (
                   <span style={{ fontSize: 12, color: t.textMuted }}>Staff only</span>
                 )}
@@ -1996,7 +2109,7 @@ export default function ScoreboardPage() {
                 referredByMe={c.referredByMe}
                 authedFetch={authedFetch}
                 onUpdated={handleSignalUpdated}
-                dark={deliberationMode}
+                dark={false}
               />
               <button
                 type="button"
