@@ -21,6 +21,7 @@ const {
   isResumeScreenType,
   normalizeRoundType,
 } = require("../utils/rounds");
+const { isNoShowGroup } = require("../utils/interviewGroups");
 
 const VALID_DECISIONS = new Set(["pending", "pass", "fail", "hold"]);
 const COFFEE_CHAT_SCORES = Object.freeze({ strong_yes: 2, yes: 1, no: -1, strong_no: -2 });
@@ -201,6 +202,7 @@ exports.listInterviewCandidates = async (req, res) => {
     const groupByCandidate = Object.fromEntries((groupError ? [] : groupAssignments || []).map((row) => [row.candidate_id, row.group_number]));
 
     const pool = (candidates || []).filter((candidate) => {
+      if (isNoShowGroup(groupByCandidate[candidate.id])) return false;
       const resume = resumeByCandidate[candidate.id];
       if (!resume) return false;
       const resumeReviews = reviewsByResume[resume.id] || [];
@@ -617,7 +619,7 @@ exports.getCoffeeChatGraderScoreboard = async (req, res) => {
         .eq("round_id", ctx.round.id),
       supabase
         .from("interview_group_assignments")
-        .select("candidate_id")
+        .select("candidate_id, group_number")
         .eq("round_id", ctx.round.id),
     ]);
 
@@ -631,7 +633,10 @@ exports.getCoffeeChatGraderScoreboard = async (req, res) => {
 
     const memberAssignments = memberAssignmentRes.data || [];
     const memberIds = [...new Set(memberAssignments.map((row) => row.user_id).filter(Boolean))];
-    const candidateIds = [...new Set((groupRes.data || []).map((row) => row.candidate_id).filter(Boolean))];
+    const candidateIds = [...new Set((groupRes.data || [])
+      .filter((row) => !isNoShowGroup(row.group_number))
+      .map((row) => row.candidate_id)
+      .filter(Boolean))];
 
     const [userRes, candidateRes, evaluationRes] = await Promise.all([
       memberIds.length
