@@ -1,4 +1,6 @@
+import { useEffect, useMemo, useState } from "react";
 import { FRQ_METRIC } from "../../constants/frq";
+import { ROUND_TYPES } from "../../constants/rounds";
 import { coffeeRatingColors, css } from "../../theme/colors";
 import { formatDate, formatScore, getInitials, hasNumericScore, titleCase } from "../../utils/format";
 import { formatReviewCount, formatReviewCountPairStacked } from "../../utils/reviewCounts";
@@ -130,13 +132,17 @@ const COFFEE_RATING_LABELS = {
   strong_no: "Strong no",
 };
 
-function CoffeeChatEvaluationCard({ evaluation, index }) {
-  const reviewerName = evaluation.reviewerName || evaluation.reviewerEmail || `Coffee Chat evaluator ${index + 1}`;
-  const ratingLabel = COFFEE_RATING_LABELS[evaluation.rating] || "Submitted";
+function InterviewEvaluationCard({ evaluation, index, round }) {
+  const coffeeChat = round?.roundType === ROUND_TYPES.COFFEE_CHAT || Boolean(COFFEE_RATING_LABELS[evaluation.rating]);
+  const reviewerName = evaluation.reviewerName || evaluation.reviewerEmail || `${round?.roundName || "Interview"} evaluator ${index + 1}`;
+  const ratingLabel = coffeeChat
+    ? COFFEE_RATING_LABELS[evaluation.rating] || "Submitted"
+    : titleCase(evaluation.decision || "submitted");
   const positive = Number(evaluation.weightedScore) > 0;
   const negative = Number(evaluation.weightedScore) < 0;
-  const ratingColor = coffeeRatingColors[evaluation.rating]
-    || (positive ? cardGreen : negative ? css.red : css.textGray);
+  const ratingColor = coffeeChat
+    ? coffeeRatingColors[evaluation.rating] || (positive ? cardGreen : negative ? css.red : css.textGray)
+    : evaluation.decision === "pass" ? cardGreen : evaluation.decision === "fail" ? css.red : evaluation.decision === "hold" ? css.amber : css.textGray;
 
   return (
     <article style={{ padding: "16px 18px", background: "#F8FAF6", borderRadius: 10, border: `1px solid ${css.borderLight}` }}>
@@ -148,7 +154,7 @@ function CoffeeChatEvaluationCard({ evaluation, index }) {
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
               <p style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>{reviewerName}</p>
-              <span style={{ padding: "3px 7px", borderRadius: 20, background: cardPale, color: cardGreen, fontSize: 9, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Coffee Chat</span>
+              <span style={{ padding: "3px 7px", borderRadius: 20, background: cardPale, color: cardGreen, fontSize: 9, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>{round?.roundName || (coffeeChat ? "Coffee Chat" : "Interview")}</span>
             </div>
             <p style={{ margin: "3px 0 0", color: css.textGray, fontSize: 11 }}>
               {[evaluation.reviewerEmail && evaluation.reviewerEmail !== reviewerName ? evaluation.reviewerEmail : null, formatDate(evaluation.submittedAt, { style: "datetime" })].filter(Boolean).join(" · ")}
@@ -192,11 +198,36 @@ export default function ApplicationEvaluationsSection({ scoring }) {
     : hasNumericScore(averageScore)
       ? `Resume ${formatScore(averageScore)}% · free response pending`
       : "Waiting for submitted grades";
-  const previousGrades = [
-    ...reviews.map((review, index) => ({ type: "resume", review, index })),
-    ...frqReviews.map((review, index) => ({ type: "frq", review, index })),
-    ...coffeeChatEvaluations.map((review, index) => ({ type: "coffee", review, index })),
-  ].sort((a, b) => new Date(b.review.submittedAt || 0) - new Date(a.review.submittedAt || 0));
+  const roundGrades = useMemo(() => scoring?.roundGrades?.length ? scoring.roundGrades : [
+    {
+      roundId: "resume-screen",
+      roundName: "Resume Screen",
+      roundType: ROUND_TYPES.RESUME_SCREEN,
+      reviews,
+      frqReviews,
+      evaluations: [],
+    },
+    ...(coffeeChatEvaluations.length ? [{
+      roundId: "coffee-chat",
+      roundName: "Coffee Chats",
+      roundType: ROUND_TYPES.COFFEE_CHAT,
+      reviews: [],
+      frqReviews: [],
+      evaluations: coffeeChatEvaluations,
+    }] : []),
+  ], [coffeeChatEvaluations, frqReviews, reviews, scoring]);
+  const [selectedRoundId, setSelectedRoundId] = useState(() => roundGrades[0]?.roundId || "");
+  useEffect(() => {
+    if (!roundGrades.some((round) => String(round.roundId) === String(selectedRoundId))) {
+      setSelectedRoundId(roundGrades[0]?.roundId || "");
+    }
+  }, [roundGrades, selectedRoundId]);
+  const selectedRound = roundGrades.find((round) => String(round.roundId) === String(selectedRoundId)) || roundGrades[0] || null;
+  const selectedGrades = useMemo(() => [
+    ...(selectedRound?.reviews || []).map((review, index) => ({ type: "resume", review, index })),
+    ...(selectedRound?.frqReviews || []).map((review, index) => ({ type: "frq", review, index })),
+    ...(selectedRound?.evaluations || []).map((review, index) => ({ type: "interview", review, index })),
+  ].sort((a, b) => new Date(b.review.submittedAt || 0) - new Date(a.review.submittedAt || 0)), [selectedRound]);
 
   return (
     <SectionCard title="Grading overview">
@@ -233,23 +264,35 @@ export default function ApplicationEvaluationsSection({ scoring }) {
       )}
 
       <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${css.borderLight}` }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
           <h3 style={{ margin: 0, color: css.textDark, fontSize: 14, fontWeight: 700 }}>Previous grades</h3>
-          <span style={{ color: css.textGray, fontSize: 12, lineHeight: 1.45, textAlign: "right", whiteSpace: "pre-line" }}>{formatReviewCountPairStacked(reviews.length, frqReviews.length)}{coffeeChatEvaluations.length || Number.isFinite(scoring?.coffeeChatExpectedEvaluationCount) ? `\n${coffeeChatEvaluations.length}${Number.isFinite(scoring?.coffeeChatExpectedEvaluationCount) ? ` / ${scoring.coffeeChatExpectedEvaluationCount}` : ""} Coffee Chat rating${coffeeChatEvaluations.length === 1 ? "" : "s"}` : ""}</span>
+          {roundGrades.length ? (
+            <select
+              aria-label="Previous grades round"
+              value={selectedRoundId}
+              onChange={(event) => setSelectedRoundId(event.target.value)}
+              style={{ minWidth: 220, padding: "9px 34px 9px 11px", borderRadius: 8, border: `1px solid ${css.borderLight}`, background: css.cardWhite, color: css.textDark, fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}
+            >
+              {roundGrades.map((round) => {
+                const count = (round.reviews?.length || 0) + (round.frqReviews?.length || 0) + (round.evaluations?.length || 0);
+                return <option key={round.roundId} value={round.roundId}>{round.roundName} · {count} grade{count === 1 ? "" : "s"}</option>;
+              })}
+            </select>
+          ) : null}
         </div>
 
-        {previousGrades.length > 0 ? (
+        {selectedGrades.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {previousGrades.map(({ type, review, index }) => (
+            {selectedGrades.map(({ type, review, index }) => (
               type === "resume"
                 ? <ResumeReviewCard key={`resume-${review.id}`} review={review} index={index} metrics={resumeMetrics} maxPerCategory={maxPerCategory} />
                 : type === "frq"
                   ? <FrqReviewCard key={`frq-${review.id}`} review={review} index={index} />
-                  : <CoffeeChatEvaluationCard key={`coffee-${review.id}`} evaluation={review} index={index} />
+                  : <InterviewEvaluationCard key={`interview-${review.id}`} evaluation={review} index={index} round={selectedRound} />
             ))}
           </div>
         ) : (
-          <div style={{ padding: "22px", borderRadius: 9, background: "#F8FAF6", border: `1px dashed ${css.borderLight}`, color: css.textGray, fontSize: 13, textAlign: "center" }}>No grades have been submitted for this candidate.</div>
+          <div style={{ padding: "22px", borderRadius: 9, background: "#F8FAF6", border: `1px dashed ${css.borderLight}`, color: css.textGray, fontSize: 13, textAlign: "center" }}>No grades were submitted for this candidate in {selectedRound?.roundName || "this round"}.</div>
         )}
       </div>
     </SectionCard>
