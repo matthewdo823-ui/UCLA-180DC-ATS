@@ -1,16 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { css } from "../../theme/colors";
 import { fetchDriveBlob } from "../../utils/driveFileCache";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 // Code-split: pdfjs-dist is only pulled into a chunk when a PdfViewer actually mounts.
 let pdfjsLibPromise = null;
 function loadPdfjs() {
   if (!pdfjsLibPromise) {
     pdfjsLibPromise = import("pdfjs-dist").then((pdfjsLib) => {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-        "pdfjs-dist/build/pdf.worker.min.mjs",
-        import.meta.url
-      ).toString();
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
       return pdfjsLib;
     });
   }
@@ -63,17 +61,20 @@ function PageCanvas({ page, viewport }) {
 export default function PdfViewer({ url, authToken }) {
   const containerRef = useRef(null);
   const [pages, setPages] = useState([]);
+  const [imageUrl, setImageUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!url) return;
     let cancelled = false;
+    let objectUrl = null;
 
     async function renderPdf() {
       setLoading(true);
       setError(null);
       setPages([]);
+      setImageUrl(null);
 
       let pdfjsLib;
       try {
@@ -91,10 +92,25 @@ export default function PdfViewer({ url, authToken }) {
         // "Missing bearer token". This mirrors AuthedDriveImage's blob approach.
         const blob = await fetchDriveBlob(url, authToken);
         if (cancelled) return;
-        // A fresh ArrayBuffer per render: getDocument detaches the one it's given,
-        // which would corrupt the cached copy for every later viewing.
-        const data = await blob.arrayBuffer();
+        // PDF.js can detach its input buffer, so always give it a fresh typed array.
+        const data = new Uint8Array(await blob.arrayBuffer());
         if (cancelled) return;
+
+        // Google Drive returns the upload's real content type. Some applicants
+        // submit PNG/JPEG resumes through the same endpoint used for PDFs; those
+        // bytes must be rendered natively rather than passed to PDF.js.
+        const isPdf =
+          blob.type === "application/pdf" ||
+          (data[0] === 0x25 && data[1] === 0x50 && data[2] === 0x44 && data[3] === 0x46);
+        const isImage = blob.type.startsWith("image/");
+
+        if (!isPdf) {
+          if (!isImage) throw new Error(`Unsupported resume type: ${blob.type || "unknown"}`);
+          objectUrl = URL.createObjectURL(blob);
+          setImageUrl(objectUrl);
+          setLoading(false);
+          return;
+        }
 
         const pdf = await pdfjsLib.getDocument({ data }).promise;
         if (cancelled) return;
@@ -106,13 +122,17 @@ export default function PdfViewer({ url, authToken }) {
           pageDataArr.push({ page, viewport });
         }
         if (!cancelled) { setPages(pageDataArr); setLoading(false); }
-      } catch {
-        if (!cancelled) { setError("Could not render PDF"); setLoading(false); }
+      } catch (renderError) {
+        console.warn("Could not render resume:", renderError);
+        if (!cancelled) { setError("Could not render resume"); setLoading(false); }
       }
     }
 
     renderPdf();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, [authToken, url]);
 
   return (
@@ -124,6 +144,13 @@ export default function PdfViewer({ url, authToken }) {
         </div>
       )}
       {error && <div style={{ color: css.red, fontSize: 13, padding: 20 }}>{error}</div>}
+      {imageUrl && (
+        <img
+          src={imageUrl}
+          alt="Candidate resume"
+          style={{ display: "block", width: "100%", height: "auto", objectFit: "contain" }}
+        />
+      )}
       {pages.map(({ page, viewport }, idx) => (
         <PageCanvas key={idx} page={page} viewport={viewport} />
       ))}
