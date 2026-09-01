@@ -104,8 +104,17 @@ function resolveReviewMaxScore(review, options = {}) {
 
 function applyReviewOverrideToReview(review, override, options = {}) {
   const overrideScore = override?.overrideScore;
+  const adminOverride = override
+    ? {
+        overrideScore: Number.isFinite(Number(overrideScore)) ? Number(overrideScore) : null,
+        scoreScale: Number(override?.scoreScale) || null,
+        adminNotes: override.adminNotes || "",
+        updatedAt: override.updatedAt || null,
+      }
+    : null;
+
   if (!Number.isFinite(Number(overrideScore))) {
-    return review;
+    return adminOverride ? { ...review, adminOverride } : review;
   }
 
   const totalOverride = Number(overrideScore);
