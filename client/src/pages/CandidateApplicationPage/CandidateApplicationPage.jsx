@@ -1,14 +1,12 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import Topbar from "../../components/Topbar/Topbar";
 import { css } from "../../theme/colors";
-import { isAdminRole } from "../../utils/auth";
-import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
-import AdminOverridesSection from "./AdminOverridesSection";
 import ApplicationContactSection from "./ApplicationContactSection";
-import ApplicationEvaluationsSection from "./ApplicationEvaluationsSection";
 import ApplicationProfileSidebar from "./ApplicationProfileSidebar";
 import ApplicationResumeSection from "./ApplicationResumeSection";
+import ApplicationRoundsSection from "./ApplicationRoundsSection";
 import ApplicationSignalsSection from "./ApplicationSignalsSection";
 import ApplicationSummarySection from "./ApplicationSummarySection";
 import useCandidateApplication from "./useCandidateApplication";
@@ -17,10 +15,9 @@ import useCandidateApplicationSummary from "./useCandidateApplicationSummary";
 export default function CandidateApplicationPage() {
   const { candidateId: resumeId } = useParams();
   const navigate = useNavigate();
-  const { token, user } = useAuth();
-  const { candidate, resume, scoring, signals, contextLabel, loading, error, refresh } = useCandidateApplication(resumeId);
+  const { token } = useAuth();
+  const { candidate, resume, scoring, signals, roundDecision, contextLabel, loading, error, refresh } = useCandidateApplication(resumeId);
   const summaryState = useCandidateApplicationSummary(resumeId, !loading && !error && Boolean(candidate));
-  const isAdmin = isAdminRole(user?.role);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
@@ -61,18 +58,11 @@ export default function CandidateApplicationPage() {
             <ApplicationProfileSidebar candidate={candidate} resume={resume} scoring={scoring} />
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-              <ApplicationEvaluationsSection scoring={scoring} />
               <ApplicationSummarySection {...summaryState} onRefresh={summaryState.refresh} />
               <ApplicationContactSection candidate={candidate} resume={resume} />
               <ApplicationSignalsSection signals={signals} />
-              {isAdmin && (
-                <AdminOverridesSection
-                  resumeId={resumeId}
-                  scoring={scoring}
-                  onOverrideSaved={() => refresh()}
-                />
-              )}
               <ApplicationResumeSection candidate={candidate} resume={resume} authToken={token} />
+              <ApplicationRoundsSection scoring={scoring} roundDecision={roundDecision} />
             </div>
           </div>
         )}
