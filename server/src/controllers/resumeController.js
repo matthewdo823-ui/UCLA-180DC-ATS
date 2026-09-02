@@ -2601,6 +2601,8 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             score: compositeCandidate.score,
             resumeAggregateScore: compositeCandidate.resumeAggregateScore,
             resumeNormalizedScore: compositeCandidate.resumeNormalizedScore,
+            resumeMax: compositeCandidate.resumeMax,
+            compositeMax: compositeCandidate.compositeMax,
             frqScore: compositeCandidate.frqScore,
             frqPending: compositeCandidate.frqPending,
             numFrqReviews: compositeCandidate.numFrqReviews,
@@ -2632,14 +2634,25 @@ exports.getScoreboardApplication = async (req, res) => {
         const payload = await fetchScoreboardApplicationPayload(resumeId);
         const userId = req.user?.user_id ?? null;
 
-        const [adminOverrideRow, signals] = await Promise.all([
+        const [adminOverrideRow, signals, roundDecisionResult] = await Promise.all([
             fetchAdminOverride(
                 payload.candidateId,
                 payload.activeCycleId,
                 payload.resumeRoundId
             ),
             fetchCandidateSignalsDetail(payload.candidateId, userId),
+            supabase
+                .from('round_decisions')
+                .select('decision, notes, decided_by, updated_at')
+                .eq('cycle_id', payload.activeCycleId)
+                .eq('round_id', payload.resumeRoundId)
+                .eq('candidate_id', payload.candidateId)
+                .maybeSingle(),
         ]);
+
+        if (roundDecisionResult.error) {
+            return respondWithServerError(res, roundDecisionResult.error, 'getScoreboardApplication decision');
+        }
 
         const adminOverride = mapAdminOverride(adminOverrideRow);
         if (adminOverride) {
@@ -2651,6 +2664,7 @@ exports.getScoreboardApplication = async (req, res) => {
             ...responseBody,
             adminOverride,
             signals,
+            roundDecision: mapRoundDecision(roundDecisionResult.data),
         });
     } catch (err) {
         return respondWithApplicationFetchError(res, err, 'getScoreboardApplication');
