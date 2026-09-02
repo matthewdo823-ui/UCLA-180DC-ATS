@@ -65,6 +65,23 @@ const SCOREBOARD_MODES = [
     badge: "FRQ · GRADER",
     emptyLabel: "No FRQ graders yet.",
   },
+  {
+    id: "coffee",
+    reviewType: "coffee chat",
+    label: "Coffee Chat grading",
+    endpoint: "coffee-chat-grader-scoreboard",
+    eyebrow: "Coffee Chat member roster",
+    heading: "Coffee Chat ",
+    headingAccent: "progress",
+    description: "Coffee Chat progress for members assigned to this round. Each member rotates through every table and submits one grade per candidate.",
+    columnLabel: "COFFEE CHAT GRADES",
+    totalLabel: "TOTAL COFFEE CHAT GRADES",
+    gradedLabel: "COFFEE CHAT GRADES",
+    recentLabel: "RECENT COFFEE CHAT GRADES",
+    noGradesLabel: "No Coffee Chat grades submitted yet.",
+    badge: "COFFEE CHAT · MEMBER",
+    emptyLabel: "No members have been assigned to this Coffee Chat round yet.",
+  },
 ];
 
 function graderMatchesStatusFilter(grader, filterId) {
@@ -137,7 +154,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4 }) {
   );
 }
 
-function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge = "ROUND 1 · GRADER", reviewType = "resume", gradedLabel = "RESUME REVIEWS", recentLabel = "RECENT RESUME REVIEWS", noGradesLabel = "No resume reviews submitted yet." }) {
+function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge = "ROUND 1 · GRADER", reviewType = "resume", gradedLabel = "RESUME REVIEWS", recentLabel = "RECENT RESUME REVIEWS", noGradesLabel = "No resume reviews submitted yet.", modeId = "resume" }) {
   useEffect(() => {
     function onKeyDown(event) {
       if (event.key === "Escape") onClose();
@@ -238,17 +255,19 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
             </div>
           </div>
 
-          <div style={{ padding: "14px 18px 4px" }}>
+          {metrics.length ? <div style={{ padding: "14px 18px 4px" }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 700 }}>AVERAGE SCORES GIVEN</p>
             {metrics.map(metric => (
               <CategoryRow key={metric} metric={metric} maxPerCategory={maxPerCategory} value={grader.categoryScores?.[metric]} />
             ))}
-          </div>
+          </div> : null}
 
           <div style={{ margin: "6px 18px 0", padding: "10px 12px", background: "#F8FAF6", border: "1px solid #E3E8DD", borderRadius: 8 }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.05em", margin: "0 0 5px", fontWeight: 700 }}>SUMMARY</p>
             <p style={{ fontSize: 12, lineHeight: 1.45, color: css.textDark, margin: 0 }}>
-              Average normalized score given: {formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%. Latest grading activity: {formatDate(grader.latestReviewAt, { fallback: "Not yet" })}.
+              {modeId === "coffee"
+                ? `Starts at Table ${grader.startingGroupNumber || "—"}. Average rating weight: ${formatNumber(grader.averageScore)} points. Latest grading activity: ${formatDate(grader.latestReviewAt, { fallback: "Not yet" })}.`
+                : `Average normalized score given: ${formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%. Latest grading activity: ${formatDate(grader.latestReviewAt, { fallback: "Not yet" })}.`}
             </p>
           </div>
 
@@ -262,7 +281,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
                   <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{review.resumeName}</p>
                   <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>{formatDate(review.submittedAt, { fallback: "Not yet" })}</p>
                 </div>
-                <div style={{ fontSize: 12, color: cardGreen, fontWeight: 700 }}>{formatNumber(review.normalizedScore ?? review.score)}%</div>
+                <div style={{ fontSize: 12, color: cardGreen, fontWeight: 700 }}>{modeId === "coffee" ? review.ratingLabel : `${formatNumber(review.normalizedScore ?? review.score)}%`}</div>
               </div>
             ))}
             {grader.reviews?.length === 0 && (
@@ -293,7 +312,11 @@ export default function GraderScoreboardPage() {
   // dashboard's grader-coverage query fills — so bouncing between the dashboard
   // and this page serves from cache. FRQ mode is a separate endpoint and key.
   const graderQuery = useQuery({
-    queryKey: activeMode.id === "frq" ? qk.frqGraderScoreboard() : qk.graderScoreboard(),
+    queryKey: activeMode.id === "frq"
+      ? qk.frqGraderScoreboard()
+      : activeMode.id === "coffee"
+        ? qk.coffeeChatGraderScoreboard()
+        : qk.graderScoreboard(),
     queryFn: async () => {
       const res = await authedFetch(`${API}/${activeMode.endpoint}`);
       return readJsonOrThrow(res, `loading ${activeMode.label.toLowerCase()}`, `Check GET /${activeMode.endpoint} in server/src/routes/resumeRoutes.js`);
@@ -555,7 +578,7 @@ export default function GraderScoreboardPage() {
                 {grader.reviewCount} / {grader.expectedReviews}
               </div>
               <div style={{ fontSize: 11, color: css.textGray }}>
-                {formatReviewCount(grader.reviewCount, activeMode.reviewType)} · {grader.progressScore}% complete · avg {formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%
+                {formatReviewCount(grader.reviewCount, activeMode.reviewType)} · {grader.progressScore}% complete{activeMode.id === "coffee" ? ` · starts at Table ${grader.startingGroupNumber || "—"}` : ` · avg ${formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%`}
               </div>
             </div>
 
@@ -586,6 +609,7 @@ export default function GraderScoreboardPage() {
           gradedLabel={activeMode.gradedLabel}
           recentLabel={activeMode.recentLabel}
           noGradesLabel={activeMode.noGradesLabel}
+          modeId={activeMode.id}
           onClose={() => setSelectedGrader(null)}
         />
       )}

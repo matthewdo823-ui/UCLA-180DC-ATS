@@ -9,6 +9,7 @@ const {
 const { hasReviewScoreValues, resolveReviewNormalizedValue } = require("../utils/rubric");
 const { respondWithServerError } = require("../utils/httpErrors");
 const { isMissingSchemaError } = require("../utils/schemaCompatibility");
+const { getUserName } = require("../utils/userDisplay");
 const {
   buildDecisionLookup,
   deliberationHasStarted,
@@ -162,15 +163,24 @@ exports.listInterviewCandidates = async (req, res) => {
 
     if (reviewError) return respondWithServerError(res, reviewError, "listInterviewCandidates reviews");
 
-    const [evaluationResult, groupResult] = await Promise.all([
+    const [evaluationResult, groupResult, memberGroupResult] = await Promise.all([
       supabase.from("interview_evaluations").select("*").eq("round_id", ctx.round.id),
       supabase.from("interview_group_assignments").select("candidate_id, group_number").eq("round_id", ctx.round.id),
+      supabase
+        .from("interview_group_member_assignments")
+        .select("user_id, group_number")
+        .eq("round_id", ctx.round.id),
     ]);
     const { data: evaluations, error: evalError } = evaluationResult;
     const { data: groupAssignments, error: groupError } = groupResult;
+    const { data: memberGroups, error: memberGroupError } = memberGroupResult;
 
     if (evalError) return respondWithServerError(res, evalError, "listInterviewCandidates evaluations");
     if (groupError && !isMissingSchemaError(groupError)) return respondWithServerError(res, groupError, "listInterviewCandidates groups");
+    if (memberGroupError && !isMissingSchemaError(memberGroupError)) return respondWithServerError(res, memberGroupError, "listInterviewCandidates member group");
+    const memberGroup = (memberGroupError ? [] : memberGroups || [])
+      .find((assignment) => assignment.user_id === req.user?.user_id) || null;
+    const assignedMemberIds = new Set((memberGroupError ? [] : memberGroups || []).map((assignment) => assignment.user_id));
 
     const resumeByCandidate = {};
     (resumes || []).forEach((r) => {
@@ -214,7 +224,10 @@ exports.listInterviewCandidates = async (req, res) => {
         : null;
       const candidateEvaluations = evalsByCandidate[candidate.id] || [];
       const myEvaluation = candidateEvaluations.find((row) => row.evaluated_by === req.user?.user_id) || null;
-      const scoredEvaluations = candidateEvaluations.filter((row) => Number.isFinite(Number(row.weighted_score)));
+      const scoredEvaluations = candidateEvaluations.filter((row) =>
+        Number.isFinite(Number(row.weighted_score))
+        && (memberGroupError || assignedMemberIds.has(row.evaluated_by))
+      );
       const coffeeChatScore = scoredEvaluations.reduce((sum, row) => sum + Number(row.weighted_score), 0);
 
       return {
@@ -277,7 +290,10 @@ exports.listInterviewCandidates = async (req, res) => {
     };
     mapped.forEach((candidate) => {
       const candidateEvaluations = evalsByCandidate[candidate.id] || [];
-      const rated = candidateEvaluations.filter((row) => COFFEE_CHAT_SCORES[row.rating] != null);
+      const rated = candidateEvaluations.filter((row) =>
+        COFFEE_CHAT_SCORES[row.rating] != null
+        && (memberGroupError || assignedMemberIds.has(row.evaluated_by))
+      );
       if (rated.length) aggregateStats.graded += 1;
       else aggregateStats.pending += 1;
       aggregateStats.totalRatings += rated.length;
@@ -293,6 +309,9 @@ exports.listInterviewCandidates = async (req, res) => {
           round: { id: ctx.round.id, name: ctx.round.name, type: ctx.round.type },
           groupCount: Number(ctx.round.interview_group_count) || 1,
           hasGroupAssignments: !groupError && (groupAssignments || []).length > 0,
+          startingGroupNumber: Number(memberGroup?.group_number) || null,
+          memberAssignmentsReady: !memberGroupError,
+          assignedMemberCount: memberGroupError ? null : (memberGroups || []).length,
       },
       stats,
       aggregateStats,
@@ -494,6 +513,13 @@ exports.assignInterviewGroups = async (req, res) => {
       .eq("id", ctx.round.id);
     if (roundError) throw roundError;
 
+    const { error: staleMemberError } = await supabase
+      .from("interview_group_member_assignments")
+      .delete()
+      .eq("round_id", ctx.round.id)
+      .gt("group_number", groupCount);
+    if (staleMemberError && !isMissingSchemaError(staleMemberError)) throw staleMemberError;
+
     const sizes = Array.from({ length: groupCount }, (_, index) =>
       eligibleIds.filter((_, candidateIndex) => candidateIndex % groupCount === index).length
     );
@@ -534,5 +560,140 @@ exports.getInterviewStats = async (req, res) => {
     });
   } catch (err) {
     return respondWithServerError(res, err, "getInterviewStats");
+  }
+};
+
+exports.getCoffeeChatGraderScoreboard = async (req, res) => {
+  try {
+    const ctx = await requireActiveInterviewRound();
+    if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
+    if (normalizeRoundType(ctx.round.type) !== ROUND_TYPES.COFFEE_CHAT) {
+      return res.status(400).json({ error: "Coffee Chat grader progress is only available during Coffee Chats" });
+    }
+
+    const [memberAssignmentRes, groupRes] = await Promise.all([
+      supabase
+        .from("interview_group_member_assignments")
+        .select("user_id, group_number")
+        .eq("round_id", ctx.round.id),
+      supabase
+        .from("interview_group_assignments")
+        .select("candidate_id")
+        .eq("round_id", ctx.round.id),
+    ]);
+
+    if (memberAssignmentRes.error) {
+      if (isMissingSchemaError(memberAssignmentRes.error)) {
+        return res.status(503).json({ error: "Coffee Chat grader progress requires member assignment migration #23." });
+      }
+      throw memberAssignmentRes.error;
+    }
+    if (groupRes.error) throw groupRes.error;
+
+    const memberAssignments = memberAssignmentRes.data || [];
+    const memberIds = [...new Set(memberAssignments.map((row) => row.user_id).filter(Boolean))];
+    const candidateIds = [...new Set((groupRes.data || []).map((row) => row.candidate_id).filter(Boolean))];
+
+    const [userRes, candidateRes, evaluationRes] = await Promise.all([
+      memberIds.length
+        ? supabase
+          .from("users")
+          .select("user_id, email, role, first_name, last_name, created_at, last_login")
+          .eq("role", "member")
+          .in("user_id", memberIds)
+        : { data: [], error: null },
+      candidateIds.length
+        ? supabase
+          .from("candidates")
+          .select("id, name")
+          .in("id", candidateIds)
+        : { data: [], error: null },
+      memberIds.length
+        ? supabase
+          .from("interview_evaluations")
+          .select("id, candidate_id, evaluated_by, rating, weighted_score, notes, submitted_at, updated_at")
+          .eq("round_id", ctx.round.id)
+          .in("evaluated_by", memberIds)
+          .not("rating", "is", null)
+        : { data: [], error: null },
+    ]);
+
+    if (userRes.error) throw userRes.error;
+    if (candidateRes.error) throw candidateRes.error;
+    if (evaluationRes.error) throw evaluationRes.error;
+
+    const assignmentByUser = Object.fromEntries(memberAssignments.map((row) => [row.user_id, row]));
+    const candidateById = Object.fromEntries((candidateRes.data || []).map((candidate) => [candidate.id, candidate]));
+    const evaluationsByUser = {};
+    (evaluationRes.data || []).forEach((evaluation) => {
+      if (!evaluationsByUser[evaluation.evaluated_by]) evaluationsByUser[evaluation.evaluated_by] = [];
+      evaluationsByUser[evaluation.evaluated_by].push(evaluation);
+    });
+
+    const ratingLabel = (rating) => ({
+      strong_yes: "Strong yes",
+      yes: "Yes",
+      no: "No",
+      strong_no: "Strong no",
+    }[rating] || rating || "—");
+
+    const expectedReviews = candidateIds.length;
+    const graders = (userRes.data || []).map((user) => {
+      const reviews = (evaluationsByUser[user.user_id] || [])
+        .map((evaluation) => ({
+          id: evaluation.id,
+          candidateId: evaluation.candidate_id,
+          resumeName: candidateById[evaluation.candidate_id]?.name || "Unknown candidate",
+          rating: evaluation.rating,
+          ratingLabel: ratingLabel(evaluation.rating),
+          score: Number(evaluation.weighted_score),
+          notes: evaluation.notes || "",
+          submittedAt: evaluation.updated_at || evaluation.submitted_at,
+        }))
+        .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+      const totalScore = reviews.reduce((sum, review) => sum + (Number.isFinite(review.score) ? review.score : 0), 0);
+      const reviewCount = reviews.length;
+      return {
+        id: user.user_id,
+        name: getUserName(user),
+        email: user.email || "",
+        role: user.role,
+        createdAt: user.created_at,
+        lastLogin: user.last_login,
+        startingGroupNumber: Number(assignmentByUser[user.user_id]?.group_number) || null,
+        reviewCount,
+        expectedReviews,
+        progressScore: expectedReviews ? Math.min(100, Math.round((reviewCount / expectedReviews) * 100)) : 0,
+        averageScore: reviewCount ? Number((totalScore / reviewCount).toFixed(2)) : null,
+        averageNormalizedScore: null,
+        latestReviewAt: reviews[0]?.submittedAt || null,
+        categoryScores: {},
+        reviews,
+      };
+    });
+
+    graders.sort((a, b) => b.reviewCount - a.reviewCount || a.name.localeCompare(b.name));
+    graders.forEach((grader, index) => { grader.rank = index + 1; });
+    const totalReviews = graders.reduce((sum, grader) => sum + grader.reviewCount, 0);
+
+    return res.json({
+      context: {
+        cycle: { id: ctx.cycle.id, name: ctx.cycle.name },
+        round: { id: ctx.round.id, name: ctx.round.name, type: ctx.round.type },
+        assignedMemberCount: graders.length,
+      },
+      metrics: [],
+      maxPerCategory: 0,
+      stats: {
+        graders: graders.length,
+        activeGraders: graders.filter((grader) => grader.reviewCount > 0).length,
+        totalReviews,
+        expectedReviews,
+        expectedRatingsPerCandidate: graders.length,
+      },
+      graders,
+    });
+  } catch (err) {
+    return respondWithServerError(res, err, "getCoffeeChatGraderScoreboard");
   }
 };
