@@ -587,7 +587,7 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                 className="coffee-drag-card"
                 draggable={memberAssignmentsReady && !busy}
                 onDragStart={(event) => startDrag(event, "member", member.id, member.startingGroupNumber)}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: `1px solid ${css.borderLight}`, borderRadius: 10, background: "#FFF", cursor: memberAssignmentsReady ? "grab" : "default" }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: `1px solid ${css.borderLight}`, borderRadius: 10, background: css.cardWhite, cursor: memberAssignmentsReady ? "grab" : "default" }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ color: css.textDark, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.name}</div>
@@ -597,7 +597,7 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                   value={member.startingGroupNumber || ""}
                   disabled={!memberAssignmentsReady || busy}
                   onChange={(event) => onAssignMember(member.id, event.target.value ? Number(event.target.value) : null)}
-                  style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "7px 9px", background: "#FFF", color: css.textDark, fontSize: 12 }}
+                  style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "7px 9px", background: css.cardWhite, color: css.textDark, fontSize: 12 }}
                 >
                   <option value="">Unassigned</option>
                   {tables.map((table) => <option key={table.number} value={table.number}>Table {table.number}</option>)}
@@ -636,7 +636,7 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                     {table.noShow ? (
                       <span style={{ color: css.textGray, fontSize: 12, lineHeight: 1.45 }}>No participants are assigned to this table.</span>
                     ) : table.members.length ? table.members.map((member) => (
-                      <div key={member.id} className="coffee-drag-card" draggable={memberAssignmentsReady} onDragStart={(event) => startDrag(event, "member", member.id, member.startingGroupNumber)} style={{ padding: "8px 9px", borderRadius: 8, border: `1px solid ${css.borderLight}`, background: "#FFF", color: css.textDark, fontSize: 12, fontWeight: 700 }}>
+                      <div key={member.id} className="coffee-drag-card" draggable={memberAssignmentsReady} onDragStart={(event) => startDrag(event, "member", member.id, member.startingGroupNumber)} style={{ padding: "8px 9px", borderRadius: 8, border: `1px solid ${css.borderLight}`, background: css.cardWhite, color: css.textDark, fontSize: 12, fontWeight: 700 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
                           <span aria-hidden="true" title="Drag to another table" style={{ color: css.textGray, fontSize: 16, lineHeight: 1 }}>⣿</span>
                           <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.name}</span>
@@ -647,7 +647,7 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                           disabled={!memberAssignmentsReady || busyKey === `member:${member.id}`}
                           onChange={(event) => onAssignMember(member.id, event.target.value ? Number(event.target.value) : null)}
                           onClick={(event) => event.stopPropagation()}
-                          style={{ width: "100%", marginTop: 7, border: `1px solid ${css.borderLight}`, borderRadius: 7, padding: "6px 7px", background: "#FFF", color: css.textDark, fontSize: 11 }}
+                          style={{ width: "100%", marginTop: 7, border: `1px solid ${css.borderLight}`, borderRadius: 7, padding: "6px 7px", background: css.cardWhite, color: css.textDark, fontSize: 11 }}
                         >
                           <option value="">Unassigned</option>
                           {tables.map((target) => <option key={target.number} value={target.number}>Table {target.number}</option>)}
@@ -663,14 +663,14 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                     {table.candidates.length ? table.candidates.map((candidate) => {
                       const busy = busyKey === `candidate:${candidate.id}`;
                       return (
-                        <div key={candidate.id} className={busy ? "" : "coffee-drag-card"} draggable={!busy} onDragStart={(event) => startDrag(event, "candidate", candidate.id, candidate.groupNumber)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", border: `1px solid ${css.borderLight}`, borderRadius: 9, background: "#FFF", cursor: busy ? "wait" : "grab" }}>
+                        <div key={candidate.id} className={busy ? "" : "coffee-drag-card"} draggable={!busy} onDragStart={(event) => startDrag(event, "candidate", candidate.id, candidate.groupNumber)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", border: `1px solid ${css.borderLight}`, borderRadius: 9, background: css.cardWhite, cursor: busy ? "wait" : "grab" }}>
                           <span aria-hidden="true" title="Drag to another table" style={{ color: css.textGray, fontSize: 17, lineHeight: 1 }}>⣿</span>
                           <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={38} background={css.greenDark} />
                           <button type="button" onClick={() => candidate.resumeId && onOpenCandidate(candidate.resumeId)} style={{ flex: 1, minWidth: 0, padding: 0, border: "none", background: "transparent", color: css.greenDark, textAlign: "left", cursor: candidate.resumeId ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
                             <span style={{ display: "block", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{candidate.name}</span>
                             <span style={{ display: "block", fontSize: 11, color: css.textGray, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[candidate.year, candidate.major].filter(Boolean).join(" · ") || "—"}</span>
                           </button>
-                          <select value={candidate.groupNumber} disabled={busy} onChange={(event) => onMoveCandidate(candidate.id, Number(event.target.value))} style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "7px 8px", background: "#FFF", color: css.textDark, fontSize: 12 }}>
+                          <select value={candidate.groupNumber} disabled={busy} onChange={(event) => onMoveCandidate(candidate.id, Number(event.target.value))} style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "7px 8px", background: css.cardWhite, color: css.textDark, fontSize: 12 }}>
                             {tables.map((target) => <option key={target.number} value={target.number}>Table {target.number}</option>)}
                             <option value={NO_SHOW_GROUP_NUMBER}>No-show</option>
                           </select>

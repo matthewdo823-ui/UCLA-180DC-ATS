@@ -517,7 +517,7 @@ export default function InterviewManagementPage() {
                     value={data.context?.startingGroupNumber || ""}
                     disabled={startingTableSaving || data.context?.memberAssignmentsReady === false}
                     onChange={(event) => chooseStartingTable(Number(event.target.value))}
-                    style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "8px 10px", background: "#FFF", color: css.textDark, fontSize: 12, fontWeight: 700 }}
+                    style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "8px 10px", background: css.cardWhite, color: css.textDark, fontSize: 12, fontWeight: 700 }}
                   >
                     <option value="">Choose table</option>
                     {coffeeGroups.filter(([number]) => number).map(([number]) => <option key={number} value={number}>Table {number}</option>)}
@@ -528,7 +528,7 @@ export default function InterviewManagementPage() {
                   {[{ id: "list", label: "List view" }, { id: "scroll", label: "Scroll view" }].map((option) => {
                     const selected = coffeeView === option.id;
                     return (
-                      <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setCoffeeView(option.id); setTableSubmitError(null); setTableSubmitNotice(""); setInvalidCandidateIds(new Set()); }} style={{ border: `1px solid ${selected ? css.greenDark : css.borderLight}`, background: selected ? css.greenDark : "#FFF", color: selected ? "#FFF" : css.textDark, borderRadius: 8, padding: "8px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                      <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setCoffeeView(option.id); setTableSubmitError(null); setTableSubmitNotice(""); setInvalidCandidateIds(new Set()); }} style={{ border: `1px solid ${selected ? css.greenDark : css.borderLight}`, background: selected ? css.greenDark : css.cardWhite, color: selected ? "#FFF" : css.textDark, borderRadius: 8, padding: "8px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                         {option.label}
                       </button>
                     );
@@ -541,7 +541,7 @@ export default function InterviewManagementPage() {
                       const selected = activeGroupNumber === number;
                       const completed = candidates.length > 0 && candidates.every((candidate) => (coffeeDrafts[candidate.id] || makeCoffeeDraft(candidate)).rating);
                       return (
-                        <button key={number} type="button" onClick={() => { setActiveGroupNumber(number); setTableSubmitError(null); setTableSubmitNotice(""); setInvalidCandidateIds(new Set()); }} style={{ border: `1px solid ${selected ? css.greenDark : completed ? "rgba(29,158,117,0.34)" : css.borderLight}`, background: selected ? "rgba(29,158,117,0.12)" : "#FFF", color: selected ? css.greenDark : css.textGray, borderRadius: 999, padding: "7px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                        <button key={number} type="button" onClick={() => { setActiveGroupNumber(number); setTableSubmitError(null); setTableSubmitNotice(""); setInvalidCandidateIds(new Set()); }} style={{ border: `1px solid ${selected ? css.greenDark : completed ? "rgba(29,158,117,0.34)" : css.borderLight}`, background: selected ? "rgba(29,158,117,0.12)" : css.cardWhite, color: selected ? css.greenDark : css.textGray, borderRadius: 999, padding: "7px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                           {number ? `Table ${number}` : "Unassigned"}{completed ? " · ready" : ""}
                         </button>
                       );

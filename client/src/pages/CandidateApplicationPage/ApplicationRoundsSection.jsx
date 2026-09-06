@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { coffeeRatingColors, css } from "../../theme/colors";
-import { formatDate, formatScore, titleCase } from "../../utils/format";
+import { formatDate, formatScore, hasNumericScore, titleCase } from "../../utils/format";
 import { hasText } from "./applicationUtils";
 import CategoryRow from "./components/CategoryRow";
 import DecisionBadge from "./components/DecisionBadge";
@@ -43,17 +43,15 @@ function Tag({ label, color, bg }) {
 function AggregateScoreRow({ scoring, expanded, onToggle }) {
   const hasResumeReviews = (scoring?.numReviews ?? 0) > 0;
   const hasFrqReviews = (scoring?.numFrqReviews ?? scoring?.frqReviews?.length ?? 0) > 0;
-  const max = scoring?.compositeMax ?? scoring?.resumeMax;
 
   return (
     <button type="button" onClick={onToggle} style={{ ...unstyledButton, padding: "4px 0 18px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, textAlign: "left" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
           <p style={{ margin: 0, fontSize: 30, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>
-            {formatScore(scoring.aggregateScore)}
-            {max != null && <span style={{ fontSize: 16, fontWeight: 600, color: css.textGray }}>/{formatScore(max)}</span>}
+            {hasNumericScore(scoring.normalizedScore) ? `${formatScore(scoring.normalizedScore)}%` : "—"}
           </p>
-          <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>aggregate score</p>
+          <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>overall average</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <p style={{ margin: 0, fontSize: 13, color: css.textGray, textAlign: "right" }}>
@@ -87,7 +85,7 @@ function ReviewRow({ review, expanded, onToggle, maxPerCategory, isFirst }) {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
         <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: reviewOverridden ? "#E24B4A" : cardGreen, whiteSpace: "nowrap" }}>
-          {formatScore(review.score)}{review.maxScore != null ? `/${formatScore(review.maxScore)}` : ""}
+          {hasNumericScore(review.normalizedScore) ? `${formatScore(review.normalizedScore)}%` : "—"}
         </p>
         {hasBreakdown && <Chevron expanded={expanded} />}
       </div>
@@ -130,7 +128,9 @@ function FrqReviewRow({ review, isFirst }) {
           </span>
         </div>
         <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: cardGreen, whiteSpace: "nowrap" }}>
-          {formatScore(review.score)}/4
+          {hasNumericScore(review.normalizedScore)
+            ? formatScore(review.normalizedScore)
+            : formatScore(Number(review.score) / 4 * 100)}%
         </p>
       </div>
       {hasText(review.notes) && (
@@ -287,7 +287,7 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
                   textTransform: "uppercase",
                   padding: "4px 9px",
                   borderRadius: 20,
-                  background: "rgba(0,0,0,0.04)",
+                  background: css.surfaceMuted,
                   color: css.textGray,
                 }}
               >

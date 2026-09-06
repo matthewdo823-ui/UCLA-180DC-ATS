@@ -3,6 +3,7 @@ export const css = {
   bgLight:   "var(--color-background)",
   greenDark: "var(--color-primary)",
   cardWhite: "var(--color-surface)",
+  surfaceMuted: "var(--color-surface-muted)",
   textDark:  "var(--color-text)",
   textGray:  "var(--color-text-muted)",
   borderLight: "var(--color-border)",
