@@ -3,6 +3,7 @@ export const css = {
   bgLight:   "var(--color-background)",
   greenDark: "var(--color-primary)",
   cardWhite: "var(--color-surface)",
+  surfaceMuted: "var(--color-surface-muted)",
   textDark:  "var(--color-text)",
   textGray:  "var(--color-text-muted)",
   borderLight: "var(--color-border)",
@@ -21,3 +22,10 @@ export const css = {
   red:     "#E24B4A",
   amber:   "#EF9F27",
 };
+
+export const coffeeRatingColors = Object.freeze({
+  strong_yes: "#064E3B",
+  yes: "#53A47D",
+  no: "#C47D12",
+  strong_no: "#E24B4A",
+});

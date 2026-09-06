@@ -25,15 +25,18 @@ const {
 const { firstRel } = require('../utils/supabaseHelpers');
 const { getUserName } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
+const { isMissingSchemaError } = require('../utils/schemaCompatibility');
 const {
     normalizeRoundDecision,
     mapRoundDecision,
     buildDecisionLookup,
     resolveCandidateDecision,
     countDecisions,
+    deliberationHasStarted,
     summarizeIncompleteDeliberation,
     buildDecisionsCsv,
 } = require('../utils/roundDecisions');
+const { ROUND_TYPES, getRoundByType, isInterviewRoundType, isResumeScreenType, normalizeRoundType } = require('../utils/rounds');
 const {
     buildCandidateLinkLookups,
     resolveCandidateLink,
@@ -1457,15 +1460,14 @@ exports.getCandidateReferrals = async (req, res) => {
             });
         }
 
-        const { data, error } = await supabase
-            .from('candidate_referrals')
-            .select(`
+        const referralSelect = (includeResolution) => `
                 id,
                 candidate_id,
                 resume_id,
                 referred_by,
                 note,
                 created_at,
+                ${includeResolution ? 'status, resolved_at,' : ''}
                 candidates!inner (
                     id,
                     name,
@@ -1492,9 +1494,28 @@ exports.getCandidateReferrals = async (req, res) => {
                     first_name,
                     last_name
                 )
-            `)
+            `;
+
+        let resolutionAvailable = true;
+        let referralResult = await supabase
+            .from('candidate_referrals')
+            .select(referralSelect(true))
+            .eq('status', 'open')
             .eq('candidates.cycle_id', activeCycleId)
             .order('created_at', { ascending: false });
+
+        // Existing local databases may not have run migration #21 yet. Keep the
+        // queue readable and mark its resolve controls unavailable until they do.
+        if (referralResult.error?.code === '42703') {
+            resolutionAvailable = false;
+            referralResult = await supabase
+                .from('candidate_referrals')
+                .select(referralSelect(false))
+                .eq('candidates.cycle_id', activeCycleId)
+                .order('created_at', { ascending: false });
+        }
+
+        const { data, error } = referralResult;
 
         if (error) throw error;
 
@@ -1503,7 +1524,10 @@ exports.getCandidateReferrals = async (req, res) => {
             candidateId: referral.candidate_id,
             resumeId: referral.resume_id,
             note: referral.note || '',
+            status: referral.status || 'open',
             createdAt: referral.created_at,
+            resolvedAt: referral.resolved_at || null,
+            resolutionAvailable,
             candidate: referral.candidates ? {
                 id: referral.candidates.id,
                 name: referral.candidates.name || 'Unknown',
@@ -1554,6 +1578,20 @@ exports.resolveCandidateFlag = async (req, res) => {
     if (!data) return res.status(404).json({ error: "Flag not found" });
 
     return res.json({ success: true, flag: data });
+};
+
+exports.resolveCandidateReferral = async (req, res) => {
+    const { data, error } = await supabase
+        .from('candidate_referrals')
+        .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+        .eq('id', req.params.id)
+        .select('id, status, resolved_at')
+        .maybeSingle();
+
+    if (error) return respondWithServerError(res, error, 'resolveCandidateReferral');
+    if (!data) return res.status(404).json({ error: "Referral not found" });
+
+    return res.json({ success: true, referral: data });
 };
 
 // Gets file link from resume 
@@ -1733,8 +1771,21 @@ async function maybeBackfillResumeCandidateId(resumeId, candidateId) {
 exports.getScoreboard = async (req, res) => {
     try {
         const requestedRoundId = String(req.query?.roundId || "").trim();
-        const activeCycle = await getActiveCycleRow();
+        const requestedCycleId = String(req.query?.cycleId || "").trim();
+        const siteActiveCycle = await getActiveCycleRow();
+        let activeCycle = siteActiveCycle;
+        if (requestedCycleId && requestedCycleId !== siteActiveCycle?.id) {
+            const { data: requestedCycle, error: requestedCycleError } = await supabase
+                .from("cycles")
+                .select("*")
+                .eq("id", requestedCycleId)
+                .maybeSingle();
+            if (requestedCycleError) throw requestedCycleError;
+            if (!requestedCycle) return res.status(404).json({ error: "Cycle not found" });
+            activeCycle = requestedCycle;
+        }
         const activeCycleId = activeCycle?.id || null;
+        const viewingHistoricalCycle = Boolean(activeCycleId && activeCycleId !== siteActiveCycle?.id);
         const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
         const {
             resumeRound,
@@ -1744,7 +1795,7 @@ exports.getScoreboard = async (req, res) => {
         } = resolveDeliberationRounds(cycleRounds);
 
         let deliberationRound = activeDeliberationRound;
-        let viewingHistorical = false;
+        let viewingHistorical = viewingHistoricalCycle;
 
         if (requestedRoundId) {
             const requestedRound = cycleRounds.find((r) => r.id === requestedRoundId) || null;
@@ -1752,7 +1803,7 @@ exports.getScoreboard = async (req, res) => {
                 return res.status(404).json({ error: "Round not found in this cycle" });
             }
             deliberationRound = requestedRound;
-            viewingHistorical = requestedRound.id !== activeRound?.id;
+            viewingHistorical = viewingHistoricalCycle || requestedRound.id !== activeRound?.id;
         }
 
         const nextRound = viewingHistorical
@@ -1785,81 +1836,27 @@ exports.getScoreboard = async (req, res) => {
         const decisionOptions = { provisional: !decisionsFinalized };
         const canDeliberate = !viewingHistorical && deliberationRound.status === "active";
 
-        const { data: resumes, error: resumeError } = await supabase
-            .from('resumes')
-            .select(`
-                id,
-                name,
-                candidate_id,
-                file_url,
-                created_at,
-                candidates (
-                    id,
-                    email,
-                    phone_number,
-                    major,
-                    gpa,
-                    year,
-                    pronouns,
-                    linkedin,
-                    gm,
-                    newbie_training,
-                    headshot
-                )
-            `)
-            .eq('cycle_id', activeCycleId)
-            .order('created_at', { ascending: true });
-
-        if (resumeError) throw resumeError;
-
-        const { data: cycleCandidates, error: cycleCandError } = await supabase
-            .from("candidates")
-            .select(`
-                id,
-                name,
-                email,
-                phone_number,
-                major,
-                gpa,
-                year,
-                pronouns,
-                linkedin,
-                gm,
-                newbie_training,
-                headshot,
-                resume_file_url
-            `)
-            .eq("cycle_id", activeCycleId);
-
-        if (cycleCandError) throw cycleCandError;
-
-        const candidateLinkLookups = buildCandidateLinkLookups(cycleCandidates);
-
-        const { data: roundDecisionRows, error: decisionError } = await supabase
-            .from('round_decisions')
-            .select('*')
-            .eq('cycle_id', activeCycleId)
-            .eq('round_id', deliberationRound.id);
-
-        if (decisionError) throw decisionError;
-
-        const decisionLookup = buildDecisionLookup(roundDecisionRows);
-
-        const priorRoundDecisionRows = await loadPriorRoundDecisionRows(
-            activeCycleId,
-            deliberationRound,
-            cycleRounds
-        );
-
-        const { data: reviews, error: reviewError } = await supabase
-            .from('resume_reviews')
-            .select(`
-                *,
-                resumes (
+        // These reads all share the same resolved cycle/round context but do not
+        // depend on one another. Fetch them together so the scoreboard does not
+        // pay one Supabase network round trip after another.
+        const [
+            resumeResult,
+            cycleCandidateResult,
+            roundDecisionResult,
+            priorRoundDecisionRows,
+            reviewResult,
+            frqResult,
+            interviewEvaluationResult,
+            coffeeMemberAssignmentResult,
+        ] = await Promise.all([
+            supabase
+                .from('resumes')
+                .select(`
                     id,
                     name,
                     candidate_id,
                     file_url,
+                    created_at,
                     candidates (
                         id,
                         email,
@@ -1873,14 +1870,101 @@ exports.getScoreboard = async (req, res) => {
                         newbie_training,
                         headshot
                     )
-                )
-            `)
-            .eq('cycle_id', activeCycleId)
-            .eq('round_id', resumeRound.id);
-            
-        if (reviewError) throw reviewError;
+                `)
+                .eq('cycle_id', activeCycleId)
+                .order('created_at', { ascending: true }),
+            supabase
+                .from("candidates")
+                .select(`
+                    id,
+                    name,
+                    email,
+                    phone_number,
+                    major,
+                    gpa,
+                    year,
+                    pronouns,
+                    linkedin,
+                    gm,
+                    newbie_training,
+                    headshot,
+                    resume_file_url
+                `)
+                .eq("cycle_id", activeCycleId),
+            supabase
+                .from('round_decisions')
+                .select('*')
+                .eq('cycle_id', activeCycleId)
+                .eq('round_id', deliberationRound.id),
+            loadPriorRoundDecisionRows(activeCycleId, deliberationRound, cycleRounds),
+            supabase
+                .from('resume_reviews')
+                .select(`
+                    *,
+                    resumes (
+                        id,
+                        name,
+                        candidate_id,
+                        file_url,
+                        candidates (
+                            id,
+                            email,
+                            phone_number,
+                            major,
+                            gpa,
+                            year,
+                            pronouns,
+                            linkedin,
+                            gm,
+                            newbie_training,
+                            headshot
+                        )
+                    )
+                `)
+                .eq('cycle_id', activeCycleId)
+                .eq('round_id', resumeRound.id),
+            supabase
+                .from("frq_reviews")
+                .select("id, resume_id, score, notes, graded_by, submitted_at")
+                .eq("cycle_id", activeCycleId)
+                .eq("round_id", resumeRound.id),
+            normalizeRoundType(deliberationRound.type) === ROUND_TYPES.COFFEE_CHAT
+                ? supabase
+                    .from("interview_evaluations")
+                    .select("candidate_id, rating, weighted_score, evaluated_by, notes, submitted_at")
+                    .eq("cycle_id", activeCycleId)
+                    .eq("round_id", deliberationRound.id)
+                : Promise.resolve({ data: [], error: null }),
+            normalizeRoundType(deliberationRound.type) === ROUND_TYPES.COFFEE_CHAT
+                ? supabase
+                    .from("interview_group_member_assignments")
+                    .select("user_id")
+                    .eq("round_id", deliberationRound.id)
+                : Promise.resolve({ data: [], error: null }),
+        ]);
 
-        const gradedByUserLookup = await getGradedByUserLookup((reviews || []).map(review => review.graded_by));
+        const { data: resumes, error: resumeError } = resumeResult;
+        const { data: cycleCandidates, error: cycleCandError } = cycleCandidateResult;
+        const { data: roundDecisionRows, error: decisionError } = roundDecisionResult;
+        const { data: reviews, error: reviewError } = reviewResult;
+        const { data: frqRows, error: frqError } = frqResult;
+        const { data: interviewEvaluationRows, error: interviewEvaluationError } = interviewEvaluationResult;
+        const { data: coffeeMemberAssignments, error: coffeeMemberAssignmentError } = coffeeMemberAssignmentResult;
+        if (resumeError) throw resumeError;
+        if (cycleCandError) throw cycleCandError;
+        if (decisionError) throw decisionError;
+        if (reviewError) throw reviewError;
+        if (frqError) throw frqError;
+        if (interviewEvaluationError && !isMissingSchemaError(interviewEvaluationError)) throw interviewEvaluationError;
+        if (coffeeMemberAssignmentError && !isMissingSchemaError(coffeeMemberAssignmentError)) throw coffeeMemberAssignmentError;
+
+        const candidateLinkLookups = buildCandidateLinkLookups(cycleCandidates);
+        const decisionLookup = buildDecisionLookup(roundDecisionRows);
+        const graderIds = [
+            ...(reviews || []).map((review) => review.graded_by),
+            ...(frqRows || []).map((review) => review.graded_by),
+        ];
+        const gradedByUserLookup = await getGradedByUserLookup(graderIds);
 
         const candidateMap = {};
         let totalNormalizedSum = 0;
@@ -1932,6 +2016,7 @@ exports.getScoreboard = async (req, res) => {
                 rubricConfig: resumeRound.rubric_config,
                 candidateYear,
             });
+            if (!Number.isFinite(reviewScore) || !Number.isFinite(reviewNormalized)) return;
 
             totalNormalizedSum += reviewNormalized;
             reviewCount++;
@@ -1985,6 +2070,7 @@ exports.getScoreboard = async (req, res) => {
                 score: reviewScore,
                 normalizedScore: reviewNormalized,
                 maxScore: scoring.maxScore,
+                maxPerCategory: scoring.maxPerCategory,
                 legacy: scoring.legacy,
                 gradedBy: review.graded_by ?? null,
                 reviewerName: graderFromUsers?.name || null,
@@ -2052,17 +2138,7 @@ exports.getScoreboard = async (req, res) => {
             { rubricConfig: resumeRound.rubric_config, metrics }
         );
 
-        const { data: frqRows, error: frqError } = await supabase
-            .from("frq_reviews")
-            .select("id, resume_id, score, notes, graded_by, submitted_at")
-            .eq("cycle_id", activeCycleId)
-            .eq("round_id", resumeRound.id);
-
-        if (frqError) throw frqError;
-
-        const frqGraderIds = (frqRows || []).map((row) => row.graded_by);
-        const frqGraderLookup = await getGradedByUserLookup(frqGraderIds);
-        const frqByResumeId = groupFrqReviewsByResumeId(frqRows, frqGraderLookup);
+        const frqByResumeId = groupFrqReviewsByResumeId(frqRows, gradedByUserLookup);
         const candidatesWithComposite = applyCompositeScoringToCandidates(candidatesWithOverrides, {
             frqByResumeId,
             rubricConfig: resumeRound.rubric_config,
@@ -2081,14 +2157,48 @@ exports.getScoreboard = async (req, res) => {
             applyCandidateSignals(c, signalLookups)
         );
 
+        // Resume rank is retained as a tie-breaker after the cycle moves into
+        // Coffee Chats; the Coffee Chat total becomes the primary ranking value.
         candidatesWithSignals.sort((a, b) => {
-            if (a.aggregateScore === null && b.aggregateScore === null) {
+            if (a.normalizedScore === null && b.normalizedScore === null) {
                 return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
             }
-            if (a.aggregateScore === null) return 1;
-            if (b.aggregateScore === null) return -1;
-            return b.aggregateScore - a.aggregateScore;
+            if (a.normalizedScore === null) return 1;
+            if (b.normalizedScore === null) return -1;
+            return b.normalizedScore - a.normalizedScore;
         });
+        candidatesWithSignals.forEach((c, index) => {
+            c.resumeScreenRank = index + 1;
+        });
+
+        const assignedCoffeeMemberIds = new Set((coffeeMemberAssignmentError ? [] : coffeeMemberAssignments || []).map((row) => row.user_id));
+        const coffeeChatEvaluationRowsForScoring = coffeeMemberAssignmentError
+            ? interviewEvaluationRows || []
+            : (interviewEvaluationRows || []).filter((row) => assignedCoffeeMemberIds.has(row.evaluated_by));
+        const coffeeChatEvaluationsByCandidate = {};
+        (interviewEvaluationError ? [] : coffeeChatEvaluationRowsForScoring).forEach((row) => {
+            if (!Number.isFinite(Number(row.weighted_score))) return;
+            if (!coffeeChatEvaluationsByCandidate[row.candidate_id]) coffeeChatEvaluationsByCandidate[row.candidate_id] = [];
+            coffeeChatEvaluationsByCandidate[row.candidate_id].push(row);
+        });
+        candidatesWithSignals.forEach((candidate) => {
+            const evaluations = coffeeChatEvaluationsByCandidate[candidate.candidateId] || [];
+            candidate.coffeeChatScore = evaluations.reduce((sum, row) => sum + Number(row.weighted_score), 0);
+            candidate.coffeeChatEvaluationCount = evaluations.length;
+            candidate.coffeeChatExpectedEvaluationCount = coffeeMemberAssignmentError ? null : assignedCoffeeMemberIds.size;
+        });
+
+        const isCoffeeChatScoreboard = normalizeRoundType(deliberationRound.type) === ROUND_TYPES.COFFEE_CHAT;
+        if (isCoffeeChatScoreboard) {
+            candidatesWithSignals.sort((a, b) =>
+                b.coffeeChatScore - a.coffeeChatScore
+                || a.resumeScreenRank - b.resumeScreenRank
+                || String(a.id).localeCompare(String(b.id))
+            );
+            candidatesWithSignals.forEach((candidate) => {
+                candidate.rankingScore = candidate.coffeeChatScore;
+            });
+        }
         candidatesWithSignals.forEach((c, index) => { c.rank = index + 1; });
 
         const totalReviewed = candidatesWithSignals.filter(c => c.numReviews > 0).length;
@@ -2100,12 +2210,14 @@ exports.getScoreboard = async (req, res) => {
 
         let notification = null;
         if (req.user?.role === "admin") {
-            const template = await resolveAdvanceNotificationForRound(
-                deliberationRound,
-                activeCycle,
-                cycleRounds
-            );
-            const lastBatch = await fetchLatestAdvanceBatch(deliberationRound.id);
+            const [template, lastBatch] = await Promise.all([
+                resolveAdvanceNotificationForRound(
+                    deliberationRound,
+                    activeCycle,
+                    cycleRounds
+                ),
+                fetchLatestAdvanceBatch(deliberationRound.id),
+            ]);
             notification = {
                 template,
                 lastBatch,
@@ -2129,6 +2241,8 @@ exports.getScoreboard = async (req, res) => {
                 undecidedCount,
                 incompleteCount: incompleteSummary.incompleteCount,
                 notification,
+                rankingMode: isCoffeeChatScoreboard ? "coffee_chat" : "resume_screen",
+                assignedMemberCount: coffeeMemberAssignmentError ? null : assignedCoffeeMemberIds.size,
             },
             metrics: metricsWithFrq,
             maxPerCategory,
@@ -2140,6 +2254,9 @@ exports.getScoreboard = async (req, res) => {
                 rejected: decisionCounts.reject,
                 pending: decisionCounts.pending,
                 avgScore: avgScore,
+                coffeeChatAverage: isCoffeeChatScoreboard && candidatesWithSignals.length
+                    ? Number((candidatesWithSignals.reduce((sum, candidate) => sum + candidate.coffeeChatScore, 0) / candidatesWithSignals.length).toFixed(1))
+                    : null,
             },
             candidates: candidatesWithSignals
         });
@@ -2238,6 +2355,118 @@ exports.upsertRoundDecision = async (req, res) => {
     }
 };
 
+exports.bulkUpsertRoundDecisions = async (req, res) => {
+    const rawDecisions = Array.isArray(req.body?.decisions) ? req.body.decisions : [];
+    if (!rawDecisions.length || rawDecisions.length > 1000) {
+        return res.status(400).json({ error: "decisions must contain between 1 and 1000 candidates" });
+    }
+
+    const inputByCandidate = new Map();
+    for (const row of rawDecisions) {
+        const candidateId = String(row?.candidate_id || "").trim();
+        const resumeId = String(row?.resume_id || "").trim();
+        const decision = String(row?.decision || "").trim().toLowerCase();
+        if (!candidateId || !resumeId || !["advance", "reject"].includes(decision)) {
+            return res.status(400).json({
+                error: "Every bulk decision requires candidate_id, resume_id, and an Advance or Reject decision",
+            });
+        }
+        inputByCandidate.set(candidateId, { candidateId, resumeId, decision });
+    }
+
+    try {
+        const activeCycle = await getActiveCycleRow();
+        if (!activeCycle?.id) return res.status(503).json({ error: "No active recruiting cycle" });
+
+        const cycleRounds = await getRoundsForCycle(activeCycle.id);
+        const resumeRound = cycleRounds.find((round) => isResumeScreenType(round.type)) || null;
+        const activeRound = cycleRounds.find((round) => round.status === "active") || null;
+        if (!resumeRound || !activeRound) {
+            return res.status(503).json({ error: "An active round and resume screening round are required" });
+        }
+
+        const candidateIds = [...inputByCandidate.keys()];
+        const [candidateResult, existingResult, priorRows] = await Promise.all([
+            supabase
+                .from("candidates")
+                .select("id")
+                .eq("cycle_id", activeCycle.id)
+                .in("id", candidateIds),
+            supabase
+                .from("round_decisions")
+                .select("candidate_id, decision")
+                .eq("cycle_id", activeCycle.id)
+                .eq("round_id", activeRound.id)
+                .in("candidate_id", candidateIds),
+            loadPriorRoundDecisionRows(activeCycle.id, activeRound, cycleRounds),
+        ]);
+
+        if (candidateResult.error) throw candidateResult.error;
+        if (existingResult.error) throw existingResult.error;
+
+        const validCandidateIds = new Set((candidateResult.data || []).map((row) => row.id));
+        const existingLookup = buildDecisionLookup(existingResult.data || []);
+        const priorLookup = buildDecisionLookup(priorRows || []);
+        const priorDecisionsStarted = deliberationHasStarted(priorRows || []);
+        const skipped = [];
+        const now = new Date().toISOString();
+
+        const payloads = [...inputByCandidate.values()].flatMap((input) => {
+            if (!validCandidateIds.has(input.candidateId)) {
+                skipped.push({ ...input, reason: "Candidate is not in the active cycle" });
+                return [];
+            }
+
+            const existingStatus = normalizeRoundDecision(existingLookup[input.candidateId]?.decision);
+            if (existingLookup[input.candidateId] && existingStatus !== "pending") {
+                skipped.push({ ...input, reason: "A committee decision already exists" });
+                return [];
+            }
+
+            if (!isResumeScreenType(activeRound.type) && priorDecisionsStarted) {
+                const priorStatus = normalizeRoundDecision(priorLookup[input.candidateId]?.decision);
+                if (priorStatus !== "advance") {
+                    skipped.push({ ...input, reason: "Candidate did not advance from the prior round" });
+                    return [];
+                }
+            }
+
+            return [{
+                candidate_id: input.candidateId,
+                cycle_id: activeCycle.id,
+                round_id: activeRound.id,
+                decision: input.decision,
+                notes: "Applied from configured rank cutoffs",
+                decided_by: req.user?.user_id,
+                updated_at: now,
+            }];
+        });
+
+        if (!payloads.length) {
+            return res.json({ appliedCount: 0, skippedCount: skipped.length, decisions: [], skipped });
+        }
+
+        const { data, error } = await supabase
+            .from("round_decisions")
+            .upsert(payloads, { onConflict: "candidate_id,round_id" })
+            .select("*");
+        if (error) return respondWithServerError(res, error, "bulkUpsertRoundDecisions upsert");
+
+        return res.json({
+            appliedCount: data?.length || 0,
+            skippedCount: skipped.length,
+            decisions: (data || []).map((row) => ({
+                candidateId: row.candidate_id,
+                resumeId: inputByCandidate.get(row.candidate_id)?.resumeId || null,
+                decision: mapRoundDecision(row, { provisional: true }),
+            })),
+            skipped,
+        });
+    } catch (err) {
+        return respondWithServerError(res, err, "bulkUpsertRoundDecisions");
+    }
+};
+
 exports.exportScoreboardDecisions = async (req, res) => {
     const rawFilter = String(req.query?.decision || "all").trim().toLowerCase();
     const allowed = new Set(["all", "advance", "hold", "reject", "pending"]);
@@ -2299,10 +2528,22 @@ exports.exportScoreboardDecisions = async (req, res) => {
 
         if (reviewError) return respondWithServerError(res, reviewError, "exportScoreboardDecisions reviews");
 
+        const { data: frqReviews, error: frqReviewError } = await supabase
+            .from("frq_reviews")
+            .select("resume_id")
+            .eq("cycle_id", activeCycleId)
+            .eq("round_id", resumeRound.id);
+
+        if (frqReviewError) return respondWithServerError(res, frqReviewError, "exportScoreboardDecisions FRQ reviews");
+
         const reviewsByResume = {};
         (reviews || []).forEach((review) => {
             if (!reviewsByResume[review.resume_id]) reviewsByResume[review.resume_id] = [];
             reviewsByResume[review.resume_id].push(review);
+        });
+        const frqReviewCountByResume = {};
+        (frqReviews || []).forEach((review) => {
+            frqReviewCountByResume[review.resume_id] = (frqReviewCountByResume[review.resume_id] || 0) + 1;
         });
 
         const exportRows = (resumes || []).map((resume) => {
@@ -2310,18 +2551,19 @@ exports.exportScoreboardDecisions = async (req, res) => {
             const linked = applyResumeCandidateLink(resume, embedded, candidateLinkLookups);
             const resumeReviews = reviewsByResume[resume.id] || [];
             let totalRaw = 0;
-            let rawCount = 0;
+            let totalPossible = 0;
+            let scoredReviewCount = 0;
             resumeReviews.forEach((review) => {
                 const scoring = getReviewScoring(review, {
                     rubricConfig: resumeRound.rubric_config,
                     candidateYear: linked.year,
                 });
+                if (!Number.isFinite(scoring.score) || !Number.isFinite(scoring.maxScore) || scoring.maxScore <= 0) return;
                 totalRaw += scoring.score;
-                rawCount += 1;
+                totalPossible += scoring.maxScore;
+                scoredReviewCount += 1;
             });
-            const avgRawScore = rawCount > 0
-                ? Number((totalRaw / rawCount).toFixed(1))
-                : null;
+            const normalizedScore = computeNormalizedFromAggregate(totalRaw, totalPossible);
 
             return {
                 candidateId: linked.candidateId,
@@ -2331,8 +2573,9 @@ exports.exportScoreboardDecisions = async (req, res) => {
                 major: linked.major,
                 year: linked.year,
                 gpa: linked.gpa,
-                score: avgRawScore,
-                numReviews: resumeReviews.length,
+                score: normalizedScore,
+                numReviews: scoredReviewCount,
+                numFrqReviews: frqReviewCountByResume[resume.id] || 0,
                 decision: resolveCandidateDecision(linked.candidateId, decisionLookup),
             };
         });
@@ -2377,23 +2620,35 @@ function mapApplicationCandidate(candidate) {
     };
 }
 
-async function fetchScoreboardApplicationPayload(resumeId) {
-    const activeCycle = await getActiveCycleRow();
+async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = null) {
+    let activeCycle = await getActiveCycleRow();
+    if (requestedCycleId && requestedCycleId !== activeCycle?.id) {
+        const { data, error } = await supabase
+            .from('cycles')
+            .select('id, name')
+            .eq('id', requestedCycleId)
+            .maybeSingle();
+        if (error) {
+            const err = new Error(error.message || 'Failed to load recruiting cycle');
+            err.cause = error;
+            throw err;
+        }
+        activeCycle = data;
+    }
     const activeCycleId = activeCycle?.id || null;
     const resumeRound = activeCycleId
         ? await getResumeScreenRoundForCycle(activeCycleId)
         : null;
 
     if (!activeCycleId || !resumeRound) {
-        const err = new Error('No active resume screening cycle');
+        const err = new Error('No recruiting cycle available');
         err.statusCode = 503;
         throw err;
     }
 
-    // These rows all share the resolved cycle/round context but do not depend on
-    // one another. Fetching them together avoids three consecutive Supabase
-    // round trips every time an admin opens a candidate profile.
-    const [resumeResult, reviewResult, frqResult] = await Promise.all([
+    // The resume and round metadata share the resolved cycle context but do not
+    // depend on one another, so load them together before fetching reviews.
+    const [resumeResult, cycleRounds] = await Promise.all([
         supabase
             .from('resumes')
             .select(`
@@ -2428,21 +2683,12 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             `)
             .eq('id', resumeId)
             .maybeSingle(),
-        supabase
-            .from('resume_reviews')
-            .select('id, scores, notes, submitted_at, graded_by, rubric_snapshot, decision')
-            .eq('resume_id', resumeId)
-            .eq('cycle_id', activeCycleId)
-            .eq('round_id', resumeRound.id)
-            .order('submitted_at', { ascending: true }),
-        supabase
-            .from('frq_reviews')
-            .select('id, resume_id, score, notes, graded_by, submitted_at')
-            .eq('resume_id', resumeId)
-            .eq('cycle_id', activeCycleId)
-            .eq('round_id', resumeRound.id),
+        getRoundsForCycle(activeCycleId),
     ]);
 
+    const coffeeChatRound = getRoundByType(cycleRounds, ROUND_TYPES.COFFEE_CHAT);
+    const interviewRounds = (cycleRounds || []).filter((round) => isInterviewRoundType(round.type));
+    const interviewRoundIds = interviewRounds.map((round) => round.id);
     const { data: resumeRow, error: resumeError } = resumeResult;
 
     if (resumeError) {
@@ -2457,18 +2703,48 @@ async function fetchScoreboardApplicationPayload(resumeId) {
     }
 
     if (resumeRow.cycle_id !== activeCycleId) {
-        const err = new Error('Candidate is not in the active cycle');
+        const err = new Error('Candidate is not in this cycle');
         err.statusCode = 404;
         throw err;
     }
 
     const candidate = firstRel(resumeRow.candidates);
     if (!candidate || candidate.cycle_id !== activeCycleId) {
-        const err = new Error('Candidate is not in the active cycle');
+        const err = new Error('Candidate is not in this cycle');
         err.statusCode = 404;
         throw err;
     }
 
+    const [reviewResult, frqResult, interviewEvaluationResult, coffeeMemberAssignmentResult] = await Promise.all([
+        supabase
+            .from('resume_reviews')
+            .select('id, scores, notes, submitted_at, graded_by, rubric_snapshot, decision')
+            .eq('resume_id', resumeId)
+            .eq('cycle_id', activeCycleId)
+            .eq('round_id', resumeRound.id)
+            .order('submitted_at', { ascending: true }),
+        supabase
+            .from('frq_reviews')
+            .select('id, resume_id, score, notes, graded_by, submitted_at')
+            .eq('resume_id', resumeId)
+            .eq('cycle_id', activeCycleId)
+            .eq('round_id', resumeRound.id),
+        interviewRoundIds.length
+            ? supabase
+                .from('interview_evaluations')
+                .select('id, round_id, decision, rating, weighted_score, notes, evaluated_by, scheduled_at, submitted_at, updated_at')
+                .eq('candidate_id', candidate.id)
+                .eq('cycle_id', activeCycleId)
+                .in('round_id', interviewRoundIds)
+                .order('submitted_at', { ascending: true })
+            : Promise.resolve({ data: [], error: null }),
+        coffeeChatRound
+            ? supabase
+                .from('interview_group_member_assignments')
+                .select('user_id')
+                .eq('round_id', coffeeChatRound.id)
+            : Promise.resolve({ data: [], error: null }),
+    ]);
     const { data: reviews, error: reviewError } = reviewResult;
 
     if (reviewError) {
@@ -2478,11 +2754,31 @@ async function fetchScoreboardApplicationPayload(resumeId) {
     }
 
     const { data: frqRows, error: frqError } = frqResult;
+    const { data: interviewEvaluationRows, error: interviewEvaluationError } = interviewEvaluationResult;
+    const { data: coffeeMemberAssignments, error: coffeeMemberAssignmentError } = coffeeMemberAssignmentResult;
     if (frqError) {
         const err = new Error(frqError.message || 'Failed to load FRQ reviews');
         err.cause = frqError;
         throw err;
     }
+    if (interviewEvaluationError && !isMissingSchemaError(interviewEvaluationError)) {
+        const err = new Error(interviewEvaluationError.message || 'Failed to load interview evaluations');
+        err.cause = interviewEvaluationError;
+        throw err;
+    }
+    if (coffeeMemberAssignmentError && !isMissingSchemaError(coffeeMemberAssignmentError)) {
+        const err = new Error(coffeeMemberAssignmentError.message || 'Failed to load Coffee Chat member assignments');
+        err.cause = coffeeMemberAssignmentError;
+        throw err;
+    }
+
+    const assignedCoffeeMemberIds = new Set((coffeeMemberAssignmentError ? [] : coffeeMemberAssignments || []).map((row) => row.user_id));
+    const roundById = new Map(interviewRounds.map((round) => [round.id, round]));
+    const interviewRowsForScoring = (interviewEvaluationError ? [] : interviewEvaluationRows || []).filter((row) => {
+        const round = roundById.get(row.round_id);
+        if (normalizeRoundType(round?.type) !== ROUND_TYPES.COFFEE_CHAT) return true;
+        return coffeeMemberAssignmentError || assignedCoffeeMemberIds.has(row.evaluated_by);
+    });
 
     // Resume and FRQ grader identities come from the same users table, and the
     // review overrides are independent of that lookup. Run both enrichments in
@@ -2490,6 +2786,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
     const graderIds = [
         ...(reviews || []).map((review) => review.graded_by),
         ...(frqRows || []).map((row) => row.graded_by),
+        ...interviewRowsForScoring.map((row) => row.evaluated_by),
     ];
     const [gradedByUserLookup, reviewOverrideLookup] = await Promise.all([
         getGradedByUserLookup(graderIds),
@@ -2498,6 +2795,8 @@ async function fetchScoreboardApplicationPayload(resumeId) {
     const metricSet = new Set(getMetricsFromRubricConfig(resumeRound.rubric_config));
     const categoryTotals = {};
     const categoryCounts = {};
+    const categoryMaxTotals = {};
+    const categoryMaxCounts = {};
     let totalScore = 0;
     let totalNormalized = 0;
 
@@ -2513,6 +2812,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             rubricConfig: resumeRound.rubric_config,
             candidateYear: candidate.year,
         });
+        if (!Number.isFinite(reviewScore) || !Number.isFinite(reviewNormalized)) return null;
 
         totalScore += reviewScore;
         totalNormalized += reviewNormalized;
@@ -2521,6 +2821,8 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             const numericValue = Number(value) || 0;
             categoryTotals[metric] = (categoryTotals[metric] || 0) + numericValue;
             categoryCounts[metric] = (categoryCounts[metric] || 0) + 1;
+            categoryMaxTotals[metric] = (categoryMaxTotals[metric] || 0) + scoring.maxPerCategory;
+            categoryMaxCounts[metric] = (categoryMaxCounts[metric] || 0) + 1;
         });
 
         const graderFromUsers = review.graded_by != null ? gradedByUserLookup[review.graded_by] : null;
@@ -2531,6 +2833,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             score: reviewScore,
             normalizedScore: reviewNormalized,
             maxScore: scoring.maxScore,
+            maxPerCategory: scoring.maxPerCategory,
             legacy: scoring.legacy,
             decision: review.decision || 'pass',
             reviewerName: graderFromUsers?.name || null,
@@ -2538,7 +2841,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             notes: review.notes || '',
             submittedAt: review.submitted_at,
         };
-    });
+    }).filter(Boolean);
 
     const numReviews = mappedReviews.length;
     const aggregateScore = numReviews > 0 ? Number((totalScore / numReviews).toFixed(1)) : null;
@@ -2559,6 +2862,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             score: normalizedScore === null ? null : Math.round(normalizedScore),
             numReviews,
             year: candidate.year,
+            resumeMax,
             metrics: [...metricSet],
             categoryScores: buildCategoryScores(categoryTotals, categoryCounts),
         },
@@ -2567,11 +2871,47 @@ async function fetchScoreboardApplicationPayload(resumeId) {
     );
 
     const frqReviews = (frqRows || []).map((row) => mapFrqReviewRow(row, gradedByUserLookup));
+    const interviewEvaluations = interviewRowsForScoring.map((row) => ({
+        id: row.id,
+        roundId: row.round_id,
+        roundName: roundById.get(row.round_id)?.name || 'Interview round',
+        roundType: normalizeRoundType(roundById.get(row.round_id)?.type),
+        decision: row.decision || 'pending',
+        rating: row.rating,
+        weightedScore: row.weighted_score == null ? null : Number(row.weighted_score),
+        notes: row.notes || '',
+        reviewerName: gradedByUserLookup[row.evaluated_by]?.name || null,
+        reviewerEmail: gradedByUserLookup[row.evaluated_by]?.email || null,
+        scheduledAt: row.scheduled_at || null,
+        submittedAt: row.updated_at || row.submitted_at,
+    }));
+    const coffeeChatEvaluations = interviewEvaluations.filter(
+        (evaluation) => evaluation.roundType === ROUND_TYPES.COFFEE_CHAT
+    );
     const compositeCandidate = applyCompositeScoringToCandidate(candidateWithOverrides, {
         frqReviews,
         rubricConfig: resumeRound.rubric_config,
     });
-
+    const roundGrades = [
+        {
+            roundId: resumeRound.id,
+            roundName: resumeRound.name,
+            roundType: normalizeRoundType(resumeRound.type),
+            roundStatus: resumeRound.status,
+            reviews: compositeCandidate.reviews,
+            frqReviews: compositeCandidate.frqReviews,
+            evaluations: [],
+        },
+        ...interviewRounds.map((round) => ({
+            roundId: round.id,
+            roundName: round.name,
+            roundType: normalizeRoundType(round.type),
+            roundStatus: round.status,
+            reviews: [],
+            frqReviews: [],
+            evaluations: interviewEvaluations.filter((evaluation) => evaluation.roundId === round.id),
+        })),
+    ];
     // Display only the current rubric's categories; the metricSet union carries retired
     // categories from older reviews' snapshots (kept for override/score math above).
     const currentMetrics = getMetricsFromRubricConfig(resumeRound.rubric_config);
@@ -2585,7 +2925,7 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             id: resumeRow.id,
             name: resumeRow.name || candidate.name || 'Unknown',
             fileUrl: resumeFileUrl,
-            reviewCount: resumeRow.review_count ?? numReviews,
+            reviewCount: numReviews,
             submittedAt: resumeRow.created_at,
         },
         candidate: mapApplicationCandidate(candidate),
@@ -2602,13 +2942,106 @@ async function fetchScoreboardApplicationPayload(resumeId) {
             resumeAggregateScore: compositeCandidate.resumeAggregateScore,
             resumeNormalizedScore: compositeCandidate.resumeNormalizedScore,
             resumeMax: compositeCandidate.resumeMax,
-            compositeMax: compositeCandidate.compositeMax,
+            resumeEarnedPoints: compositeCandidate.resumeEarnedPoints,
+            resumePossiblePoints: compositeCandidate.resumePossiblePoints,
             frqScore: compositeCandidate.frqScore,
             frqPending: compositeCandidate.frqPending,
             numFrqReviews: compositeCandidate.numFrqReviews,
+            compositeMax: compositeCandidate.compositeMax,
+            earnedPoints: compositeCandidate.earnedPoints,
+            possiblePoints: compositeCandidate.possiblePoints,
             categoryScores: compositeCandidate.categoryScores,
+            categoryMaxScores: {
+                ...buildCategoryScores(categoryMaxTotals, categoryMaxCounts),
+                [FRQ_METRIC]: FRQ_MAX_SCORE,
+            },
             reviews: compositeCandidate.reviews,
             frqReviews: compositeCandidate.frqReviews,
+            coffeeChatScore: coffeeChatEvaluations.reduce((sum, row) => sum + (Number.isFinite(row.weightedScore) ? row.weightedScore : 0), 0),
+            coffeeChatEvaluationCount: coffeeChatEvaluations.length,
+            coffeeChatExpectedEvaluationCount: coffeeMemberAssignmentError ? null : assignedCoffeeMemberIds.size,
+            coffeeChatEvaluations,
+            roundGrades,
+        },
+    };
+}
+
+async function fetchScoreboardApplicationSummarySource(resumeId, requestedCycleId = null) {
+    const activeCycleId = requestedCycleId || await getActiveCycleId();
+    if (!activeCycleId) {
+        const err = new Error('No recruiting cycle available');
+        err.statusCode = 503;
+        throw err;
+    }
+
+    // The AI prompt only needs the candidate's free responses and cycle labels.
+    // Avoid rebuilding every review, grader, signal, and override merely to read
+    // or generate a cached two-sentence summary.
+    const [activeCycleResult, resumeRound, resumeResult] = await Promise.all([
+        supabase
+            .from('cycles')
+            .select('id, name')
+            .eq('id', activeCycleId)
+            .maybeSingle(),
+        getResumeScreenRoundForCycle(activeCycleId),
+        supabase
+            .from('resumes')
+            .select(`
+                id,
+                cycle_id,
+                candidates (
+                    id,
+                    name,
+                    why_consulting,
+                    why_180dc,
+                    why_social_impact,
+                    cycle_id
+                )
+            `)
+            .eq('id', resumeId)
+            .maybeSingle(),
+    ]);
+
+    const { data: activeCycle, error: activeCycleError } = activeCycleResult;
+    if (activeCycleError) {
+        const err = new Error(activeCycleError.message || 'Failed to load active cycle');
+        err.cause = activeCycleError;
+        throw err;
+    }
+
+    const { data: resumeRow, error: resumeError } = resumeResult;
+    if (resumeError) {
+        const err = new Error(resumeError.message || 'Failed to load resume');
+        err.cause = resumeError;
+        throw err;
+    }
+
+    if (!activeCycle || !resumeRound) {
+        const err = new Error('No resume screening round for this cycle');
+        err.statusCode = 503;
+        throw err;
+    }
+    if (!resumeRow) {
+        const err = new Error('Candidate not found');
+        err.statusCode = 404;
+        throw err;
+    }
+
+    const candidate = firstRel(resumeRow.candidates);
+    if (resumeRow.cycle_id !== activeCycleId || !candidate || candidate.cycle_id !== activeCycleId) {
+        const err = new Error('Candidate is not in this cycle');
+        err.statusCode = 404;
+        throw err;
+    }
+
+    return {
+        candidate: mapApplicationCandidate(candidate),
+        candidateId: candidate.id,
+        activeCycleId,
+        resumeRoundId: resumeRound.id,
+        context: {
+            cycle: { id: activeCycle.id, name: activeCycle.name },
+            round: { id: resumeRound.id, name: resumeRound.name },
         },
     };
 }
@@ -2631,7 +3064,8 @@ exports.getScoreboardApplication = async (req, res) => {
             return res.status(400).json({ error: 'resumeId is required' });
         }
 
-        const payload = await fetchScoreboardApplicationPayload(resumeId);
+        const requestedCycleId = String(req.query?.cycleId || '').trim() || null;
+        const payload = await fetchScoreboardApplicationPayload(resumeId, requestedCycleId);
         const userId = req.user?.user_id ?? null;
 
         const [adminOverrideRow, signals, roundDecisionResult] = await Promise.all([
@@ -2684,27 +3118,8 @@ exports.getScoreboardApplicationSummary = async (req, res) => {
 
         const forceRefresh = String(req.query.refresh || '').trim() === '1';
 
-        const payload = await fetchScoreboardApplicationPayload(resumeId);
-
-        const { data: roundDecisionRow, error: decisionError } = await supabase
-            .from('round_decisions')
-            .select('decision, notes, updated_at')
-            .eq('cycle_id', payload.activeCycleId)
-            .eq('round_id', payload.resumeRoundId)
-            .eq('candidate_id', payload.candidateId)
-            .maybeSingle();
-
-        if (decisionError) {
-            return respondWithServerError(res, decisionError, 'getScoreboardApplicationSummary decision');
-        }
-
-        const roundDecision = roundDecisionRow
-            ? {
-                decision: roundDecisionRow.decision,
-                notes: roundDecisionRow.notes || '',
-                updatedAt: roundDecisionRow.updated_at || null,
-            }
-            : null;
+        const requestedCycleId = String(req.query?.cycleId || '').trim() || null;
+        const payload = await fetchScoreboardApplicationSummarySource(resumeId, requestedCycleId);
 
         const summaryResult = await resolveCandidateSummary(supabase, {
             resumeId,
@@ -2713,11 +3128,8 @@ exports.getScoreboardApplicationSummary = async (req, res) => {
             roundId: payload.resumeRoundId,
             applicationPayload: {
                 candidate: payload.candidate,
-                scoring: payload.scoring,
                 context: payload.context,
-                roundDecision,
             },
-            roundDecision,
             forceRefresh,
         });
 
@@ -2952,17 +3364,14 @@ exports.upsertReviewOverride = async (req, res) => {
         }
 
         const candidateYear = firstRel(resume?.candidates)?.year;
-        const snapshot = reviewRow.rubric_snapshot || null;
-        const rubricForYear = snapshot
-            ? {
-                metrics: snapshot.metrics || Object.keys(reviewRow.scores || {}),
-                maxPerCategory: snapshot.maxPerCategory || 4,
-                maxScore: snapshot.maxScore,
-            }
-            : getRubricForYear(resumeRound.rubric_config, candidateYear);
+        const reviewScoring = getReviewScoring(reviewRow, {
+            rubricConfig: resumeRound.rubric_config,
+            candidateYear,
+        });
 
         let overrideScore = null;
-        const maxAllowed = rubricForYear.maxScore || getRubricMaxScore(rubricForYear);
+        const maxAllowed = reviewScoring.maxScore
+            || getRubricMaxScore(getRubricForYear(resumeRound.rubric_config, candidateYear));
         if (hasScore) {
             overrideScore = Number(rawScore);
             if (!Number.isFinite(overrideScore) || overrideScore < 0 || overrideScore > maxAllowed) {
@@ -3093,6 +3502,7 @@ exports.getGraderScoreboard = async (req, res) => {
                 rubricConfig: resumeRound?.rubric_config,
                 candidateYear,
             });
+            if (!Number.isFinite(reviewScore) || !Number.isFinite(reviewNormalized)) return;
             grader.reviewCount++;
             grader.totalScore += reviewScore;
             grader.totalNormalized += reviewNormalized;

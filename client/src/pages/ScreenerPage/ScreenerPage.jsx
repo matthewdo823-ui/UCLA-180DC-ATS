@@ -8,6 +8,7 @@ import { API } from "../../constants/config";
 import { invalidateAfterReview } from "../../lib/queryKeys";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { FRQ_MAX_SCORE } from "../../constants/frq";
+import { formatReviewCount } from "../../utils/reviewCounts";
 
 import Topbar, { topbarGhostButtonStyle } from "../../components/Topbar/Topbar";
 import CandidateRow from "../../components/CandidateRow/CandidateRow";
@@ -483,33 +484,20 @@ export default function ScreenerPage() {
   }
 
   const screeningBlocked = !cycleLoading && (!activeRound || cycleError || !isResumeRound);
-  const doneCount = isFrqMode ? myFrqReviews.length : myReviews.length;
 
   const topbarRightSlot = (
     <>
-      <button type="button" onClick={() => setDrawerOpen(true)} style={topbarGhostButtonStyle}>
-        📋 {isFrqMode ? "Past FRQ Grades" : "Past Reviews"}
-        <span style={{ background: css.greenDark, color: css.cardWhite, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: "2px 7px" }}>
-          {doneCount}
-        </span>
+      {isAdmin && isResumeRound && !screeningBlocked ? (
+        <GradingModeToggle mode={gradingMode} onChange={handleGradingModeChange} />
+      ) : null}
+      <button type="button" onClick={() => { setGradingMode(GRADING_MODES.RESUME); setDrawerOpen(true); }} style={topbarGhostButtonStyle}>
+        📋 {formatReviewCount(myReviews.length, "resume")}
       </button>
-      <div style={{
-        width: 40,
-        height: 40,
-        borderRadius: "50%",
-        border: `1px solid ${css.greenDark}`,
-        background: "rgba(40, 98, 65, 0.08)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        marginLeft: 8,
-      }}
-      >
-        <span style={{ fontSize: 14, fontWeight: 700, color: css.greenDark, lineHeight: 1 }}>{doneCount}</span>
-        <span style={{ fontSize: 7, fontWeight: 700, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.02em", marginTop: 1 }}>done</span>
-      </div>
+      {isAdmin ? (
+        <button type="button" onClick={() => { setGradingMode(GRADING_MODES.FRQ); setDrawerOpen(true); }} style={topbarGhostButtonStyle}>
+          📝 {formatReviewCount(myFrqReviews.length, "free response")}
+        </button>
+      ) : null}
     </>
   );
 

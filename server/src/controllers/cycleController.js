@@ -43,6 +43,7 @@ function mapRound(row) {
     rubricConfig: row.rubric_config || null,
     autoAdvancePercent: Number(row.auto_advance_percent) || 0,
     autoRejectPercent: Number(row.auto_reject_percent) || 0,
+    interviewGroupCount: Number(row.interview_group_count) || 1,
     createdAt: row.created_at,
   };
 }
@@ -70,19 +71,21 @@ function mapCycle(row, extras = {}) {
 async function fetchCycleCounts(cycleIds) {
   const counts = {};
   cycleIds.forEach((id) => {
-    counts[id] = { candidates: 0, resumes: 0, reviews: 0 };
+    counts[id] = { candidates: 0, resumes: 0, resumeReviews: 0, frqReviews: 0 };
   });
   if (!cycleIds.length) return counts;
 
-  const [candidatesRes, resumesRes, reviewsRes] = await Promise.all([
+  const [candidatesRes, resumesRes, reviewsRes, frqReviewsRes] = await Promise.all([
     supabase.from("candidates").select("cycle_id").in("cycle_id", cycleIds),
     supabase.from("resumes").select("cycle_id").in("cycle_id", cycleIds),
     supabase.from("resume_reviews").select("cycle_id").in("cycle_id", cycleIds),
+    supabase.from("frq_reviews").select("cycle_id").in("cycle_id", cycleIds),
   ]);
 
   if (candidatesRes.error) throw candidatesRes.error;
   if (resumesRes.error) throw resumesRes.error;
   if (reviewsRes.error) throw reviewsRes.error;
+  if (frqReviewsRes.error) throw frqReviewsRes.error;
 
   (candidatesRes.data || []).forEach((row) => {
     if (row.cycle_id && counts[row.cycle_id]) counts[row.cycle_id].candidates += 1;
@@ -91,7 +94,10 @@ async function fetchCycleCounts(cycleIds) {
     if (row.cycle_id && counts[row.cycle_id]) counts[row.cycle_id].resumes += 1;
   });
   (reviewsRes.data || []).forEach((row) => {
-    if (row.cycle_id && counts[row.cycle_id]) counts[row.cycle_id].reviews += 1;
+    if (row.cycle_id && counts[row.cycle_id]) counts[row.cycle_id].resumeReviews += 1;
+  });
+  (frqReviewsRes.data || []).forEach((row) => {
+    if (row.cycle_id && counts[row.cycle_id]) counts[row.cycle_id].frqReviews += 1;
   });
 
   return counts;
@@ -114,6 +120,30 @@ async function fetchRoundsForCycles(cycleIds) {
     grouped[row.cycle_id].push(mapRound(row));
   });
   return grouped;
+}
+
+async function fetchRoundDecisionCounts(cycleIds) {
+  const counts = {};
+  if (!cycleIds.length) return counts;
+
+  const { data, error } = await supabase
+    .from("round_decisions")
+    .select("round_id, decision")
+    .in("cycle_id", cycleIds);
+
+  if (error) throw error;
+
+  (data || []).forEach((row) => {
+    if (!counts[row.round_id]) {
+      counts[row.round_id] = { advance: 0, hold: 0, reject: 0, pending: 0 };
+    }
+    const decision = String(row.decision || "pending").toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(counts[row.round_id], decision)) {
+      counts[row.round_id][decision] += 1;
+    }
+  });
+
+  return counts;
 }
 
 async function buildActiveCyclePayload() {
@@ -196,17 +226,21 @@ exports.listCycles = async (req, res) => {
 
     const cycleIds = (cycles || []).map((c) => c.id);
     const activeCycleId = await getActiveCycleId();
-    const [countsByCycle, roundsByCycle] = await Promise.all([
+    const [countsByCycle, roundsByCycle, decisionCountsByRound] = await Promise.all([
       fetchCycleCounts(cycleIds),
       fetchRoundsForCycles(cycleIds),
+      fetchRoundDecisionCounts(cycleIds),
     ]);
 
     return res.json({
       cycles: (cycles || []).map((cycle) =>
         mapCycle(cycle, {
           isActive: cycle.id === activeCycleId,
-          counts: countsByCycle[cycle.id] || { candidates: 0, resumes: 0, reviews: 0 },
-          rounds: roundsByCycle[cycle.id] || [],
+          counts: countsByCycle[cycle.id] || { candidates: 0, resumes: 0, resumeReviews: 0, frqReviews: 0 },
+          rounds: (roundsByCycle[cycle.id] || []).map((round) => ({
+            ...round,
+            decisionCounts: decisionCountsByRound[round.id] || { advance: 0, hold: 0, reject: 0, pending: 0 },
+          })),
         })
       ),
       activeCycleId,
@@ -263,7 +297,7 @@ exports.createCycle = async (req, res) => {
     return res.status(201).json({
       cycle: mapCycle(cycle, {
         isActive: false,
-        counts: { candidates: 0, resumes: 0, reviews: 0 },
+        counts: { candidates: 0, resumes: 0, resumeReviews: 0, frqReviews: 0 },
         rounds: (rounds || []).map(mapRound),
       }),
     });
@@ -364,7 +398,7 @@ exports.patchCycle = async (req, res) => {
     return res.json({
       cycle: mapCycle(data, {
         isActive: data.id === activeCycleId,
-        counts: countsByCycle[cycleId] || { candidates: 0, resumes: 0, reviews: 0 },
+        counts: countsByCycle[cycleId] || { candidates: 0, resumes: 0, resumeReviews: 0, frqReviews: 0 },
         rounds: roundsByCycle[cycleId] || [],
       }),
     });
@@ -610,7 +644,7 @@ exports.syncCycleForm = async (req, res) => {
       errors: result.errors,
       cycle: mapCycle(refreshed, {
         isActive: refreshed.id === activeCycleId,
-        counts: countsByCycle[cycleId] || { candidates: 0, resumes: 0, reviews: 0 },
+        counts: countsByCycle[cycleId] || { candidates: 0, resumes: 0, resumeReviews: 0, frqReviews: 0 },
         rounds: roundsByCycle[cycleId] || [],
       }),
     });

@@ -1,15 +1,16 @@
 import { css } from "../../theme/colors";
-import { formatScore, getInitials, hasNumericScore } from "../../utils/format";
+import { getInitials, hasNumericScore } from "../../utils/format";
 import { formatRoundKind } from "../../constants/rounds";
 import { passesDecisionFilter } from "./decisionUtils";
+import { getResumeReviewCount } from "../../utils/reviewCounts";
 
 export const defaultFilters = { major: "all", year: "all", reviews: "all", scoreBand: "all", decision: "all", signals: "all" };
 export const SORT_TABS = [
   { id: "performance_desc", label: "Score · high to low" }, { id: "performance_asc", label: "Score · low to high" },
   { id: "referrals_desc", label: "Referrals · most" }, { id: "last_review_desc", label: "Last grade · newest" },
   { id: "last_review_asc", label: "Last grade · oldest" }, { id: "name_asc", label: "Name · A–Z" },
-  { id: "name_desc", label: "Name · Z–A" }, { id: "reviews_desc", label: "Reviews · most" },
-  { id: "reviews_asc", label: "Reviews · fewest" }, { id: "created_desc", label: "Applied · newest" },
+  { id: "name_desc", label: "Name · Z–A" }, { id: "reviews_desc", label: "Resume reviews · most" },
+  { id: "reviews_asc", label: "Resume reviews · fewest" }, { id: "created_desc", label: "Applied · newest" },
   { id: "created_asc", label: "Applied · oldest" },
 ];
 
@@ -31,14 +32,13 @@ export function sortYears(items) {
     .sort((a, b) => yearRank(a) - yearRank(b) || a.localeCompare(b, undefined, { sensitivity: "base" }));
 }
 export function countActiveFilters(filters) { return Object.keys(defaultFilters).filter((key) => filters[key] !== defaultFilters[key]).length; }
-export function getNumReviews(candidate) { return candidate?.numReviews ?? candidate?.reviews?.length ?? 0; }
+export function getNumReviews(candidate) { return getResumeReviewCount(candidate); }
 export function getNormalizedScore(candidate) { return hasNumericScore(candidate?.normalizedScore) ? Number(candidate.normalizedScore) : null; }
-export function getAggregateScore(candidate) { return hasNumericScore(candidate?.aggregateScore) ? Number(candidate.aggregateScore) : null; }
-export function getPerformanceSortScore(candidate) { return getAggregateScore(candidate); }
-export function getScoreMaxTotal(candidate) { return hasNumericScore(candidate?.compositeMax) ? Number(candidate.compositeMax) : hasNumericScore(candidate?.maxScore) ? Number(candidate.maxScore) : null; }
+export function getPerformanceSortScore(candidate) {
+  return hasNumericScore(candidate?.rankingScore) ? Number(candidate.rankingScore) : getNormalizedScore(candidate);
+}
 export function getHeadlineScore(candidate) { const score = getNormalizedScore(candidate); return score == null ? null : Math.min(100, score); }
 export function getSourceNormalizedScore(candidate) { return hasNumericScore(candidate?.sourceNormalizedScore) ? Number(candidate.sourceNormalizedScore) : getNormalizedScore(candidate); }
-export function formatScorePointsLine(candidate) { const score = getAggregateScore(candidate); const max = getScoreMaxTotal(candidate); return hasNumericScore(score) && max != null ? `${formatScore(score)} pts / ${formatScore(max)}` : null; }
 export function normalizeMetricScore(candidate, metric) { const value = candidate?.categoryScores?.[metric]; return hasNumericScore(value) ? Number(value) : null; }
 
 export function computeScoreCutoffs(candidates) {

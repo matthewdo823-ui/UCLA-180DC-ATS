@@ -2,10 +2,12 @@ import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import { css } from "../../theme/colors";
 import { sansFont } from "../../theme/typography";
 import { formatScore, hasNumericScore } from "../../utils/format";
+import { formatReviewCountsStacked } from "../../utils/reviewCounts";
 import { hasText } from "./applicationUtils";
 import { cardGreen, cardMint, cardPale, ROUND_1_LABEL, UPCOMING_EVALUATION_ROUNDS } from "./constants";
+import ApplicationResumeSection from "./ApplicationResumeSection";
 
-export default function ApplicationProfileSidebar({ candidate, resume, scoring }) {
+export default function ApplicationProfileSidebar({ candidate, resume, scoring, authToken, candidateCount, resumeScreenRank, coffeeChatScore, coffeeChatEvaluationCount }) {
   return (
     <aside style={{ position: "sticky", top: 16 }}>
       <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
@@ -30,14 +32,24 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring }
         </div>
 
         <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {[candidate.year, candidate.major, candidate.gpa ? `GPA ${candidate.gpa}` : ""].filter(Boolean).map(tag => (
-            <span
-              key={tag}
-              style={{ display: "inline-block", alignSelf: "flex-start", background: cardPale, color: cardGreen, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 20 }}
-            >
-              {tag}
-            </span>
-          ))}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, alignItems: "start" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+              {[candidate.year, candidate.major, candidate.gpa ? `GPA ${candidate.gpa}` : ""].filter(Boolean).map(tag => (
+                <span
+                  key={tag}
+                  style={{ display: "inline-block", alignSelf: "flex-start", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", background: cardPale, color: cardGreen, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 20, boxSizing: "border-box" }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+            <ApplicationResumeSection
+              candidate={candidate}
+              resume={resume}
+              authToken={authToken}
+              compact
+            />
+          </div>
           <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${css.borderLight}`, display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
               <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
@@ -45,40 +57,44 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring }
               </p>
               {hasNumericScore(scoring?.normalizedScore) ? (
                 <>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                    <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: scoring?.adminOverride?.overrideScore != null ? "#E24B4A" : cardGreen, lineHeight: 1 }}>
-                      {formatScore(scoring.normalizedScore)}<span style={{ fontSize: 14 }}>%</span>
-                    </p>
-                    {scoring?.adminOverride?.overrideScore != null && (
-                      <span
-                        style={{
-                          fontSize: 9,
-                          fontWeight: 700,
-                          letterSpacing: "0.05em",
-                          textTransform: "uppercase",
-                          padding: "3px 8px",
-                          borderRadius: 20,
-                          background: "rgba(226,75,74,0.12)",
-                          color: "#E24B4A",
-                          border: "1px solid rgba(226,75,74,0.28)",
-                        }}
-                      >
-                        Overridden
-                      </span>
-                    )}
+                  <div style={{ display: "flex", alignItems: "stretch", gap: 13 }}>
+                    <div style={{ minWidth: 48, paddingRight: 13, borderRight: `1px solid ${css.borderLight}` }}>
+                      <p style={{ margin: 0, fontSize: 25, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>
+                        {resumeScreenRank ? `#${resumeScreenRank}` : "—"}
+                      </p>
+                      <p style={{ margin: "5px 0 0", fontSize: 10, color: css.textGray }}>
+                        Rank{candidateCount ? ` of ${candidateCount}` : ""}
+                      </p>
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: scoring?.adminOverride?.overrideScore != null ? "#E24B4A" : cardGreen, lineHeight: 1 }}>
+                        {formatScore(scoring.normalizedScore)}<span style={{ fontSize: 14 }}>%</span>
+                      </p>
+                      <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>Overall average</p>
+                    </div>
                   </div>
-                  <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
-                    {scoring?.adminOverride?.overrideScore != null
-                      ? `Admin override · ${scoring.numReviews} ${scoring.numReviews === 1 ? "review" : "reviews"}`
-                      : `${formatScore(scoring.aggregateScore)} raw pts · ${scoring.numReviews} ${scoring.numReviews === 1 ? "review" : "reviews"}`
-                    }
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: css.textGray, lineHeight: 1.5, whiteSpace: "pre-line" }}>
+                    {formatReviewCountsStacked(scoring)}
                   </p>
                 </>
               ) : (
                 <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>No score yet</p>
               )}
             </div>
-            {UPCOMING_EVALUATION_ROUNDS.map(round => (
+            <div>
+              <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
+                Coffee Chats
+              </p>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+                <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: coffeeChatScore > 0 ? cardGreen : coffeeChatScore < 0 ? "#E24B4A" : css.textGray }}>
+                  {coffeeChatScore} pts
+                </p>
+                <p style={{ margin: 0, fontSize: 11, color: css.textGray }}>
+                  {coffeeChatEvaluationCount} rating{coffeeChatEvaluationCount === 1 ? "" : "s"}
+                </p>
+              </div>
+            </div>
+            {UPCOMING_EVALUATION_ROUNDS.filter((round) => round.id !== "round-2").map(round => (
               <div key={round.id}>
                 <p style={{ margin: "0 0 2px", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: css.textGray, textTransform: "uppercase" }}>
                   {round.label}

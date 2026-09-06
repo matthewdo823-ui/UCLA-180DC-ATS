@@ -239,13 +239,31 @@ function resolveCandidateResumeMax(reviews = [], options = {}) {
 
 function getReviewScoring(review, options = {}) {
   const context = resolveReviewScoringContext(review, options);
-  const score = computeRawScore(review?.scores || {}, context.metrics);
+  const scores = review?.scores || {};
+  const hasScoredMetric = hasReviewScoreValues(review, context.metrics);
+  if (!hasScoredMetric) {
+    return {
+      ...context,
+      score: null,
+      normalizedScore: null,
+    };
+  }
+  const score = computeRawScore(scores, context.metrics);
   const normalizedScore = computeNormalizedFromAggregate(score, context.maxScore);
   return {
     ...context,
     score,
     normalizedScore,
   };
+}
+
+function hasReviewScoreValues(review, metrics = null) {
+  const scores = review?.scores || {};
+  const keys = metrics?.length ? metrics : Object.keys(scores);
+  return keys.some((metric) => {
+    const value = scores[metric];
+    return value !== null && value !== "" && Number.isFinite(Number(value));
+  });
 }
 
 function computeRawScore(scores = {}, metrics = []) {
@@ -290,6 +308,8 @@ function computeReviewNormalizedFromScores(review, options = {}) {
   if (!Object.keys(scores).length) return null;
 
   const context = resolveReviewScoringContext(review, options);
+  const hasScoredMetric = hasReviewScoreValues(review, context.metrics);
+  if (!hasScoredMetric) return null;
   const raw = computeRawScore(scores, context.metrics);
   return computeNormalizedFromAggregate(raw, context.maxScore);
 }
@@ -327,6 +347,7 @@ module.exports = {
   resolveReviewScoringContext,
   resolveCandidateResumeMax,
   getReviewScoring,
+  hasReviewScoreValues,
   computeRawScore,
   computeNormalizedScore,
   getMetricsFromRubricConfig,

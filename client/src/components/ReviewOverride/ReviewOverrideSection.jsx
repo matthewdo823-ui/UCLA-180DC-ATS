@@ -10,7 +10,7 @@ function getReviewerLabel(review, index) {
   return review?.reviewerName || review?.reviewerEmail || `Reviewer ${index + 1}`;
 }
 
-function getReviewRawTotal(review) {
+function getReviewTotal(review) {
   if (Number.isFinite(Number(review?.score))) return Number(review.score);
   return Object.values(review?.scores ?? {}).reduce(
     (sum, value) => sum + (Number(value) || 0),
@@ -18,10 +18,38 @@ function getReviewRawTotal(review) {
   );
 }
 
-function getReviewScoreLabel(review, maxScore) {
-  const total = getReviewRawTotal(review);
-  const max = maxScore || review?.maxScore || Object.keys(review?.scores || {}).length * 4 || 24;
-  return `${formatScore(total)}/${max} pts`;
+function getReviewMaxScore(review, metrics = [], maxPerCategory = 4) {
+  const explicitMax = Number(review?.maxScore);
+  if (Number.isFinite(explicitMax) && explicitMax > 0) return explicitMax;
+
+  const categoryMax = Number(review?.maxPerCategory) || Number(maxPerCategory) || 4;
+  const categoryCount = Object.keys(review?.scores || {}).length || metrics.length;
+  return Math.max(categoryCount, 1) * categoryMax;
+}
+
+function getDisplayReviewMaxScore(review, metrics = [], maxPerCategory = 4) {
+  const displayMetrics = Object.keys(review?.displayScores || {});
+  const categoryCount = displayMetrics.length
+    || (!review?.legacy ? Object.keys(review?.scores || {}).length : 0)
+    || metrics.length;
+  const categoryMax = Number(review?.displayMaxPerCategory)
+    || Number(maxPerCategory)
+    || 4;
+  return Math.max(categoryCount, 1) * categoryMax;
+}
+
+function convertScoreScale(score, fromMax, toMax) {
+  const value = Number(score);
+  const sourceMax = Number(fromMax);
+  const targetMax = Number(toMax);
+  if (!Number.isFinite(value) || !Number.isFinite(sourceMax) || sourceMax <= 0 || !Number.isFinite(targetMax) || targetMax <= 0) {
+    return value;
+  }
+  return Number(((value / sourceMax) * targetMax).toFixed(2));
+}
+
+function getReviewScoreLabel(score, maxScore) {
+  return `${formatScore(score)}/${formatScore(maxScore)} pts`;
 }
 
 function getBaselineTotal(review) {
@@ -71,21 +99,22 @@ export default function ReviewOverrideSection({
     () => (reviews || []).map((review, index) => {
       const override = overrideByReviewId[review.id] || review?.adminOverride;
       const hasOverride = override?.overrideScore != null;
-      const maxScore = review?.maxScore || metrics.length * maxPerCategory;
-      const displayReview = hasOverride
-        ? { ...review, score: override.overrideScore }
-        : review;
+      const sourceMaxScore = getReviewMaxScore(review, metrics, maxPerCategory);
+      const maxScore = getDisplayReviewMaxScore(review, metrics, maxPerCategory);
+      const sourceScore = hasOverride ? Number(override.overrideScore) : getReviewTotal(review);
+      const displayScore = convertScoreScale(sourceScore, sourceMaxScore, maxScore);
 
       return {
         review,
         index,
         label: getReviewerLabel(review, index),
-        scoreLabel: getReviewScoreLabel(displayReview, maxScore),
+        scoreLabel: getReviewScoreLabel(displayScore, maxScore),
         hasOverride,
         maxScore,
+        sourceMaxScore,
       };
     }),
-    [reviews, overrideByReviewId, metrics.length, maxPerCategory]
+    [reviews, overrideByReviewId, metrics, maxPerCategory]
   );
 
   useEffect(() => {
@@ -107,10 +136,17 @@ export default function ReviewOverrideSection({
   useEffect(() => {
     if (!selectedReviewId) return;
     const review = reviews.find(row => row.id === selectedReviewId);
+    const option = reviewOptions.find(row => row.review.id === selectedReviewId);
     const override = overrideByReviewId[selectedReviewId] || review?.adminOverride;
     setNotes(override?.adminNotes || "");
-    setOverrideScore(String(getEffectiveOverrideScore(review, override)));
-  }, [selectedReviewId, reviews, overrideByReviewId]);
+    const sourceScore = getEffectiveOverrideScore(review, override);
+    const displayScore = convertScoreScale(
+      sourceScore,
+      option?.sourceMaxScore,
+      option?.maxScore
+    );
+    setOverrideScore(String(displayScore));
+  }, [selectedReviewId, reviews, reviewOptions, overrideByReviewId]);
 
   const selectedReview = reviews.find(row => row.id === selectedReviewId);
   const selectedOption = reviewOptions.find(opt => opt.review.id === selectedReviewId);
@@ -119,20 +155,31 @@ export default function ReviewOverrideSection({
     : null;
   const isOverridden = activeOverride?.overrideScore != null;
   const baselineTotal = selectedReview ? getBaselineTotal(selectedReview) : 0;
-  const maxScore = selectedOption?.maxScore || selectedReview?.maxScore || metrics.length * maxPerCategory || 24;
+  const maxScore = selectedOption?.maxScore || getDisplayReviewMaxScore(selectedReview, metrics, maxPerCategory);
+  const sourceMaxScore = selectedOption?.sourceMaxScore || getReviewMaxScore(selectedReview, metrics, maxPerCategory);
+  const displayBaselineTotal = convertScoreScale(baselineTotal, sourceMaxScore, maxScore);
   const parsedOverrideScore = Number(overrideScore);
-  const effectiveOverrideScore = getEffectiveOverrideScore(selectedReview, activeOverride);
+  const effectiveOverrideScore = convertScoreScale(
+    getEffectiveOverrideScore(selectedReview, activeOverride),
+    sourceMaxScore,
+    maxScore
+  );
+  const overrideScoreIsValid = Number.isFinite(parsedOverrideScore)
+    && parsedOverrideScore >= 0
+    && parsedOverrideScore <= maxScore;
 
   const hasChanges =
     notes !== (activeOverride?.adminNotes || "") ||
-    (Number.isFinite(parsedOverrideScore) && parsedOverrideScore !== effectiveOverrideScore);
+    (overrideScoreIsValid && parsedOverrideScore !== effectiveOverrideScore);
+  const canSave = hasChanges && !savingReviewId && overrideScoreIsValid;
 
   const handleSave = async () => {
-    if (!selectedReviewId || !Number.isFinite(parsedOverrideScore)) return;
+    if (!selectedReviewId || !overrideScoreIsValid) return;
+    const sourceOverrideScore = convertScoreScale(parsedOverrideScore, maxScore, sourceMaxScore);
     const result = await save({
       reviewId: selectedReviewId,
       adminNotes: notes,
-      overrideScore: parsedOverrideScore,
+      overrideScore: sourceOverrideScore,
     });
     if (result !== null && onOverrideSaved) {
       onOverrideSaved(result);
@@ -142,7 +189,7 @@ export default function ReviewOverrideSection({
   const handleUndo = async () => {
     if (!selectedReviewId) return;
     setNotes("");
-    setOverrideScore(String(baselineTotal));
+    setOverrideScore(String(displayBaselineTotal));
     const result = await save({
       reviewId: selectedReviewId,
       adminNotes: "",
@@ -247,7 +294,7 @@ export default function ReviewOverrideSection({
               color: css.textGray,
             }}
           >
-            Total score (0–{maxScore} pts)
+            Resume score (0–{maxScore} pts)
           </label>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <input
@@ -278,7 +325,12 @@ export default function ReviewOverrideSection({
 
           {isOverridden ? (
             <p style={{ margin: "10px 0 0", fontSize: 11, color: "#E24B4A", fontWeight: 600 }}>
-              Original: {formatScore(baselineTotal)}/{maxScore} pts
+              Original: {formatScore(displayBaselineTotal)}/{maxScore} pts
+            </p>
+          ) : null}
+          {selectedReview?.legacy ? (
+            <p style={{ margin: "10px 0 0", fontSize: 11, color: css.textGray, lineHeight: 1.45 }}>
+              Converted from the historical {formatScore(sourceMaxScore)}-point rubric to the current {formatScore(maxScore)}-point resume scale. Free response is scored separately out of 4 points.
             </p>
           ) : null}
         </div>
@@ -325,16 +377,16 @@ export default function ReviewOverrideSection({
           <button
             type="button"
             onClick={handleSave}
-            disabled={!hasChanges || Boolean(savingReviewId) || !Number.isFinite(parsedOverrideScore)}
+            disabled={!canSave}
             style={{
               padding: "8px 18px",
               borderRadius: 8,
               border: "none",
-              background: hasChanges && !savingReviewId ? cardGreen : css.borderLight,
-              color: hasChanges && !savingReviewId ? cardPale : css.textGray,
+              background: canSave ? cardGreen : css.borderLight,
+              color: canSave ? cardPale : css.textGray,
               fontSize: 13,
               fontWeight: 700,
-              cursor: hasChanges && !savingReviewId ? "pointer" : "default",
+              cursor: canSave ? "pointer" : "default",
             }}
           >
             {savingReviewId === selectedReviewId ? "Saving…" : "Save override"}

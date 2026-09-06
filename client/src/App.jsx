@@ -103,9 +103,17 @@ function AppShell() {
               }
             />
             <Route
+              path="/candidates/:candidateId"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "member"]}>
+                  <CandidateApplicationPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/scoreboard/:candidateId/application"
               element={
-                <ProtectedRoute allowedRoles={["admin"]}>
+                <ProtectedRoute allowedRoles={["admin", "member"]}>
                   <CandidateApplicationPage />
                 </ProtectedRoute>
               }

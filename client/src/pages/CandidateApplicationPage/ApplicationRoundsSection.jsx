@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { css } from "../../theme/colors";
-import { formatDate, formatScore, titleCase } from "../../utils/format";
+import { coffeeRatingColors, css } from "../../theme/colors";
+import { formatDate, formatScore, hasNumericScore, titleCase } from "../../utils/format";
 import { hasText } from "./applicationUtils";
 import CategoryRow from "./components/CategoryRow";
 import DecisionBadge from "./components/DecisionBadge";
@@ -43,17 +43,15 @@ function Tag({ label, color, bg }) {
 function AggregateScoreRow({ scoring, expanded, onToggle }) {
   const hasResumeReviews = (scoring?.numReviews ?? 0) > 0;
   const hasFrqReviews = (scoring?.numFrqReviews ?? scoring?.frqReviews?.length ?? 0) > 0;
-  const max = scoring?.compositeMax ?? scoring?.resumeMax;
 
   return (
     <button type="button" onClick={onToggle} style={{ ...unstyledButton, padding: "4px 0 18px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, textAlign: "left" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
           <p style={{ margin: 0, fontSize: 30, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>
-            {formatScore(scoring.aggregateScore)}
-            {max != null && <span style={{ fontSize: 16, fontWeight: 600, color: css.textGray }}>/{formatScore(max)}</span>}
+            {hasNumericScore(scoring.normalizedScore) ? `${formatScore(scoring.normalizedScore)}%` : "—"}
           </p>
-          <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>aggregate score</p>
+          <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>overall average</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <p style={{ margin: 0, fontSize: 13, color: css.textGray, textAlign: "right" }}>
@@ -87,7 +85,7 @@ function ReviewRow({ review, expanded, onToggle, maxPerCategory, isFirst }) {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
         <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: reviewOverridden ? "#E24B4A" : cardGreen, whiteSpace: "nowrap" }}>
-          {formatScore(review.score)}{review.maxScore != null ? `/${formatScore(review.maxScore)}` : ""}
+          {hasNumericScore(review.normalizedScore) ? `${formatScore(review.normalizedScore)}%` : "—"}
         </p>
         {hasBreakdown && <Chevron expanded={expanded} />}
       </div>
@@ -130,12 +128,55 @@ function FrqReviewRow({ review, isFirst }) {
           </span>
         </div>
         <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: cardGreen, whiteSpace: "nowrap" }}>
-          {formatScore(review.score)}/4
+          {hasNumericScore(review.normalizedScore)
+            ? formatScore(review.normalizedScore)
+            : formatScore(Number(review.score) / 4 * 100)}%
         </p>
       </div>
       {hasText(review.notes) && (
         <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.6, color: css.textDark, whiteSpace: "pre-wrap" }}>
           {review.notes.trim()}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const COFFEE_RATING_LABELS = {
+  strong_yes: "Strong yes",
+  yes: "Yes",
+  no: "No",
+  strong_no: "Strong no",
+};
+
+function InterviewEvaluationRow({ evaluation, isFirst, round }) {
+  const score = Number(evaluation.weightedScore);
+  const isCoffeeChat = round?.roundType === "coffee_chat" || Boolean(COFFEE_RATING_LABELS[evaluation.rating]);
+  const scoreColor = isCoffeeChat
+    ? coffeeRatingColors[evaluation.rating] || (score > 0 ? cardGreen : score < 0 ? css.red : css.textGray)
+    : evaluation.decision === "pass" ? cardGreen : evaluation.decision === "fail" ? css.red : evaluation.decision === "hold" ? css.amber : css.textGray;
+  const resultLabel = isCoffeeChat
+    ? COFFEE_RATING_LABELS[evaluation.rating] || "Submitted"
+    : titleCase(evaluation.decision || "submitted");
+
+  return (
+    <div style={{ borderTop: isFirst ? "none" : `1px solid ${css.borderLight}`, padding: "16px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: css.textDark }}>
+            {evaluation.reviewerName || evaluation.reviewerEmail || `${round?.roundName || "Interview"} evaluator`}
+          </p>
+          <span style={{ fontSize: 12, color: css.textGray }}>
+            {formatDate(evaluation.submittedAt, { style: "short" })}
+          </span>
+        </div>
+        <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: scoreColor, whiteSpace: "nowrap" }}>
+          {resultLabel}
+        </p>
+      </div>
+      {hasText(evaluation.notes) && (
+        <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.6, color: css.textDark, whiteSpace: "pre-wrap" }}>
+          {evaluation.notes.trim()}
         </p>
       )}
     </div>
@@ -152,6 +193,8 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
   const isOverridden = scoring?.adminOverride?.overrideScore != null;
   const resumeReviews = scoring?.reviews || [];
   const frqReviews = scoring?.frqReviews || [];
+  const coffeeChatEvaluations = scoring?.coffeeChatEvaluations || [];
+  const roundGrades = scoring?.roundGrades || [];
 
   return (
     <SectionCard title="Rounds">
@@ -229,8 +272,11 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
           )}
         </div>
 
-        {UPCOMING_EVALUATION_ROUNDS.map((round) => (
-          <div key={round.id} style={{ borderTop: `1px solid ${css.borderLight}`, paddingTop: 20 }}>
+        {UPCOMING_EVALUATION_ROUNDS.map((round, roundIndex) => {
+          const roundGrade = roundGrades.find((entry) => entry.roundType === round.type);
+          const evaluations = roundGrade?.evaluations || (roundIndex === 0 ? coffeeChatEvaluations : []);
+          return (
+          <div key={roundGrade?.roundId || round.id} style={{ borderTop: `1px solid ${css.borderLight}`, paddingTop: 20 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
               <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: css.textDark }}>{round.label}</p>
               <span
@@ -241,18 +287,33 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
                   textTransform: "uppercase",
                   padding: "4px 9px",
                   borderRadius: 20,
-                  background: "rgba(0,0,0,0.04)",
+                  background: css.surfaceMuted,
                   color: css.textGray,
                 }}
               >
-                Upcoming
+                {evaluations.length ? titleCase(roundGrade?.roundStatus || "in progress") : "Upcoming"}
               </span>
             </div>
-            <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
-              Scoring and feedback for this round will appear here once evaluations begin.
-            </p>
+            {evaluations.length ? (
+              <>
+                <p style={{ margin: "0 0 2px", fontSize: 13, color: css.textGray }}>
+                  {roundIndex === 0 ? `${formatScore(scoring.coffeeChatScore || 0)} points from ` : ""}{evaluations.length}
+                  {roundIndex === 0 && Number.isFinite(scoring.coffeeChatExpectedEvaluationCount) ? ` / ${scoring.coffeeChatExpectedEvaluationCount}` : ""} {evaluations.length === 1 ? "rating" : "ratings"}
+                </p>
+                <div>
+                  {evaluations.map((evaluation, index) => (
+                    <InterviewEvaluationRow key={evaluation.id} evaluation={evaluation} isFirst={index === 0} round={roundGrade} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
+                Scoring and feedback for this round will appear here once evaluations begin.
+              </p>
+            )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </SectionCard>
   );

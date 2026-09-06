@@ -40,7 +40,26 @@ function collectFrqEntries(candidates) {
   return entries;
 }
 
-function buildGraderMetricStats(entries, metrics) {
+function getMetricMax(review, fallbackMax = 4) {
+  const explicitCategoryMax = Number(review?.maxPerCategory);
+  if (Number.isFinite(explicitCategoryMax) && explicitCategoryMax > 0) return explicitCategoryMax;
+
+  const metricCount = Object.keys(review?.scores || {}).length;
+  const totalMax = Number(review?.maxScore);
+  if (metricCount > 0 && Number.isFinite(totalMax) && totalMax > 0) {
+    return totalMax / metricCount;
+  }
+  return fallbackMax;
+}
+
+function normalizeMetricValue(value, review, fallbackMax) {
+  const raw = Number(value);
+  const max = getMetricMax(review, fallbackMax);
+  if (!Number.isFinite(raw) || !Number.isFinite(max) || max <= 0) return null;
+  return raw / max;
+}
+
+function buildGraderMetricStats(entries, metrics, maxPerCategory) {
   const buckets = {};
 
   entries.forEach(({ review }) => {
@@ -48,7 +67,7 @@ function buildGraderMetricStats(entries, metrics) {
     if (!buckets[graderKey]) buckets[graderKey] = {};
 
     metrics.forEach(metric => {
-      const value = Number(review.scores?.[metric]);
+      const value = normalizeMetricValue(review.scores?.[metric], review, maxPerCategory);
       if (!Number.isFinite(value)) return;
       if (!buckets[graderKey][metric]) buckets[graderKey][metric] = [];
       buckets[graderKey][metric].push(value);
@@ -71,12 +90,12 @@ function buildGraderMetricStats(entries, metrics) {
   return stats;
 }
 
-function buildGlobalMetricStats(entries, metrics) {
+function buildGlobalMetricStats(entries, metrics, maxPerCategory) {
   const stats = {};
 
   metrics.forEach(metric => {
     const values = entries
-      .map(({ review }) => Number(review.scores?.[metric]))
+      .map(({ review }) => normalizeMetricValue(review.scores?.[metric], review, maxPerCategory))
       .filter(value => Number.isFinite(value));
 
     const metricMean = mean(values);
@@ -98,22 +117,23 @@ function equalizeMetricScore(raw, graderStat, globalStat) {
 
   const z = (raw - graderStat.mean) / graderStat.std;
   const adjusted = globalStat.mean + z * globalStat.std;
-  return Number(adjusted.toFixed(2));
+  return Number(Math.max(0, Math.min(1, adjusted)).toFixed(4));
 }
 
-function equalizeReviewScores(review, graderStats, globalStats) {
+function equalizeReviewScores(review, graderStats, globalStats, maxPerCategory) {
   const graderKey = getGraderKey(review);
   const graderMetricStats = graderStats[graderKey] || {};
   const adjusted = {};
 
   Object.entries(review.scores || {}).forEach(([metric, raw]) => {
-    const numericRaw = Number(raw);
-    if (!Number.isFinite(numericRaw)) return;
-    adjusted[metric] = equalizeMetricScore(
-      numericRaw,
+    const normalizedRaw = normalizeMetricValue(raw, review, maxPerCategory);
+    if (!Number.isFinite(normalizedRaw)) return;
+    const normalizedAdjusted = equalizeMetricScore(
+      normalizedRaw,
       graderMetricStats[metric],
       globalStats[metric]
     );
+    adjusted[metric] = Number((normalizedAdjusted * getMetricMax(review, maxPerCategory)).toFixed(2));
   });
 
   return adjusted;
@@ -163,18 +183,25 @@ function averageFrqScore(frqReviews = []) {
   return Number((sum / frqReviews.length).toFixed(1));
 }
 
-function applyCompositeFromParts(candidate, resumeAggregateScore, resumeNormalizedScore, frqReviews) {
+function applyCompositeFromParts(candidate, resumeAggregateScore, resumePossibleScore, resumeNormalizedScore, frqReviews) {
   const frqAvg = averageFrqScore(frqReviews);
   const frqPending = !frqReviews.length;
-  const resumeMax = Number(candidate.compositeMax) - (frqPending ? 0 : FRQ_MAX_SCORE);
-  const compositeMax = frqPending ? resumeMax : resumeMax + FRQ_MAX_SCORE;
+  const resumeMax = Number(resumePossibleScore);
+  const hasResumeScore = Number.isFinite(Number(resumeAggregateScore));
+  const hasResumeMax = Number.isFinite(resumeMax) && resumeMax > 0;
+  let compositeMax = hasResumeMax ? resumeMax : null;
 
   let aggregateScore = resumeAggregateScore;
   let normalizedScore = resumeNormalizedScore;
 
-  if (frqAvg != null && resumeAggregateScore != null) {
+  if (frqAvg != null && hasResumeScore && hasResumeMax) {
     aggregateScore = Number((resumeAggregateScore + frqAvg).toFixed(1));
+    compositeMax = resumeMax + FRQ_MAX_SCORE;
     normalizedScore = Number(Math.min(100, (aggregateScore / compositeMax) * 100).toFixed(1));
+  } else if (frqAvg != null && !hasResumeScore) {
+    aggregateScore = frqAvg;
+    compositeMax = FRQ_MAX_SCORE;
+    normalizedScore = Number(Math.min(100, (frqAvg / FRQ_MAX_SCORE) * 100).toFixed(1));
   }
 
   return {
@@ -189,7 +216,7 @@ function applyCompositeFromParts(candidate, resumeAggregateScore, resumeNormaliz
 
 function equalizeFrqReviews(frqReviews, graderStats, globalStats) {
   return (frqReviews || []).map(review => {
-    const adjustedScores = equalizeReviewScores(review, graderStats, globalStats);
+    const adjustedScores = equalizeReviewScores(review, graderStats, globalStats, FRQ_MAX_SCORE);
     const adjustedScore = adjustedScores[FRQ_METRIC];
     const numericScore = Number.isFinite(adjustedScore) ? adjustedScore : Number(review.score);
     return {
@@ -208,9 +235,14 @@ function equalizeFrqReviews(frqReviews, graderStats, globalStats) {
  * Resume categories and FRQ grades are equalized separately, then merged into composite scores.
  */
 export function equalizeCandidateScores(candidates, { metrics = [], maxPerCategory = 4 } = {}) {
-  const metricList = metrics.length
-    ? metrics
-    : [...new Set((candidates || []).flatMap(c => Object.keys(c.categoryScores || {})))];
+  const reviewMetrics = (candidates || []).flatMap((candidate) =>
+    (candidate.reviews || []).flatMap((review) => Object.keys(review.scores || {}))
+  );
+  const metricList = [...new Set([
+    ...metrics,
+    ...reviewMetrics,
+    ...(candidates || []).flatMap(c => Object.keys(c.categoryScores || {})),
+  ])];
 
   const resumeMetrics = metricList.filter(metric => metric !== FRQ_METRIC);
   const resumeEntries = collectReviewEntries(candidates);
@@ -219,17 +251,17 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
   if (!resumeEntries.length && !frqEntries.length) return candidates || [];
 
   const resumeGraderStats = resumeEntries.length
-    ? buildGraderMetricStats(resumeEntries, resumeMetrics)
+    ? buildGraderMetricStats(resumeEntries, resumeMetrics, maxPerCategory)
     : {};
   const resumeGlobalStats = resumeEntries.length
-    ? buildGlobalMetricStats(resumeEntries, resumeMetrics)
+    ? buildGlobalMetricStats(resumeEntries, resumeMetrics, maxPerCategory)
     : {};
 
   const frqGraderStats = frqEntries.length
-    ? buildGraderMetricStats(frqEntries, [FRQ_METRIC])
+    ? buildGraderMetricStats(frqEntries, [FRQ_METRIC], FRQ_MAX_SCORE)
     : {};
   const frqGlobalStats = frqEntries.length
-    ? buildGlobalMetricStats(frqEntries, [FRQ_METRIC])
+    ? buildGlobalMetricStats(frqEntries, [FRQ_METRIC], FRQ_MAX_SCORE)
     : {};
 
   return (candidates || []).map(candidate => {
@@ -237,20 +269,25 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
     const frqReviews = candidate.frqReviews || [];
 
     let resumeAggregateScore = null;
+    let resumePossibleScore = null;
     let resumeNormalizedScore = null;
     let equalizedReviews = reviews;
     let equalizedFrqReviews = frqReviews;
 
     if (reviews.length && resumeMetrics.length) {
       let totalRaw = 0;
+      let totalPossible = 0;
       let reviewCount = 0;
 
       equalizedReviews = reviews.map(review => {
-        const adjustedScores = equalizeReviewScores(review, resumeGraderStats, resumeGlobalStats);
+        const adjustedScores = equalizeReviewScores(review, resumeGraderStats, resumeGlobalStats, maxPerCategory);
         const rawScore = computeRawScore(adjustedScores, Object.keys(adjustedScores));
+        const reviewMax = Number(review?.maxScore)
+          || Object.keys(adjustedScores).length * getMetricMax(review, maxPerCategory);
 
-        if (Number.isFinite(rawScore)) {
+        if (Number.isFinite(rawScore) && Number.isFinite(reviewMax) && reviewMax > 0) {
           totalRaw += rawScore;
+          totalPossible += reviewMax;
           reviewCount += 1;
         }
 
@@ -266,13 +303,13 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
       });
 
       resumeAggregateScore = reviewCount > 0 ? Number((totalRaw / reviewCount).toFixed(1)) : null;
-      const resumeMax = Number(candidate.compositeMax) - (frqReviews.length ? FRQ_MAX_SCORE : 0)
-        || resumeMetrics.length * maxPerCategory;
-      resumeNormalizedScore = resumeAggregateScore != null && resumeMax > 0
-        ? Number(((resumeAggregateScore / resumeMax) * 100).toFixed(1))
+      resumePossibleScore = reviewCount > 0 ? Number((totalPossible / reviewCount).toFixed(1)) : null;
+      resumeNormalizedScore = totalPossible > 0
+        ? Number(((totalRaw / totalPossible) * 100).toFixed(1))
         : null;
     } else if (reviews.length) {
       resumeAggregateScore = candidate.resumeAggregateScore ?? candidate.aggregateScore ?? null;
+      resumePossibleScore = candidate.resumePossiblePoints ?? candidate.resumeMax ?? null;
       resumeNormalizedScore = candidate.resumeNormalizedScore ?? candidate.normalizedScore ?? null;
     }
 
@@ -283,6 +320,7 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
     const composite = applyCompositeFromParts(
       candidate,
       resumeAggregateScore ?? candidate.resumeAggregateScore ?? candidate.aggregateScore,
+      resumePossibleScore ?? candidate.resumePossiblePoints ?? candidate.resumeMax,
       resumeNormalizedScore ?? candidate.resumeNormalizedScore ?? candidate.normalizedScore,
       equalizedFrqReviews
     );
@@ -296,6 +334,9 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
       reviews: equalizedReviews,
       frqReviews: equalizedFrqReviews,
       resumeAggregateScore,
+      resumeMax: resumePossibleScore,
+      resumeEarnedPoints: resumeAggregateScore,
+      resumePossiblePoints: resumePossibleScore,
       resumeNormalizedScore,
       aggregateScore: composite.aggregateScore,
       normalizedScore: composite.normalizedScore,
@@ -303,6 +344,8 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
       frqScore: composite.frqScore,
       frqPending: composite.frqPending,
       compositeMax: composite.compositeMax,
+      earnedPoints: composite.aggregateScore,
+      possiblePoints: composite.compositeMax,
       score: composite.score,
       sourceNormalizedScore: candidate.normalizedScore ?? candidate.score ?? null,
       sourceAggregateScore: candidate.aggregateScore ?? null,

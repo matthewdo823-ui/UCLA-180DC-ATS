@@ -3,6 +3,7 @@ import logo180 from "@images/180logo.webp";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { css } from "../../theme/colors";
 import { formatDate } from "../../utils/format";
+import { formatReviewCount } from "../../utils/reviewCounts";
 import useGraderDashboard from "./useGraderDashboard";
 import {
   pageStyle,
@@ -10,6 +11,7 @@ import {
   ProgressBar,
   PrimaryButton,
   StatCard,
+  CoffeeChatPersonalStats,
 } from "./dashboardComponents";
 
 function relativeLastActivity(iso) {
@@ -41,12 +43,13 @@ export default function GraderDashboard() {
   const progressPct = personal?.progressPct ?? 0;
   const goalComplete = personal?.goalComplete;
   const lastActivity = relativeLastActivity(personal?.lastActivityAt);
+  const coffeeChatMode = personal?.ratingMode === "coffee_chat";
 
   const goalLabel = isInterview
     ? goal > 0
       ? `Evaluate ${goal} candidate${goal === 1 ? "" : "s"} in ${activeRound?.name || "this round"}`
       : "No candidates in your interview queue"
-    : `Grade ${goal} resume${goal === 1 ? "" : "s"}`;
+    : `Complete ${formatReviewCount(goal, "resume")}`;
 
   const statusMessage = goalComplete
     ? "Goal complete — thank you!"
@@ -60,7 +63,7 @@ export default function GraderDashboard() {
 
   return (
     <div style={pageStyle}>
-      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+      <div style={{ maxWidth: coffeeChatMode ? 1200 : 720, width: "100%", margin: "0 auto" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: 32 }}>
           <img
             src={logo180}
@@ -102,7 +105,7 @@ export default function GraderDashboard() {
             <div>
               <span style={{ fontSize: 13, color: css.textGray, fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
                 <span>{isInterview ? "📅" : "⭐"}</span>
-                {isInterview ? "Your interview progress" : "Your grading goal"}
+                {isInterview ? "Your interview progress" : "Your resume-review goal"}
               </span>
               <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>
                 {loading ? "Loading…" : activeRound ? goalLabel : "No active round"}
@@ -119,7 +122,7 @@ export default function GraderDashboard() {
               ) : null}
             </div>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 12, color: css.textGray, fontWeight: 500 }}>Progress</div>
+              <div style={{ fontSize: 12, color: css.textGray, fontWeight: 500 }}>{isInterview ? "Progress" : formatReviewCount(count, "resume")}</div>
               <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>
                 {loading ? "—" : goal > 0 ? `${count}/${goal}` : count}
               </div>
@@ -141,9 +144,13 @@ export default function GraderDashboard() {
           </div>
         </div>
 
-        {isInterview && personal?.breakdown && !loading ? (
+        {isInterview && personal?.ratingMode === "coffee_chat" && personal?.breakdown && !loading ? (
+          <Panel title="Your Coffee Chat grading">
+            <CoffeeChatPersonalStats total={personal.expectedReviews} graded={personal.count} breakdown={personal.breakdown} />
+          </Panel>
+        ) : isInterview && personal?.breakdown && !loading ? (
           <Panel title="Your evaluations">
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
               {[
                 ["Pass", personal.breakdown.pass, css.green],
                 ["Fail", personal.breakdown.fail, css.red],
@@ -159,7 +166,7 @@ export default function GraderDashboard() {
         <Panel title="Quick links">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
             {[
-              { label: "Past reviews", path: gradingPath, icon: "📋", desc: "View and edit your submissions", state: { openPastQueue: true } },
+              { label: "Past resume reviews", path: gradingPath, icon: "📋", desc: "View and edit your resume reviews", state: { openPastQueue: true } },
               { label: "Scoreboard", path: "/scoreboard", icon: "📊", desc: "See ranked candidates" },
               { label: "Demographics", path: "/demographics", icon: "📈", desc: "Pipeline diversity overview" },
             ].map((link) => (
