@@ -19,6 +19,7 @@ const {
   isResumeScreenType,
   sortRounds,
 } = require("../utils/rounds");
+const { hasReviewScoreValues } = require("../utils/rubric");
 
 function mapScoreboardRoundContext(row) {
   if (!row) return null;
@@ -129,14 +130,14 @@ async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRo
 
   const { data: reviews, error: reviewError } = await supabase
     .from("resume_reviews")
-    .select("resume_id")
+    .select("resume_id, scores")
     .eq("cycle_id", cycleId)
     .eq("round_id", resumeRound.id);
 
   if (reviewError) throw reviewError;
 
   const reviewCountByResume = {};
-  (reviews || []).forEach((review) => {
+  (reviews || []).filter(hasReviewScoreValues).forEach((review) => {
     reviewCountByResume[review.resume_id] = (reviewCountByResume[review.resume_id] || 0) + 1;
   });
 

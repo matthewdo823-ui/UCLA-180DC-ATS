@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
@@ -17,7 +18,8 @@ import {
 } from "../../utils/rubric";
 import { formatDate } from "../../utils/format";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
-import { formatRoundTypeLabel, isResumeScreenType } from "../../constants/rounds";
+import { ROUND_TYPES, formatRoundTypeLabel, isResumeScreenType, normalizeRoundType } from "../../constants/rounds";
+import { formatReviewCountPair } from "../../utils/reviewCounts";
 
 const CYCLE_STATUS_STYLE = {
   active: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
@@ -544,13 +546,15 @@ function RubricEditor({ draft, onChange, error }) {
   );
 }
 
-function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric, onSaveAutoDecisions }) {
+function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onSaveRubric, onSaveAutoDecisions, onAssignInterviewGroups }) {
+  const [expanded, setExpanded] = useState(round.status !== "closed");
   const [editingRubric, setEditingRubric] = useState(false);
   const [rubricDraft, setRubricDraft] = useState(() => cloneRubricConfig(round.rubricConfig));
   const [rubricError, setRubricError] = useState("");
   const [autoAdvancePercent, setAutoAdvancePercent] = useState(round.autoAdvancePercent ?? 0);
   const [autoRejectPercent, setAutoRejectPercent] = useState(round.autoRejectPercent ?? 0);
   const [autoDecisionError, setAutoDecisionError] = useState("");
+  const [interviewGroupCount, setInterviewGroupCount] = useState(round.interviewGroupCount || 1);
 
   useEffect(() => {
     if (!editingRubric) {
@@ -565,7 +569,56 @@ function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric, onSa
     setAutoDecisionError("");
   }, [round.autoAdvancePercent, round.autoRejectPercent]);
 
+  useEffect(() => {
+    setInterviewGroupCount(round.interviewGroupCount || 1);
+  }, [round.interviewGroupCount]);
+
+  useEffect(() => {
+    setExpanded(round.status !== "closed");
+    if (round.status === "closed") setEditingRubric(false);
+  }, [round.status]);
+
   const isResumeRound = isResumeScreenType(round.type);
+  const isCoffeeChatRound = normalizeRoundType(round.type) === ROUND_TYPES.COFFEE_CHAT;
+  const isClosed = round.status === "closed";
+  const sortedRounds = [...(cycle.rounds || [])].sort((a, b) => a.sortOrder - b.sortOrder);
+  const roundIndex = sortedRounds.findIndex((candidateRound) => candidateRound.id === round.id);
+  const priorRound = roundIndex > 0 ? sortedRounds[roundIndex - 1] : null;
+  const interviewCandidateCount = isCoffeeChatRound
+    ? interviewPool?.roundId === round.id
+      ? interviewPool.candidateCount
+      : Number(priorRound?.decisionCounts?.advance) || 0
+    : 0;
+  const numericGroupCount = Number(interviewGroupCount);
+  const validGroupCount = Number.isInteger(numericGroupCount)
+    && numericGroupCount >= 1
+    && numericGroupCount <= Math.max(1, interviewCandidateCount);
+  const smallerTableSize = validGroupCount ? Math.floor(interviewCandidateCount / numericGroupCount) : 0;
+  const largerTableCount = validGroupCount ? interviewCandidateCount % numericGroupCount : 0;
+  const smallerTableCount = validGroupCount ? numericGroupCount - largerTableCount : 0;
+  const tableDistribution = !interviewCandidateCount
+    ? "No candidates have advanced into Coffee Chats yet."
+    : !validGroupCount
+      ? `Choose between 1 and ${interviewCandidateCount} tables.`
+      : largerTableCount === 0
+        ? `${smallerTableSize} candidate${smallerTableSize === 1 ? "" : "s"} per table.`
+        : `${largerTableCount} table${largerTableCount === 1 ? "" : "s"} of ${smallerTableSize + 1} · ${smallerTableCount} table${smallerTableCount === 1 ? "" : "s"} of ${smallerTableSize}.`;
+  const roundActions = (
+    <>
+      {round.status !== "active" ? (
+        <ActionButton label="Activate round" onClick={() => onActivate(round.id)} disabled={busy || cycle.status !== "active"} variant="primary" />
+      ) : (
+        <ActionButton label="Close round" onClick={() => onClose(round.id)} disabled={busy} variant="danger" />
+      )}
+      {isResumeRound ? (
+        <ActionButton
+          label={editingRubric ? "Cancel edit" : "Edit rubric"}
+          onClick={() => setEditingRubric((v) => !v)}
+          disabled={busy}
+        />
+      ) : null}
+    </>
+  );
 
   return (
     <div style={{
@@ -585,31 +638,68 @@ function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric, onSa
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {round.status !== "active" ? (
-            <ActionButton label="Activate round" onClick={() => onActivate(round.id)} disabled={busy || cycle.status !== "active"} variant="primary" />
-          ) : (
-            <ActionButton label="Close round" onClick={() => onClose(round.id)} disabled={busy} variant="danger" />
-          )}
-          {isResumeRound ? (
+          {isClosed ? (
             <ActionButton
-              label={editingRubric ? "Cancel edit" : "Edit rubric"}
-              onClick={() => setEditingRubric((v) => !v)}
+              label={expanded ? "Hide details ↑" : "Show details ↓"}
+              onClick={() => setExpanded((value) => !value)}
               disabled={busy}
             />
-          ) : null}
+          ) : roundActions}
         </div>
       </div>
 
-      {isResumeRound && !editingRubric && round.rubricConfig ? (
+      {expanded && isClosed ? (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 14, paddingTop: 14, borderTop: `1px solid ${css.borderLight}` }}>
+          {roundActions}
+        </div>
+      ) : null}
+
+      {expanded && isResumeRound && !editingRubric && round.rubricConfig ? (
         <p style={{ margin: "12px 0 0", fontSize: 12, color: css.textGray }}>
           Rubric configured for {RUBRIC_YEAR_KEYS.length} year groups · max {round.rubricConfig.maxPerCategory ?? 4} per category
         </p>
       ) : null}
 
-      <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${css.borderLight}` }}>
+      {expanded && isCoffeeChatRound ? (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${css.borderLight}` }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: css.textDark }}>Coffee Chat tables</div>
+          <p style={{ margin: "4px 0 10px", fontSize: 12, color: css.textGray, lineHeight: 1.4 }}>
+            Randomly divide every candidate advanced into this round. Running the split again replaces table assignments but keeps submitted ratings.
+          </p>
+          <div style={{ display: "flex", alignItems: "flex-end", flexWrap: "wrap", gap: 10 }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, fontWeight: 700, color: css.textGray }}>
+              Number of tables
+              <input
+                type="number"
+                min="1"
+                max={Math.max(1, interviewCandidateCount)}
+                step="1"
+                value={interviewGroupCount}
+                onChange={(event) => setInterviewGroupCount(event.target.value)}
+                disabled={busy || round.status !== "active"}
+                style={{ width: 110, padding: "7px 8px", border: `1px solid ${css.borderLight}`, borderRadius: 6 }}
+              />
+            </label>
+            <ActionButton
+              label={round.interviewGroupCount > 1
+                ? `Randomize ${interviewCandidateCount} candidates into ${validGroupCount ? numericGroupCount : "—"} tables`
+                : `Split ${interviewCandidateCount} candidates into ${validGroupCount ? numericGroupCount : "—"} tables`}
+              variant="primary"
+              disabled={busy || round.status !== "active" || !interviewCandidateCount || !validGroupCount}
+              onClick={() => onAssignInterviewGroups(round.id, numericGroupCount, round.interviewGroupCount > 1)}
+            />
+            {round.status !== "active" ? <span style={{ fontSize: 12, color: css.textGray }}>Activate Coffee Chats before creating tables.</span> : null}
+          </div>
+          <p style={{ margin: "9px 0 0", fontSize: 12, fontWeight: 600, color: validGroupCount ? css.greenDark : css.textGray }}>
+            {tableDistribution}
+          </p>
+        </div>
+      ) : null}
+
+      {expanded ? <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${css.borderLight}` }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: css.textDark }}>Deliberation auto-decisions</div>
         <p style={{ margin: "4px 0 10px", fontSize: 12, color: css.textGray, lineHeight: 1.4 }}>
-          In deliberation, pending candidates in the top and bottom portions of the equalized-score ranking are automatically marked Advance and Reject.
+          Configure rank cutoffs here, then use <strong>Apply cutoffs</strong> in scoreboard deliberation. Existing manual decisions are never replaced.
         </p>
         <div style={{ display: "flex", alignItems: "flex-end", flexWrap: "wrap", gap: 10 }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, fontWeight: 700, color: css.textGray }}>
@@ -635,9 +725,9 @@ function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric, onSa
           }} />
         </div>
         {autoDecisionError ? <p style={{ margin: "8px 0 0", fontSize: 12, color: css.red }}>{autoDecisionError}</p> : null}
-      </div>
+      </div> : null}
 
-      {isResumeRound && editingRubric ? (
+      {expanded && isResumeRound && editingRubric ? (
         <div style={{ marginTop: 14 }}>
           <RubricEditor
             draft={rubricDraft}
@@ -677,7 +767,7 @@ function RoundCard({ round, cycle, busy, onActivate, onClose, onSaveRubric, onSa
   );
 }
 
-function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, onActivateRound, onCloseRound, onSaveRubric, onSaveAutoDecisions }) {
+function CycleCard({ cycle, busy, authedFetch, interviewPool, onReload, onActivate, onArchive, onActivateRound, onCloseRound, onSaveRubric, onSaveAutoDecisions, onAssignInterviewGroups }) {
   const [expanded, setExpanded] = useState(cycle.isActive);
 
   return (
@@ -704,7 +794,7 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
               Slug: {cycle.slug} · Created {formatDate(cycle.createdAt, { style: "short" })}
             </p>
             <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
-              {cycle.counts?.candidates ?? 0} candidates · {cycle.counts?.resumes ?? 0} resumes · {cycle.counts?.reviews ?? 0} reviews
+              {cycle.counts?.candidates ?? 0} candidates · {cycle.counts?.resumes ?? 0} resumes · {formatReviewCountPair(cycle.counts?.resumeReviews, cycle.counts?.frqReviews)}
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -733,10 +823,12 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
               round={round}
               cycle={cycle}
               busy={busy}
+              interviewPool={interviewPool}
               onActivate={onActivateRound}
               onClose={onCloseRound}
               onSaveRubric={onSaveRubric}
               onSaveAutoDecisions={onSaveAutoDecisions}
+              onAssignInterviewGroups={onAssignInterviewGroups}
             />
           ))}
         </div>
@@ -745,13 +837,79 @@ function CycleCard({ cycle, busy, authedFetch, onReload, onActivate, onArchive, 
   );
 }
 
+function PastCycleCard({ cycle, busy, onReactivate, onViewCandidates }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div style={{
+      background: css.cardWhite,
+      border: `1px solid ${css.borderLight}`,
+      borderRadius: 14,
+      overflow: "hidden",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+    }}>
+      <div style={{ padding: "20px 22px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 7 }}>
+              <h3 style={{ fontFamily: sansFont, fontSize: 20, margin: 0, color: css.textDark }}>{cycle.name}</h3>
+              <StatusBadge status={cycle.status} styles={CYCLE_STATUS_STYLE} />
+            </div>
+            <p style={{ margin: "0 0 7px", fontSize: 12, color: css.textGray }}>
+              Created {formatDate(cycle.createdAt, { style: "short" })}
+            </p>
+            <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
+              {cycle.counts?.candidates ?? 0} candidates · {cycle.counts?.resumes ?? 0} resumes · {formatReviewCountPair(cycle.counts?.resumeReviews, cycle.counts?.frqReviews)}
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <ActionButton label="View candidates" onClick={() => onViewCandidates(cycle.id)} disabled={busy || !(cycle.counts?.candidates > 0)} variant="primary" />
+            <ActionButton label={expanded ? "Hide history" : "View history"} onClick={() => setExpanded((value) => !value)} disabled={busy} />
+            <ActionButton label="Reactivate" onClick={() => onReactivate(cycle.id)} disabled={busy} />
+          </div>
+        </div>
+      </div>
+
+      {expanded ? (
+        <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "18px 22px 22px", background: "#FCFDFC" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, overflowX: "auto" }}>
+            {(cycle.rounds || []).map((round, index) => {
+              const decisions = round.decisionCounts || {};
+              const total = (decisions.advance || 0) + (decisions.hold || 0) + (decisions.reject || 0) + (decisions.pending || 0);
+              return (
+                <div key={round.id} style={{ minWidth: 190, padding: 15, borderRadius: 10, border: `1px solid ${css.borderLight}`, background: css.cardWhite }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.07em" }}>Stage {index + 1}</div>
+                  <div style={{ marginTop: 6, fontSize: 15, fontWeight: 700, color: css.textDark }}>{round.name}</div>
+                  {total > 0 ? (
+                    <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 10px", fontSize: 11, color: css.textGray }}>
+                      <span><strong style={{ color: css.green }}>{decisions.advance || 0}</strong> advanced</span>
+                      <span><strong style={{ color: css.red }}>{decisions.reject || 0}</strong> rejected</span>
+                      <span><strong style={{ color: css.amber }}>{decisions.hold || 0}</strong> held</span>
+                      <span><strong style={{ color: css.textDark }}>{decisions.pending || 0}</strong> pending</span>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 12, fontSize: 11, color: css.textGray }}>No decisions recorded</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function CycleManagementPage() {
   const authedFetch = useAuthedFetch();
+  const navigate = useNavigate();
+  const [viewParams, setViewParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   // Action errors live here; the query owns load errors — merged into `error` below.
   const [actionError, setActionError] = useState(null);
   const [newCycleName, setNewCycleName] = useState("");
+  const [cycleView, setCycleView] = useState(() => viewParams.get("view") === "past" ? "past" : "current");
 
   const cyclesQuery = useQuery({
     queryKey: qk.cycles(),
@@ -781,6 +939,32 @@ export default function CycleManagementPage() {
     () => cycles.find((c) => c.id === activeCycleId) || cycles.find((c) => c.isActive) || null,
     [cycles, activeCycleId]
   );
+  const currentCycles = useMemo(
+    () => cycles.filter((cycle) => cycle.status !== "archived"),
+    [cycles]
+  );
+  const pastCycles = useMemo(
+    () => cycles.filter((cycle) => cycle.status === "archived"),
+    [cycles]
+  );
+  const activeRound = activeCycle?.rounds?.find((round) => round.status === "active") || null;
+  const activeCoffeeChatRound = normalizeRoundType(activeRound?.type) === ROUND_TYPES.COFFEE_CHAT
+    ? activeRound
+    : null;
+  const interviewPoolQuery = useQuery({
+    queryKey: qk.interviewCandidates(),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/interviews/candidates`);
+      return readJsonOrThrow(res, "loading the Coffee Chat pool", "Check GET /interviews/candidates in server/src/routes/interviewRoutes.js");
+    },
+    enabled: Boolean(activeCoffeeChatRound),
+    staleTime: STALE.dashboard,
+  });
+  const interviewPool = activeCoffeeChatRound ? {
+    roundId: activeCoffeeChatRound.id,
+    candidateCount: interviewPoolQuery.data?.candidates?.length
+      ?? (Number(activeCycle?.rounds?.find((round) => round.sortOrder < activeCoffeeChatRound.sortOrder)?.decisionCounts?.advance) || 0),
+  } : null;
 
   async function runAction(action) {
     setBusy(true);
@@ -817,7 +1001,7 @@ export default function CycleManagementPage() {
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
       <Topbar phaseLabel="Admin · Cycle management" activeLabel="Recruiting cycles" rightSlot={<></>} />
 
-      <div style={{ maxWidth: 960, margin: "0 auto", width: "100%", padding: "24px 24px 40px" }}>
+      <div style={{ maxWidth: 1360, margin: "0 auto", width: "100%", boxSizing: "border-box", padding: "24px 32px 40px" }}>
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>Cycle management</h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
@@ -826,7 +1010,24 @@ export default function CycleManagementPage() {
           </p>
         </div>
 
-        {activeCycle ? (
+        <div role="tablist" aria-label="Cycle views" style={{ display: "inline-flex", gap: 4, padding: 4, marginBottom: 20, borderRadius: 10, border: `1px solid ${css.borderLight}`, background: css.cardWhite }}>
+          {[
+            { value: "current", label: `Present cycle${currentCycles.length > 1 ? "s" : ""}` },
+            { value: "past", label: `Past cycles (${pastCycles.length})` },
+          ].map((tab) => {
+            const selected = cycleView === tab.value;
+            return (
+              <button key={tab.value} type="button" role="tab" aria-selected={selected} onClick={() => {
+                setCycleView(tab.value);
+                setViewParams(tab.value === "past" ? { view: "past" } : {});
+              }} style={{ border: "none", borderRadius: 7, padding: "9px 14px", background: selected ? css.greenDark : "transparent", color: selected ? "#FFF" : css.textGray, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {cycleView === "current" && activeCycle ? (
           <div style={{
             marginBottom: 20,
             padding: "14px 16px",
@@ -845,7 +1046,7 @@ export default function CycleManagementPage() {
           </div>
         ) : null}
 
-        <form onSubmit={handleCreateCycle} style={{
+        {cycleView === "current" ? <form onSubmit={handleCreateCycle} style={{
           display: "flex",
           gap: 10,
           alignItems: "center",
@@ -885,7 +1086,7 @@ export default function CycleManagementPage() {
           >
             Create cycle
           </button>
-        </form>
+        </form> : null}
 
         {error ? (
           <ErrorBanner
@@ -900,14 +1101,37 @@ export default function CycleManagementPage() {
           <PageLoader />
         ) : cycles.length === 0 ? (
           <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No cycles yet. Create one to get started.</div>
+        ) : cycleView === "past" ? (
+          pastCycles.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No archived cycles yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {pastCycles.map((cycle) => (
+                <PastCycleCard
+                  key={cycle.id}
+                  cycle={cycle}
+                  busy={busy}
+                  onViewCandidates={(cycleId) => navigate(`/scoreboard?cycleId=${encodeURIComponent(cycleId)}`)}
+                  onReactivate={(id) => runAction(async () => {
+                    const res = await authedFetch(`${API}/cycles/${id}/activate`, { method: "POST" });
+                    if (!res.ok) throw await formatResponseError(res, "reactivating cycle");
+                    setCycleView("current");
+                  })}
+                />
+              ))}
+            </div>
+          )
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {cycles.map((cycle) => (
+          currentCycles.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: css.textGray }}>No present cycle. Create one above or reactivate a past cycle.</div>
+          ) : <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {currentCycles.map((cycle) => (
               <CycleCard
                 key={cycle.id}
                 cycle={cycle}
                 busy={busy}
                 authedFetch={authedFetch}
+                interviewPool={cycle.id === activeCycleId ? interviewPool : null}
                 onReload={reloadCycles}
                 onActivate={(id) => runAction(async () => {
                   const res = await authedFetch(`${API}/cycles/${id}/activate`, { method: "POST" });
@@ -956,6 +1180,18 @@ export default function CycleManagementPage() {
                   if (!res.ok) {
                     throw await formatResponseError(res, "saving automatic decision percentages");
                   }
+                })}
+                onAssignInterviewGroups={(roundId, groupCount, replacing) => runAction(async () => {
+                  if (replacing && !window.confirm("Randomize the Coffee Chat tables again? Existing ratings will stay attached to candidates.")) return;
+                  const res = await authedFetch(`${API}/interviews/groups`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ round_id: roundId, group_count: groupCount }),
+                  });
+                  if (!res.ok) {
+                    throw await formatResponseError(res, "creating Coffee Chat tables");
+                  }
+                  await queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() });
                 })}
               />
             ))}

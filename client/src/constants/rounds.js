@@ -23,6 +23,7 @@ export const ROUND_1_LABEL = ROUND_PIPELINE[0].label;
 export const UPCOMING_EVALUATION_ROUNDS = ROUND_PIPELINE.slice(1).map((round, index) => ({
   id: `round-${index + 2}`,
   label: round.label,
+  type: round.type,
 }));
 
 export function normalizeRoundType(type) {

@@ -67,7 +67,7 @@ export default function Topbar({
       {rightSlot ?? (hasReviewControls ? (
         <>
           <button type="button" onClick={onHistory} style={topbarGhostButtonStyle}>
-            📋 Past Reviews
+            📋 Past Resume Reviews
             <span style={{ background: css.greenDark, color: css.cardWhite, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: "2px 7px" }}>{historyCount}</span>
           </button>
 

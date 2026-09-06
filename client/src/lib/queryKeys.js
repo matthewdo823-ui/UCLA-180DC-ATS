@@ -12,8 +12,11 @@
 export const qk = {
   activeCycle: () => ["cycles", "active"],
 
-  scoreboard: (roundId = null) => ["scoreboard", roundId ?? "active"],
+  scoreboard: (roundId = null, cycleId = null) => ["scoreboard", cycleId ?? "active-cycle", roundId ?? "active-round"],
   scoreboardRoot: () => ["scoreboard"],
+  candidateApplication: (resumeId, cycleId = null) => ["candidate-application", String(resumeId || ""), cycleId ?? "active-cycle"],
+  candidateApplicationsRoot: () => ["candidate-application"],
+  candidateApplicationSummary: (resumeId, cycleId = null) => ["candidate-application-summary", String(resumeId || ""), cycleId ?? "active-cycle"],
 
   adminDashboard: () => ["dashboard", "admin"],
   graderDashboard: () => ["dashboard", "grader"],
@@ -21,6 +24,7 @@ export const qk = {
 
   graderScoreboard: () => ["grader-scoreboard"],
   frqGraderScoreboard: () => ["frq-grader-scoreboard"],
+  coffeeChatGraderScoreboard: () => ["coffee-chat-grader-scoreboard"],
   interviewCandidates: () => ["interviews", "candidates"],
   demographics: () => ["demographics"],
   users: () => ["users"],
@@ -42,6 +46,8 @@ export const qk = {
  */
 export function invalidateAfterReview(queryClient) {
   queryClient.invalidateQueries({ queryKey: qk.scoreboardRoot() });
+  queryClient.invalidateQueries({ queryKey: qk.candidateApplicationsRoot() });
   queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() });
   queryClient.invalidateQueries({ queryKey: qk.graderScoreboard() });
+  queryClient.invalidateQueries({ queryKey: qk.frqGraderScoreboard() });
 }

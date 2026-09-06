@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
 import { css } from "../../theme/colors";
+import { formatReviewCountPair } from "../../utils/reviewCounts";
 import useAdminDashboard from "./useAdminDashboard";
 import {
   pageStyle,
   Panel,
   ActionItemList,
   GraderProgressRows,
+  CoffeeChatPersonalStats,
   RoundTimeline,
   PipelineBreakdown,
   twoColumnGridStyle,
@@ -71,10 +73,16 @@ function getDashboardFocus({ context, pipeline, actionItems, isInterview }) {
     };
   }
   if ((pipeline?.awaitingReviews || 0) > 0) {
+    const resumeLeft = pipeline.resumeReviewsRemaining || 0;
+    const frqLeft = pipeline.frqReviewsRemaining || 0;
     return {
       eyebrow: `${context.activeRound.name || "Active round"}`,
-      title: `${pipeline.awaitingReviews} application${pipeline.awaitingReviews === 1 ? "" : "s"} still need review`,
-      detail: `${pipeline.reviewed || 0} of ${pipeline.applicants || 0} complete across the team.`,
+      title: isInterview
+        ? `${pipeline.awaitingReviews} candidate${pipeline.awaitingReviews === 1 ? "" : "s"} still need evaluation`
+        : `${formatReviewCountPair(resumeLeft, frqLeft)} left`,
+      detail: isInterview
+        ? `${pipeline.reviewed || 0} of ${pipeline.applicants || 0} evaluated.`
+        : `${pipeline.resumeReviewed || 0}/${pipeline.applicants || 0} candidates have a resume review; ${pipeline.frqReviewed || 0}/${pipeline.applicants || 0} have a free response review.`,
       actionLabel: isInterview ? "Open interviews" : "Open review queue",
       path: isInterview ? "/interviews" : "/scoreboard",
     };
@@ -143,13 +151,16 @@ export default function AdminDashboard() {
   const sortedActionItems = [...actionItems].sort(
     (a, b) => (severityRank[a.severity] ?? 3) - (severityRank[b.severity] ?? 3)
   );
-  const reviewPct = pipeline?.applicants ? Math.round(((pipeline?.reviewed || 0) / pipeline.applicants) * 100) : 0;
+  const applicants = pipeline?.applicants || 0;
+  const reviewPct = applicants ? Math.round(((pipeline?.reviewed || 0) / applicants) * 100) : 0;
+  const resumeReviewPct = applicants ? Math.round(((pipeline?.resumeReviewed || 0) / applicants) * 100) : 0;
+  const frqReviewPct = applicants ? Math.round(((pipeline?.frqReviewed || 0) / applicants) * 100) : 0;
 
   return (
     <div style={{ ...pageStyle, padding: 0 }}>
       <Topbar phaseLabel={phaseLabel} showActivePill={Boolean(context?.activeRound)} activeLabel="Admin" />
 
-      <div style={{ padding: "24px 32px 40px", maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ padding: "24px 32px 40px", maxWidth: 1440, width: "100%", boxSizing: "border-box", margin: "0 auto" }}>
         {error ? (
           <div style={{
             background: "rgba(226,75,74,0.08)",
@@ -169,6 +180,12 @@ export default function AdminDashboard() {
           <PageLoader minHeight="60vh" />
         ) : (
           <>
+            <RoundTimeline
+              rounds={context?.allRounds}
+              activeRound={context?.activeRound}
+              onManage={() => navigate("/cycle-management")}
+            />
+
             <section style={{
               background: css.cardWhite,
               border: `1px solid ${css.borderLight}`,
@@ -192,8 +209,25 @@ export default function AdminDashboard() {
               </div>
               <div style={{ flexShrink: 0, minWidth: 142, textAlign: "right" }}>
                 <div style={{ fontSize: 11, color: css.textGray, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Round progress</div>
-                <div style={{ marginTop: 3, fontSize: 25, fontWeight: 700, color: css.greenDark, letterSpacing: "-0.03em" }}>{reviewPct}%</div>
-                <div style={{ marginTop: 2, marginBottom: 13, fontSize: 12, color: css.textGray }}>{pipeline?.reviewed || 0} of {pipeline?.applicants || 0} reviewed</div>
+                {isInterview ? (
+                  <>
+                    <div style={{ marginTop: 3, fontSize: 25, fontWeight: 700, color: css.greenDark, letterSpacing: "-0.03em" }}>{reviewPct}%</div>
+                    <div style={{ marginTop: 2, marginBottom: 13, fontSize: 12, color: css.textGray }}>
+                      {pipeline?.reviewed || 0} of {applicants} evaluated
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ margin: "7px 0 13px", display: "grid", gap: 5, minWidth: 190 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 14, fontSize: 12 }}>
+                      <span style={{ color: css.textGray }}>Resume</span>
+                      <strong style={{ color: css.greenDark }}>{pipeline?.resumeReviewed || 0}/{applicants} · {resumeReviewPct}%</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 14, fontSize: 12 }}>
+                      <span style={{ color: css.textGray }}>Free response</span>
+                      <strong style={{ color: "#1D9E75" }}>{pipeline?.frqReviewed || 0}/{applicants} · {frqReviewPct}%</strong>
+                    </div>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => navigate(focus.path)}
@@ -215,6 +249,16 @@ export default function AdminDashboard() {
               <ActionItemList items={sortedActionItems} onNavigate={navigate} limit={4} />
             </Panel>
 
+            {pipeline?.ratingMode === "coffee_chat" && pipeline.personalStats ? (
+              <Panel title="Your Coffee Chat grading">
+                <CoffeeChatPersonalStats
+                  total={pipeline.personalStats.total}
+                  graded={pipeline.personalStats.graded}
+                  breakdown={pipeline.personalStats}
+                />
+              </Panel>
+            ) : null}
+
             <div style={twoColumnGridStyle}>
               <Panel title={isInterview ? "Evaluation pipeline" : "Pipeline"}>
                 <PipelineBreakdown pipeline={pipeline} isInterview={isInterview} />
@@ -228,34 +272,34 @@ export default function AdminDashboard() {
                 ) : (
                   <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: "18px 20px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 16, paddingBottom: 14, marginBottom: 4, borderBottom: `1px solid ${css.borderLight}`, fontSize: 13 }}>
-                      <span style={{ color: css.textDark, fontWeight: 700 }}>{graderSummary.activeGraders} active <span style={{ color: css.textGray, fontWeight: 500 }}>of {graderSummary.graders} graders</span></span>
-                      <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} not started</span>
+                      <span style={{ color: css.textDark, fontWeight: 700 }}>{graderSummary.activeGraders} {graderSummary.mode === "coffee_chat" ? "active" : "resume-active"} <span style={{ color: css.textGray, fontWeight: 500 }}>of {graderSummary.graders} {graderSummary.mode === "coffee_chat" ? "participants" : "graders"}</span></span>
+                      <span style={{ color: graderSummary.notStarted > 0 ? css.amber : css.green, fontWeight: 700 }}>{graderSummary.notStarted} with no {graderSummary.mode === "coffee_chat" ? "Coffee Chat grades" : "resume reviews"}</span>
                     </div>
-                    {graderSummary.behindGraders?.length > 0 ? (
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: "10px 0 12px", color: css.textGray, fontSize: 12 }}>
+                      <span>{graderSummary.mode === "coffee_chat" ? `${graderSummary.totalReviews} Coffee Chat grade${graderSummary.totalReviews === 1 ? "" : "s"}` : formatReviewCountPair(graderSummary.totalResumeGrades, graderSummary.totalFrqGrades)}</span>
+                    </div>
+                    {graderSummary.graderProgress?.length > 0 ? (
                       <>
                         <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                          Behind on goal
+                          Progress by grader
                         </div>
-                        <GraderProgressRows
-                          graders={graderSummary.behindGraders}
-                          expectedReviews={graderSummary.expectedReviews}
-                        />
+                        <div style={{ maxHeight: 430, overflowY: "auto", paddingRight: 4 }}>
+                          <GraderProgressRows
+                            graders={graderSummary.graderProgress}
+                            expectedReviews={graderSummary.expectedReviews}
+                            expectedFrqReviews={graderSummary.expectedFrqReviews}
+                            mode={graderSummary.mode}
+                          />
+                        </div>
                       </>
                     ) : (
-                      <div style={{ fontSize: 13, color: css.textGray, paddingTop: 10 }}>All active graders are on track.</div>
+                      <div style={{ fontSize: 13, color: css.textGray, paddingTop: 10 }}>No grader activity yet.</div>
                     )}
                   </div>
                 )}
               </Panel>
             </div>
 
-            <Panel title="Round timeline" style={{ marginTop: 4 }}>
-              <RoundTimeline
-                rounds={context?.allRounds}
-                activeRound={context?.activeRound}
-                nextRound={context?.nextRound}
-              />
-            </Panel>
           </>
         )}
       </div>

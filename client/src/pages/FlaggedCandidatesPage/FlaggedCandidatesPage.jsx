@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
@@ -34,14 +35,29 @@ const SIGNAL_MODES = [
     eyebrow: "Admin queue",
     heading: "Referred ",
     headingAccent: "candidates",
-    description: "Candidates referred by the team — use Refresh to reload the list after changes elsewhere.",
-    emptyLabel: "No candidate referrals yet.",
-    statLabels: ["REFERRALS", "REFERRED CANDIDATES"],
-    countSuffix: "total",
+    description: "Open referrals from the team that need an admin decision.",
+    emptyLabel: "No open candidate referrals.",
+    statLabels: ["OPEN REFERRALS", "REFERRED CANDIDATES"],
+    countSuffix: "open",
   },
 ];
 
-function FlagCard({ flag, onResolve, resolving }) {
+function CandidateNameButton({ candidate, resumeId, onOpenProfile }) {
+  const canOpen = Boolean(resumeId);
+  return (
+    <button
+      type="button"
+      disabled={!canOpen}
+      onClick={() => canOpen && onOpenProfile(resumeId)}
+      title={canOpen ? `Open ${candidate.name || "candidate"} profile` : "No linked resume profile"}
+      style={{ border: "none", background: "none", padding: 0, fontFamily: sansFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500, textAlign: "left", cursor: canOpen ? "pointer" : "default", textDecoration: canOpen ? "underline" : "none", textDecorationColor: "rgba(40,98,65,0.35)", textUnderlineOffset: 3 }}
+    >
+      {candidate.name || "Unknown candidate"}
+    </button>
+  );
+}
+
+function FlagCard({ flag, onResolve, resolving, onOpenProfile }) {
   const candidate = flag.candidate || {};
   const flaggedBy = flag.flaggedBy?.name || flag.flaggedBy?.email || "Unknown reviewer";
 
@@ -53,9 +69,7 @@ function FlagCard({ flag, onResolve, resolving }) {
             {getInitials(candidate.name)}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontFamily: sansFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500 }}>
-              {candidate.name || "Unknown candidate"}
-            </p>
+            <CandidateNameButton candidate={candidate} resumeId={flag.resumeId || flag.resume?.id} onOpenProfile={onOpenProfile} />
             <p style={{ fontSize: 13, color: css.textGray, margin: 0 }}>
               {[candidate.major, candidate.year, candidate.gpa ? `GPA ${candidate.gpa}` : ""].filter(Boolean).join(" · ") || "No profile details"}
             </p>
@@ -102,16 +116,6 @@ function FlagCard({ flag, onResolve, resolving }) {
           Resume: <span style={{ color: css.textDark, fontWeight: 700 }}>{flag.resume?.name || candidate.name || "Unknown"}</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {flag.resume?.fileUrl && (
-            <a
-              href={flag.resume.fileUrl}
-              target="_blank"
-              rel="noreferrer"
-              style={{ ...buttonStyle, background: "#FFF", color: "#333", border: `1px solid ${css.borderLight}`, textDecoration: "none" }}
-            >
-              Open Resume
-            </a>
-          )}
           <button
             type="button"
             onClick={() => onResolve(flag.id)}
@@ -126,9 +130,10 @@ function FlagCard({ flag, onResolve, resolving }) {
   );
 }
 
-function ReferralCard({ referral }) {
+function ReferralCard({ referral, onResolve, resolving, onOpenProfile }) {
   const candidate = referral.candidate || {};
   const referredBy = referral.referredBy?.name || referral.referredBy?.email || "Unknown reviewer";
+  const resolutionAvailable = referral.resolutionAvailable !== false;
 
   return (
     <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 20, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
@@ -138,9 +143,7 @@ function ReferralCard({ referral }) {
             {getInitials(candidate.name)}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontFamily: sansFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500 }}>
-              {candidate.name || "Unknown candidate"}
-            </p>
+            <CandidateNameButton candidate={candidate} resumeId={referral.resumeId || referral.resume?.id} onOpenProfile={onOpenProfile} />
             <p style={{ fontSize: 13, color: css.textGray, margin: 0 }}>
               {[candidate.major, candidate.year, candidate.gpa ? `GPA ${candidate.gpa}` : ""].filter(Boolean).join(" · ") || "No profile details"}
             </p>
@@ -148,7 +151,7 @@ function ReferralCard({ referral }) {
         </div>
 
         <span style={{ background: "rgba(40,98,65,0.1)", color: css.greenDark, border: "1px solid rgba(40,98,65,0.24)", borderRadius: 999, fontSize: 11, fontWeight: 700, padding: "5px 10px", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-          Referral
+          Open Referral
         </span>
       </div>
 
@@ -187,16 +190,15 @@ function ReferralCard({ referral }) {
           Resume: <span style={{ color: css.textDark, fontWeight: 700 }}>{referral.resume?.name || candidate.name || "Unknown"}</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {referral.resume?.fileUrl && (
-            <a
-              href={referral.resume.fileUrl}
-              target="_blank"
-              rel="noreferrer"
-              style={{ ...buttonStyle, background: "#FFF", color: "#333", border: `1px solid ${css.borderLight}`, textDecoration: "none" }}
-            >
-              Open Resume
-            </a>
-          )}
+          <button
+            type="button"
+            onClick={() => onResolve(referral.id)}
+            disabled={resolving || !resolutionAvailable}
+            title={resolutionAvailable ? "Resolve referral" : "Run server/sql/add_candidate_referral_resolution.sql first"}
+            style={{ ...buttonStyle, background: css.greenDark, color: "#FFF", border: "none", opacity: resolving || !resolutionAvailable ? 0.55 : 1, cursor: resolving || !resolutionAvailable ? "not-allowed" : "pointer" }}
+          >
+            {resolving ? "Resolving..." : resolutionAvailable ? "Resolve Referral" : "Migration needed"}
+          </button>
         </div>
       </div>
     </div>
@@ -204,8 +206,10 @@ function ReferralCard({ referral }) {
 }
 
 export default function FlaggedCandidatesPage() {
+  const location = useLocation();
   const authedFetch = useAuthedFetch();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { cycle } = useActiveCycle();
   const [mode, setMode] = useState(SIGNAL_MODES[0].id);
   // Kept apart from the query's own error so a failed resolve doesn't clobber the
@@ -250,25 +254,25 @@ export default function FlaggedCandidatesPage() {
     [items]
   );
 
-  async function resolveFlag(flagId) {
+  async function resolveSignal(signalId, signalMode = activeMode) {
     try {
-      setResolvingId(flagId);
+      setResolvingId(signalId);
       setResolveError(null);
-      const res = await authedFetch(`${API}/candidate-flags/${flagId}/resolve`, {
+      const res = await authedFetch(`${API}/${signalMode.endpoint}/${signalId}/resolve`, {
         method: "PATCH",
       });
 
       if (!res.ok) {
-        throw await formatResponseError(res, "resolving candidate flag");
+        throw await formatResponseError(res, `resolving candidate ${signalMode.id === "flags" ? "flag" : "referral"}`);
       }
 
-      // Drop the resolved flag from the cached flags list — snappy, no refetch.
+      // Drop the resolved signal from its cached open queue — snappy, no refetch.
       queryClient.setQueryData(
-        qk.candidateSignals("candidate-flags"),
-        (current) => (current ? current.filter(item => item.id !== flagId) : current)
+        qk.candidateSignals(signalMode.endpoint),
+        (current) => (current ? current.filter(item => item.id !== signalId) : current)
       );
     } catch (err) {
-      console.error("Failed to resolve candidate flag:", err);
+      console.error("Failed to resolve candidate signal:", err);
       setResolveError(err);
     } finally {
       setResolvingId(null);
@@ -394,13 +398,20 @@ export default function FlaggedCandidatesPage() {
           <FlagCard
             key={flag.id}
             flag={flag}
-            onResolve={resolveFlag}
+            onResolve={(id) => resolveSignal(id, SIGNAL_MODES[0])}
             resolving={resolvingId === flag.id}
+            onOpenProfile={(resumeId) => navigate(`/candidates/${resumeId}`, { state: { returnTo: `${location.pathname}${location.search}`, returnLabel: "flags" } })}
           />
         ))}
 
         {!loading && mode === "referrals" && items.map(referral => (
-          <ReferralCard key={referral.id} referral={referral} />
+          <ReferralCard
+            key={referral.id}
+            referral={referral}
+            onResolve={(id) => resolveSignal(id, SIGNAL_MODES[1])}
+            resolving={resolvingId === referral.id}
+            onOpenProfile={(resumeId) => navigate(`/candidates/${resumeId}`, { state: { returnTo: `${location.pathname}${location.search}`, returnLabel: "referrals" } })}
+          />
         ))}
       </div>
       </div>

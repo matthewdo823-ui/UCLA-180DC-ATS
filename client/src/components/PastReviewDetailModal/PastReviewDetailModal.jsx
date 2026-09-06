@@ -9,7 +9,6 @@ const monoFont = "'DM Mono', monospace";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
-const cardLime = "#C0DD97";
 
 function aggregateFromScores(scores, metrics = []) {
   return metrics.reduce((sum, m) => sum + (Number(scores[m]) || 0), 0);
@@ -25,25 +24,6 @@ async function readErrorBody(res) {
   } catch {
     return text.slice(0, 280);
   }
-}
-
-function ScoreTiles({ score, maxScore }) {
-  const filled = Number.isFinite(Number(score)) ? Math.round(Number(score)) : 0;
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 2 }}>
-      {Array.from({ length: maxScore }).map((_, index) => (
-        <div
-          key={index}
-          style={{
-            width: 9,
-            height: 9,
-            borderRadius: 2,
-            background: index < filled ? cardMint : cardLime,
-          }}
-        />
-      ))}
-    </div>
-  );
 }
 
 function CategoryRowEdit({ metric, value, onScore, maxPerCategory = RUBRIC_MAX_PER_CATEGORY }) {
@@ -175,6 +155,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
   );
 
   const total = useMemo(() => aggregateFromScores(scores, metrics), [scores, metrics]);
+  const normalizedScore = maxScore > 0 ? Math.min(100, total / maxScore * 100) : null;
 
   const handleSave = useCallback(async () => {
     if (!review?.reviewId || !scoringComplete) return;
@@ -359,14 +340,13 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
 
           <div style={{ background: cardPale, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, borderBottom: "1px solid #D4DECC" }}>
             <div>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 4px", fontWeight: 700, letterSpacing: "0.06em" }}>TOTAL</p>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 4px", fontWeight: 700, letterSpacing: "0.06em" }}>NORMALIZED SCORE</p>
               <p style={{ fontSize: 28, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1, fontFamily: "'DM Mono', monospace" }}>
-                {formatScore(total, { fallback: "—" })} <span style={{ fontSize: 14, color: "#3B6D11", fontWeight: 600 }}>/ {maxScore}</span>
+                {formatScore(normalizedScore, { fallback: "—" })}<span style={{ fontSize: 14, color: "#3B6D11", fontWeight: 600 }}>%</span>
               </p>
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.06em" }}>{metrics.length} categories</p>
-              <ScoreTiles score={total} maxScore={maxScore} />
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: 0, fontWeight: 700, letterSpacing: "0.06em" }}>{metrics.length} categories</p>
             </div>
           </div>
 
@@ -425,7 +405,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
               <span style={{ fontSize: 22, lineHeight: 1 }} aria-hidden>✓</span>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>Review saved</div>
-                <div style={{ fontSize: 12, color: css.textGray, marginTop: 2, lineHeight: 1.4 }}>Your changes are updated in Past Reviews.</div>
+                <div style={{ fontSize: 12, color: css.textGray, marginTop: 2, lineHeight: 1.4 }}>Your changes are updated in Past Resume Reviews.</div>
               </div>
             </div>
           ) : null}

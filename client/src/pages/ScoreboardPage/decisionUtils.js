@@ -16,10 +16,11 @@ export const DECISION_STYLE = {
     label: "Advance",
   },
   hold: {
-    bg: "rgba(239,159,39,0.14)",
-    color: "#C47D12",
-    bd: "rgba(239,159,39,0.32)",
-    row: "rgba(239,159,39,0.08)",
+    bg: "rgba(255,184,28,0.18)",
+    color: "#E5A800",
+    selectedText: "#4A3700",
+    bd: "rgba(229,168,0,0.42)",
+    row: "rgba(255,184,28,0.12)",
     label: "Hold",
   },
   reject: {
@@ -116,6 +117,8 @@ export function passesDecisionFilter(candidate, decisionFilter) {
       return status === "reject";
     case "undecided":
       return status === "pending" || status === "hold";
+    case "not_advanced":
+      return status !== "advance";
     default:
       return true;
   }
@@ -129,7 +132,7 @@ function escapeCsvField(value) {
   return str;
 }
 
-const EXPORT_HEADERS = ["name", "email", "phone", "major", "year", "gpa", "score_raw_pts", "num_reviews", "decision", "notes"];
+const EXPORT_HEADERS = ["name", "email", "phone", "major", "year", "gpa", "score_normalized_percent", "num_resume_grades", "num_free_response_grades", "decision", "notes"];
 
 function triggerCsvDownload(csvText, filename) {
   const blob = new Blob(["\uFEFF", csvText], { type: "text/csv;charset=utf-8" });
@@ -152,8 +155,9 @@ function candidateToCsvRow(candidate) {
     escapeCsvField(candidate.major),
     escapeCsvField(candidate.year),
     escapeCsvField(candidate.gpa),
-    escapeCsvField(candidate.aggregateScore ?? candidate.score ?? ""),
+    escapeCsvField(candidate.normalizedScore ?? candidate.score ?? ""),
     escapeCsvField(candidate.numReviews ?? candidate.reviews?.length ?? 0),
+    escapeCsvField(candidate.numFrqReviews ?? candidate.frqReviews?.length ?? 0),
     escapeCsvField(getCandidateDecisionStatus(candidate)),
     escapeCsvField(candidate.decision?.notes || ""),
   ].join(",");

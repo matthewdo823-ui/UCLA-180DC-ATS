@@ -1,6 +1,6 @@
-import { Fragment } from "react";
-import { css } from "../../theme/colors";
+import { coffeeRatingColors, css } from "../../theme/colors";
 import { formatRoundKind } from "../../constants/rounds";
+import { formatReviewCountPair } from "../../utils/reviewCounts";
 
 export const pageStyle = {
   minHeight: "100%",
@@ -97,9 +97,22 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
   const applicants = pipeline.applicants || 0;
   const reviewed = pipeline.reviewed || 0;
   const reviewPct = applicants > 0 ? Math.round((reviewed / applicants) * 100) : 0;
+  const resumeReviewed = pipeline.resumeReviewed || 0;
+  const frqReviewed = pipeline.frqReviewed || 0;
+  const resumeLeft = pipeline.resumeReviewsRemaining || 0;
+  const frqLeft = pipeline.frqReviewsRemaining || 0;
+  const resumeReviewPct = applicants > 0 ? Math.round((resumeReviewed / applicants) * 100) : 0;
+  const frqReviewPct = applicants > 0 ? Math.round((frqReviewed / applicants) * 100) : 0;
 
   const segments = isInterview
-    ? [
+    ? pipeline.ratingMode === "coffee_chat"
+      ? [
+        { label: "Strong yes", value: pipeline.strongYes || 0, color: coffeeRatingColors.strong_yes },
+        { label: "Yes", value: pipeline.yes || 0, color: coffeeRatingColors.yes },
+        { label: "No", value: pipeline.no || 0, color: css.amber },
+        { label: "Strong no", value: pipeline.strongNo || 0, color: css.red },
+      ]
+      : [
         { label: "Pass", value: pipeline.pass || 0, color: css.green },
         { label: "Fail", value: pipeline.fail || 0, color: css.red },
         { label: "Hold", value: pipeline.hold || 0, color: css.amber },
@@ -113,7 +126,9 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
       ];
 
   const breakdownTotal = segments.reduce((sum, seg) => sum + seg.value, 0);
-  const breakdownTitle = isInterview ? "Evaluation outcomes" : "Decision outcomes";
+  const breakdownTitle = isInterview
+    ? pipeline.ratingMode === "coffee_chat" ? "Submitted ratings" : "Evaluation outcomes"
+    : "Decision outcomes";
 
   return (
     <div style={{
@@ -124,17 +139,34 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
       boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
     }}
     >
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>
-            {isInterview ? "Evaluation progress" : "Review progress"}
-          </span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>
-            {reviewed} / {applicants} ({reviewPct}%)
-          </span>
+      {isInterview ? (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Evaluation progress</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>
+              {reviewed} / {applicants} ({reviewPct}%)
+            </span>
+          </div>
+          <ProgressBar pct={reviewPct} />
         </div>
-        <ProgressBar pct={reviewPct} />
-      </div>
+      ) : (
+        <div style={{ display: "grid", gap: 14, marginBottom: 20 }}>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Resume review coverage</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>{resumeReviewed} / {applicants} ({resumeReviewPct}%) · {resumeLeft} left</span>
+            </div>
+            <ProgressBar pct={resumeReviewPct} />
+          </div>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Free response review coverage</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#1D9E75" }}>{frqReviewed} / {applicants} ({frqReviewPct}%) · {frqLeft} left</span>
+            </div>
+            <ProgressBar pct={frqReviewPct} color="#1D9E75" />
+          </div>
+        </div>
+      )}
 
       <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
         {breakdownTitle}
@@ -249,7 +281,7 @@ export function ActionItemList({ items, onNavigate, limit }) {
                 <div style={{ fontSize: 12, color: css.textGray, marginTop: 4 }}>{item.detail}</div>
               ) : null}
             </div>
-            {item.count != null ? (
+            {item.countLabel != null || item.count != null ? (
               <span style={{
                 background: style.bg,
                 color: style.color,
@@ -261,7 +293,7 @@ export function ActionItemList({ items, onNavigate, limit }) {
                 flexShrink: 0,
               }}
               >
-                {item.count}
+                {item.countLabel ?? item.count}
               </span>
             ) : (
               <span style={{ fontSize: 18, color: css.textGray, flexShrink: 0 }}>→</span>
@@ -273,181 +305,105 @@ export function ActionItemList({ items, onNavigate, limit }) {
   );
 }
 
-const ROUND_STATUS_STYLE = {
-  active: {
-    icon: "●",
-    color: css.green,
-    bg: "rgba(29,158,117,0.10)",
-    bd: "rgba(29,158,117,0.35)",
-    label: "Active",
-  },
-  closed: {
-    icon: "✓",
-    color: css.textGray,
-    bg: "rgba(107,114,128,0.08)",
-    bd: "rgba(107,114,128,0.22)",
-    label: "Closed",
-  },
-  draft: {
-    icon: "○",
-    color: css.amber,
-    bg: "rgba(239,159,39,0.08)",
-    bd: "rgba(239,159,39,0.28)",
-    label: "Draft",
-  },
-};
-
-function getRoundPhaseMessage({ rounds, activeRound, nextRound }) {
-  if (!rounds?.length) {
-    return {
-      tone: "neutral",
-      title: "No rounds configured",
-      detail: "Add rounds for this cycle in Cycle Management.",
-    };
-  }
-
-  if (activeRound) {
-    const style = ROUND_STATUS_STYLE.active;
-    return {
-      tone: "active",
-      title: `Currently in ${activeRound.name}`,
-      detail: `${formatRoundKind(activeRound.type)} is open — graders and deliberation run against this round.`,
-      accent: style.color,
-      bg: style.bg,
-      bd: style.bd,
-    };
-  }
-
-  const sorted = [...rounds].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  const lastClosed = [...sorted].reverse().find((r) => r.status === "closed");
-  const nextDraft = sorted.find((r) => r.status === "draft");
-  const allClosed = sorted.every((r) => r.status === "closed");
-  const allDraft = sorted.every((r) => r.status === "draft");
-
-  if (allDraft) {
-    return {
-      tone: "between",
-      title: "Recruiting hasn't started",
-      detail: "All rounds are still in draft. Activate Round 1 when applications are ready to review.",
-      accent: css.amber,
-      bg: "rgba(239,159,39,0.10)",
-      bd: "rgba(239,159,39,0.28)",
-    };
-  }
-
-  if (allClosed) {
-    return {
-      tone: "between",
-      title: "Cycle complete",
-      detail: "Every round is closed. Archive this cycle or start a new one when the next recruiting season begins.",
-      accent: css.textGray,
-      bg: "rgba(107,114,128,0.08)",
-      bd: "rgba(107,114,128,0.22)",
-    };
-  }
-
-  const nextName = nextRound?.name || nextDraft?.name;
-  if (lastClosed && nextName) {
-    return {
-      tone: "between",
-      title: "Between rounds",
-      detail: `${lastClosed.name} is closed. Activate ${nextName} in Cycle Management when you're ready to continue.`,
-      accent: css.amber,
-      bg: "rgba(239,159,39,0.10)",
-      bd: "rgba(239,159,39,0.28)",
-    };
-  }
-
-  return {
-    tone: "between",
-    title: "Between rounds",
-    detail: "No round is active right now. Open Cycle Management to activate the next round.",
-    accent: css.amber,
-    bg: "rgba(239,159,39,0.10)",
-    bd: "rgba(239,159,39,0.28)",
+function getRoundStageName(round) {
+  const labels = {
+    resume_screen: "Resume Screen",
+    coffee_chat: "Coffee Chat",
+    interview: "Coffee Chat",
+    final_round: "Final Round",
   };
+
+  return labels[round?.type] || round?.name || formatRoundKind(round?.type);
 }
 
-export function RoundTimeline({ rounds, activeRound, nextRound }) {
-  const sorted = [...(rounds || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+function getCurrentStageMessage(round) {
+  const messages = {
+    resume_screen: "Applications are being reviewed for the Coffee Chat pool.",
+    coffee_chat: "Coffee Chat conversations and evaluations are underway.",
+    interview: "Coffee Chat conversations and evaluations are underway.",
+    final_round: "Finalists are being evaluated for the incoming cohort.",
+  };
 
-  if (!sorted.length) {
-    const phase = getRoundPhaseMessage({ rounds: sorted, activeRound, nextRound });
-    return (
-      <div style={{ fontSize: 13, color: css.textGray }}>{phase.detail}</div>
-    );
-  }
+  return messages[round?.type] || "Choose an active stage in Cycle Management.";
+}
+
+export function RoundTimeline({ rounds, activeRound, onManage }) {
+  const sorted = [...(rounds || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const currentRoundName = activeRound ? getRoundStageName(activeRound) : "No active round";
 
   return (
     <div style={{
-      background: css.cardWhite,
+      marginBottom: 28,
+      background: "linear-gradient(135deg, var(--color-surface) 0%, rgba(29, 158, 117, 0.055) 100%)",
       border: `1px solid ${css.borderLight}`,
-      borderRadius: 12,
-      padding: "12px 14px",
-      boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+      borderRadius: 16,
+      padding: "28px 30px 30px",
+      boxShadow: "0 4px 18px rgba(40, 98, 65, 0.06)",
     }}
     >
-      <div style={{ display: "flex", alignItems: "stretch", gap: 6, overflowX: "auto" }}>
-        {sorted.map((round, index) => {
-          const status = round.status || "draft";
-          const style = ROUND_STATUS_STYLE[status] || ROUND_STATUS_STYLE.draft;
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 24, marginBottom: 26 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 800, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            Recruiting stages
+          </div>
+          <h2 style={{ margin: 0, fontSize: 27, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em", color: css.textDark }}>
+            Current stage: <span style={{ color: css.greenDark }}>{currentRoundName}</span>
+          </h2>
+          <p style={{ margin: "8px 0 0", fontSize: 14, lineHeight: 1.45, color: css.textGray }}>
+            {getCurrentStageMessage(activeRound)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onManage}
+          style={{ flexShrink: 0, border: `1px solid ${css.borderLight}`, borderRadius: 9, background: css.cardWhite, color: css.greenDark, padding: "10px 13px", cursor: "pointer", fontSize: 12, fontWeight: 800, fontFamily: "'DM Sans', sans-serif" }}
+        >
+          Manage cycle →
+        </button>
+      </div>
+      {sorted.length ? (
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${sorted.length}, minmax(0, 1fr))`, gap: 14, overflowX: "auto" }}>
+        {sorted.map((round) => {
           const isCurrent = activeRound?.id === round.id;
+          const StageElement = isCurrent ? "button" : "div";
 
           return (
-            <Fragment key={round.id}>
-              {/* flex:1 gives every round box an equal share of the row so the
-                  three sit evenly spaced across the full width. */}
-              <div style={{
-                flex: 1,
-                minWidth: 0,
-                background: isCurrent ? style.bg : css.cardWhite,
-                border: `1px solid ${isCurrent ? style.color : style.bd}`,
-                borderRadius: 8,
-                padding: "8px 10px",
-                boxShadow: isCurrent ? `0 0 0 2px ${style.bg}` : "none",
+            <StageElement
+              key={round.id}
+              type={isCurrent ? "button" : undefined}
+              onClick={isCurrent ? onManage : undefined}
+              aria-label={isCurrent ? `${getRoundStageName(round)} is the current stage. Open cycle management.` : undefined}
+              style={{
+                minWidth: 210,
+                minHeight: 160,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
+                background: isCurrent
+                  ? "linear-gradient(145deg, var(--color-primary) 0%, #1D9E75 145%)"
+                  : "linear-gradient(145deg, var(--color-surface) 0%, rgba(29,158,117,0.07) 145%)",
+                border: `1px solid ${isCurrent ? css.greenDark : css.borderLight}`,
+                borderRadius: 25,
+                padding: "24px 24px 22px",
+                boxShadow: isCurrent ? "0 9px 24px rgba(40, 98, 65, 0.22)" : "0 1px 3px rgba(0,0,0,0.03)",
+                cursor: isCurrent ? "pointer" : "default",
+                color: isCurrent ? "#FFF" : css.textDark,
+                fontFamily: "'DM Sans', sans-serif",
               }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ color: style.color, fontSize: 11, fontWeight: 700 }}>{style.icon}</span>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: isCurrent ? 700 : 600, color: css.textDark }}>
-                      {round.name || formatRoundKind(round.type)}
-                      {isCurrent ? (
-                        <span style={{
-                          marginLeft: 8,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          color: style.color,
-                        }}
-                        >
-                          You are here
-                        </span>
-                      ) : null}
-                    </div>
-                    <div style={{ fontSize: 11, color: css.textGray, marginTop: 2 }}>
-                      {formatRoundKind(round.type)} · {style.label}
-                    </div>
-                  </div>
-                </div>
+            >
+              <div style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em" }}>
+                {getRoundStageName(round)}
               </div>
-              {index < sorted.length - 1 ? (
-                <span style={{
-                  alignSelf: "center",
-                  flexShrink: 0,
-                  color: sorted[index + 1]?.status === "draft" && status === "closed" ? css.amber : css.textGray,
-                  fontSize: 16,
-                  fontWeight: 700,
-                }}
-                >
-                  →
-                </span>
-              ) : null}
-            </Fragment>
+            </StageElement>
           );
         })}
-      </div>
+        </div>
+      ) : (
+        <div style={{ minHeight: 96, display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed ${css.borderLight}`, borderRadius: 12, color: css.textGray, fontSize: 13 }}>
+          No rounds configured
+        </div>
+      )}
     </div>
   );
 }
@@ -496,7 +452,7 @@ export function PrimaryButton({ label, onClick, disabled, icon }) {
   );
 }
 
-export function GraderProgressRows({ graders, expectedReviews }) {
+export function GraderProgressRows({ graders, expectedReviews, expectedFrqReviews = 0, mode = "resume" }) {
   if (!graders?.length) {
     return <div style={{ fontSize: 13, color: css.textGray }}>No grader data yet.</div>;
   }
@@ -504,25 +460,66 @@ export function GraderProgressRows({ graders, expectedReviews }) {
   return (
     <div>
       {graders.map((grader, index) => {
-        const pct = expectedReviews > 0
-          ? Math.min(100, Math.round((grader.reviewCount / expectedReviews) * 100))
+        const resumeCount = grader.resumeReviewCount ?? grader.reviewCount ?? 0;
+        const frqCount = grader.frqReviewCount || 0;
+        const resumePct = expectedReviews > 0
+          ? Math.min(100, Math.round((resumeCount / expectedReviews) * 100))
           : 0;
+        const frqPct = expectedFrqReviews > 0
+          ? Math.min(100, Math.round((frqCount / expectedFrqReviews) * 100))
+          : 0;
+        const showFrqProgress = grader.role === "admin" && expectedFrqReviews > 0;
+        const coffeeChatMode = mode === "coffee_chat";
         return (
           <div key={grader.id} style={{
             padding: "11px 0",
             borderTop: index ? `1px solid ${css.borderLight}` : "none",
           }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: css.textDark }}>{grader.name}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: css.greenDark }}>
-                {grader.reviewCount} / {expectedReviews}
-              </span>
+              <span style={{ fontSize: 11, color: css.textGray }}>{coffeeChatMode ? `${resumeCount} Coffee Chat grade${resumeCount === 1 ? "" : "s"}` : formatReviewCountPair(resumeCount, frqCount)}</span>
             </div>
-            <ProgressBar pct={pct} />
+            <div style={{ display: "grid", gap: 8 }}>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
+                  <span style={{ color: css.textGray }}>{coffeeChatMode ? "Coffee Chat grades" : "Resume reviews"}</span>
+                  <strong style={{ color: css.greenDark }}>{resumeCount} / {expectedReviews}</strong>
+                </div>
+                <ProgressBar pct={resumePct} />
+              </div>
+              {!coffeeChatMode && showFrqProgress ? (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
+                    <span style={{ color: css.textGray }}>Free response reviews</span>
+                    <strong style={{ color: "#1D9E75" }}>{frqCount} / {expectedFrqReviews}</strong>
+                  </div>
+                  <ProgressBar pct={frqPct} color="#1D9E75" />
+                </div>
+              ) : null}
+            </div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+export function CoffeeChatPersonalStats({ total = 0, graded = 0, breakdown = {} }) {
+  const items = [
+    ["Candidates", total, css.textDark],
+    ["You graded", graded, css.greenDark],
+    ["Strong no", breakdown.strongNo, coffeeRatingColors.strong_no],
+    ["No", breakdown.no, coffeeRatingColors.no],
+    ["Yes", breakdown.yes, coffeeRatingColors.yes],
+    ["Strong yes", breakdown.strongYes, coffeeRatingColors.strong_yes],
+  ];
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+      {items.map(([label, value, color]) => (
+        <StatCard key={label} label={label} value={value ?? 0} accent={color} />
+      ))}
     </div>
   );
 }
