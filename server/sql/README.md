@@ -24,13 +24,14 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 18 | `add_candidate_summaries.sql` | Cached AI candidate summaries for the full application view |
 | 19 | `add_password_reset_tokens.sql` | One-time password-reset tokens + atomic reset RPC |
 | 20 | `add_resume_assignments.sql` | Admin-directed resume assignments for grader queues |
-| 21 | `add_resume_storage.sql` | Resume Storage metadata + grading-query indexes |
+| 21 | `add_resume_storage.sql` | **Superseded by #28** — its `resumes.storage_path` / `storage_synced_at` columns are unused; still run it for `idx_resumes_candidate_id` |
 | 22 | `add_round_auto_decision_percentages.sql` | Auto-advance/reject percentages + combined percentage constraint |
 | 23 | `backfill_resume_candidate_ids.sql` | **Optional data repair** — link orphan `resumes` to `candidates` by name / Drive file id |
 | 24 | `allow_frq_score_zero.sql` | **Existing databases only** — allows FRQ grades of 0 in the table constraint and save RPC |
 | 25 | `add_candidate_referral_resolution.sql` | **Existing-database upgrade** — adds the referral open/resolved workflow |
 | 26 | `add_coffee_chat_scoring_and_groups.sql` | Coffee Chat random groups and per-evaluator Strong Yes / Yes / No / Strong No scoring |
 | 27 | `add_interview_group_member_assignments.sql` | Assign each member a persistent starting Coffee Chat table |
+| 28 | `add_document_sync_queue.sql` | Candidate document sync queue — Drive → Supabase Storage, plus the private bucket |
 
 ## Notes
 

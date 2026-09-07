@@ -1,6 +1,7 @@
 const supabase = require('../config/supabase');
 const { extractDriveFileID, toDownloadURL, isGoogleDriveFileUrl } = require('../utils/drive');
 const { streamDriveFileToResponse, sendDriveProxyError } = require('../utils/driveStream');
+const { getSignedUrl, SIGNED_URL_TTL_SECONDS } = require('../utils/documentStorage');
 const {
     getActiveCycleId,
     getActiveCycleRow,
@@ -3732,5 +3733,36 @@ exports.getFrqGraderScoreboard = async (req, res) => {
         });
     } catch (err) {
         return respondWithServerError(res, err, 'getFrqGraderScoreboard');
+    }
+};
+
+// Signed-URL lookup for a candidate's synced headshot.
+//
+// This is the read path the whole storage migration exists for: it hands the
+// browser a URL it fetches from Supabase's CDN directly, so the bytes never
+// traverse this service. Proxying the object through here instead would rebuild
+// the original problem against a new origin and save nothing.
+exports.getCandidateHeadshotUrl = async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('documents')
+            .select('storage_path')
+            .eq('candidate_id', req.params.candidateId)
+            .eq('kind', 'headshot')
+            .eq('sync_status', 'ready')
+            .maybeSingle();
+
+        if (error) return respondWithServerError(res, error, 'getCandidateHeadshotUrl');
+
+        // Not synced yet (or failed): 404 tells the client to fall back to the
+        // Drive proxy, so this ships safely before the queue has drained.
+        if (!data?.storage_path) return res.status(404).json({ error: 'Headshot not synced' });
+
+        const url = await getSignedUrl(data.storage_path);
+        if (!url) return res.status(502).json({ error: 'Could not sign headshot URL' });
+
+        return res.json({ url, expires_in: SIGNED_URL_TTL_SECONDS });
+    } catch (err) {
+        return respondWithServerError(res, err, 'getCandidateHeadshotUrl');
     }
 };

@@ -393,6 +393,7 @@ function ScorecardModal({
               <CandidateAvatar
                 name={candidate.name}
                 headshot={candidate.headshot}
+                candidateId={candidate.candidateId}
                 size={56}
                 background={cardMint}
                 color={cardPale}
@@ -2017,7 +2018,7 @@ export default function ScoreboardPage() {
             <div style={{ color: isFocused ? t.accent : t.textMuted, fontWeight: 700, fontSize: 13 }}>{index + 1}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-              <CandidateAvatar name={c.name} headshot={c.headshot} size={40} background={deliberationMode ? t.accent : css.greenDark} />
+              <CandidateAvatar name={c.name} headshot={c.headshot} candidateId={c.candidateId} size={40} background={deliberationMode ? t.accent : css.greenDark} />
               <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
                   <button

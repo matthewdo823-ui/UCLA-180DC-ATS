@@ -305,7 +305,102 @@ async function streamDriveFileToResponse(fileUrl, res, { fallbackContentType, th
   await streamViaPublicUrl(fileId, res, fallbackContentType);
 }
 
+// ---------------------------------------------------------------------------
+// Buffer fetchers (background worker)
+//
+// The streaming functions above all write straight into an Express response. The
+// document sync worker has no response to write to — it needs the bytes in hand to
+// hand them to Supabase Storage — so these mirror the same fallback order and the
+// same HTML guards, returning a buffer instead of piping.
+// ---------------------------------------------------------------------------
+
+// Returns null (rather than throwing) for every "we can't use the authorized
+// thumbnail" case, so the caller falls through to the public one exactly like the
+// streaming path does.
+async function fetchApiThumbnailBuffer(fileId, size) {
+  let drive;
+  try {
+    drive = await getDriveClient();
+  } catch (err) {
+    console.warn('[driveStream] getDriveClient failed for thumbnail buffer, falling back:', err.message);
+    return null;
+  }
+  if (!drive) return null;
+
+  let thumbnailLink;
+  try {
+    const { data: meta } = await drive.files.get({
+      fileId,
+      fields: 'thumbnailLink',
+      supportsAllDrives: true,
+    });
+    thumbnailLink = meta?.thumbnailLink;
+  } catch (err) {
+    const status = err?.code ?? err?.response?.status;
+    if (status === 404 || status === 403 || status === 401) return null;
+    throw err;
+  }
+  if (!thumbnailLink) return null;
+
+  let response;
+  try {
+    response = await axios.get(withThumbnailSize(thumbnailLink, size), {
+      responseType: 'arraybuffer',
+      maxRedirects: 5,
+      validateStatus: (status) => status >= 200 && status < 400,
+    });
+  } catch {
+    return null;
+  }
+
+  const buffer = Buffer.from(response.data);
+  const contentType = response.headers['content-type'] || 'image/jpeg';
+  if (isHtmlContentType(contentType) || looksLikeHtml(buffer)) return null;
+  return { buffer, contentType };
+}
+
+async function fetchPublicThumbnailBuffer(fileId, size) {
+  const url = `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w${size}`;
+  const response = await axios.get(url, {
+    responseType: 'arraybuffer',
+    maxRedirects: 5,
+    headers: { 'User-Agent': USER_AGENT },
+    validateStatus: (status) => status >= 200 && status < 400,
+  });
+
+  const buffer = Buffer.from(response.data);
+  const contentType = response.headers['content-type'] || 'image/jpeg';
+  // A restricted file answers with a sign-in page rather than an error status.
+  if (isHtmlContentType(contentType) || looksLikeHtml(buffer)) {
+    throw driveAccessError('Drive thumbnail is not available');
+  }
+  return { buffer, contentType };
+}
+
+/**
+ * Fetch a size-bounded Drive thumbnail as a buffer.
+ *
+ * Drive renders the thumbnail itself, which means it also transcodes: a HEIC
+ * upload (the default on iPhones, and permitted by the Google Forms "Image" file
+ * type) comes back as a browser-renderable JPEG. Fetching the thumbnail rather
+ * than the original is therefore both the size fix and the format fix, and saves
+ * pulling an image-processing dependency into the worker.
+ *
+ * @returns {Promise<{ buffer: Buffer, contentType: string }>}
+ */
+async function fetchDriveThumbnail(fileUrl, size) {
+  const fileId = extractDriveFileID(fileUrl);
+  if (!fileId) {
+    throw driveAccessError('Invalid Drive file URL', 'INVALID_URL');
+  }
+
+  const viaApi = await fetchApiThumbnailBuffer(fileId, size);
+  if (viaApi) return viaApi;
+  return fetchPublicThumbnailBuffer(fileId, size);
+}
+
 module.exports = {
   streamDriveFileToResponse,
   sendDriveProxyError,
+  fetchDriveThumbnail,
 };
