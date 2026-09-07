@@ -1,22 +1,59 @@
 import { useEffect, useState } from "react";
 import { API } from "../../constants/config";
-import { fetchDriveBlob } from "../../utils/driveFileCache";
+import { fetchDriveImageBlob } from "../../utils/driveFileCache";
 
 export function isDriveUrl(url) {
   return typeof url === "string" && url.trim().length > 0 && /drive\.google\.com|docs\.google\.com/i.test(url);
 }
 
+// Start fetching shortly before a row scrolls into view, so the image is usually
+// decoded by the time it's actually on screen.
+const PRELOAD_MARGIN = "200px";
+
 export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback }) {
   const [src, setSrc] = useState(null);
   const [failed, setFailed] = useState(false);
+  // Callback ref rather than useRef: the observer effect has to re-run once the
+  // node actually attaches, and a ref object mutating doesn't trigger that.
+  const [container, setContainer] = useState(null);
+  const [inView, setInView] = useState(false);
 
   // Derived rather than pushed into state from the effect: "this isn't a Drive
   // URL" is knowable during render, so there's no reason to trigger a second
   // render pass to discover it.
   const canLoad = isDriveUrl(fileUrl) && Boolean(authToken);
 
+  // Only request images the user can actually see. The scoreboard renders one of
+  // these per candidate with no pagination, so fetching on mount meant a few
+  // hundred simultaneous requests through a single API instance — most of them
+  // for rows far below the fold — which queued behind each other and rate-limited
+  // upstream Drive. Gating on visibility cuts that to the dozen or so rows on
+  // screen. Once seen, an image stays loaded: unloading on scroll-away would
+  // re-request it the moment the user scrolled back.
   useEffect(() => {
-    if (!canLoad) return undefined;
+    if (!canLoad || inView || !container) return undefined;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: PRELOAD_MARGIN }
+    );
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [canLoad, container, inView]);
+
+  useEffect(() => {
+    if (!canLoad || !inView) return undefined;
 
     let objectUrl;
     let cancelled = false;
@@ -26,7 +63,7 @@ export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback }) 
       try {
         // The Blob itself lives in the shared cache; the object URL is per-mount
         // so the existing revoke-on-unmount stays correct.
-        const blob = await fetchDriveBlob(proxyUrl, authToken);
+        const blob = await fetchDriveImageBlob(proxyUrl, authToken);
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
         setSrc(objectUrl);
@@ -43,17 +80,25 @@ export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback }) 
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [authToken, canLoad, fileUrl]);
+  }, [authToken, canLoad, fileUrl, inView]);
 
-  if (canLoad && src && !failed) {
-    return (
-      <img
-        src={src}
-        alt={alt}
-        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-      />
-    );
-  }
+  const loaded = canLoad && src && !failed;
 
-  return fallback;
+  // The wrapper is always rendered at full size so the observer has a stable node
+  // to watch and the row reserves its space immediately — the fallback paints on
+  // the first frame and the photo replaces it in place, with no layout shift.
+  return (
+    <div ref={setContainer} style={{ width: "100%", height: "100%" }}>
+      {loaded ? (
+        <img
+          src={src}
+          alt={alt}
+          decoding="async"
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+      ) : (
+        fallback
+      )}
+    </div>
+  );
 }
