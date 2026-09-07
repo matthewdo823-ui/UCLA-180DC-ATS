@@ -1,6 +1,22 @@
 # SQL migrations — run order
 
-Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Postgres database), in this order:
+**These are applied automatically.** Pushing a change under `server/sql/` to `main`
+runs [.github/workflows/migrate.yml](../../.github/workflows/migrate.yml), which
+applies any pending migration exactly once and records it in `schema_migrations`.
+Pull requests get a read-only plan. You should not need to open the Supabase SQL
+Editor for a normal migration.
+
+[`migrations.json`](migrations.json) is the ordered source of truth the runner
+reads. **Add new migrations to the end of it**, and never edit or reorder an entry
+that has already been applied — the runner checksums applied files and refuses to
+continue if one changed.
+
+Entries marked `"mode": "manual"` are never applied automatically: they are
+conditional on a given database's state (optional upgrades, legacy-only paths, data
+repairs) and stay a human decision.
+
+The table below documents the order and intent; it is kept in sync with
+`migrations.json` by hand.
 
 | # | File | Purpose |
 |---|------|---------|
@@ -32,6 +48,25 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 26 | `add_coffee_chat_scoring_and_groups.sql` | Coffee Chat random groups and per-evaluator Strong Yes / Yes / No / Strong No scoring |
 | 27 | `add_interview_group_member_assignments.sql` | Assign each member a persistent starting Coffee Chat table |
 | 28 | `add_document_sync_queue.sql` | Candidate document sync queue — Drive → Supabase Storage, plus the private bucket |
+
+## First-time setup on a new database
+
+Nothing special is needed — the runner builds a database from empty, `init.sql`
+onward. (Until recently it could not: `init.sql` opened a `/*` block comment that
+was never closed, so the core tables were silently skipped. That is fixed, and the
+one-off data statements that lived inside the comment were dropped rather than
+restored.)
+
+For an existing database that already has the schema (i.e. production), record the
+current state once so the runner knows what has already happened:
+
+```bash
+cd server && npm run migrate:baseline
+```
+
+That writes every manifest entry into `schema_migrations` **without executing
+anything**. Until it is run, the runner refuses to touch a database that has
+application tables but no migration history.
 
 ## Notes
 
