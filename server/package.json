@@ -10,7 +10,10 @@
     "gmail-test-send": "node scripts/test-gmail-send.js",
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "worker": "node src/workers/documentSyncWorker.js"
+    "worker": "node src/workers/documentSyncWorker.js",
+    "migrate": "node scripts/apply-migrations.js",
+    "migrate:plan": "node scripts/apply-migrations.js --plan",
+    "migrate:baseline": "node scripts/apply-migrations.js --baseline"
   },
   "keywords": [],
   "author": "",
@@ -30,5 +33,8 @@
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.5.0"
+  },
+  "devDependencies": {
+    "pg": "^8.23.0"
   }
 }
