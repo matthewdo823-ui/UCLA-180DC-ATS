@@ -3,6 +3,7 @@ import { API } from "../constants/config";
 import { isStaffRole } from "../utils/auth";
 import { queryClient } from "../lib/queryClient";
 import { clearDriveFileCache } from "../utils/driveFileCache";
+import { clearHeadshotUrlCache } from "../utils/headshotUrl";
 import { formatNetworkError, formatResponseError } from "../utils/errors";
 
 const TOKEN_STORAGE_KEY = "resume_screener_jwt";
@@ -58,6 +59,7 @@ export function AuthProvider({ children }) {
     // them so the next sign-in on this browser starts from the server.
     queryClient.clear();
     clearDriveFileCache();
+    clearHeadshotUrlCache();
   }, []);
 
   useEffect(() => {

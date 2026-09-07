@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { API } from "../../constants/config";
 import { fetchDriveImageBlob } from "../../utils/driveFileCache";
+import { fetchHeadshotUrl } from "../../utils/headshotUrl";
 
 export function isDriveUrl(url) {
   return typeof url === "string" && url.trim().length > 0 && /drive\.google\.com|docs\.google\.com/i.test(url);
@@ -10,7 +11,7 @@ export function isDriveUrl(url) {
 // decoded by the time it's actually on screen.
 const PRELOAD_MARGIN = "200px";
 
-export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback }) {
+export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback, candidateId }) {
   const [src, setSrc] = useState(null);
   const [failed, setFailed] = useState(false);
   // Callback ref rather than useRef: the observer effect has to re-run once the
@@ -57,10 +58,26 @@ export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback }) 
 
     let objectUrl;
     let cancelled = false;
-    const proxyUrl = `${API}/view/image?url=${encodeURIComponent(fileUrl.trim())}`;
 
     (async () => {
       try {
+        // Preferred path: the file has been copied into Supabase Storage, so the
+        // browser fetches it from a CDN directly. No Authorization header means no
+        // JS-mediated fetch, no Blob, and a URL the HTTP cache can reuse across
+        // page loads — none of which the proxy path can offer.
+        if (candidateId) {
+          const signedUrl = await fetchHeadshotUrl(candidateId, authToken);
+          if (cancelled) return;
+          if (signedUrl) {
+            setSrc(signedUrl);
+            setFailed(false);
+            return;
+          }
+        }
+
+        // Not synced yet (or no candidate context): fall back to proxying Drive.
+        // This is what lets the storage migration ship before the queue drains.
+        const proxyUrl = `${API}/view/image?url=${encodeURIComponent(fileUrl.trim())}`;
         // The Blob itself lives in the shared cache; the object URL is per-mount
         // so the existing revoke-on-unmount stays correct.
         const blob = await fetchDriveImageBlob(proxyUrl, authToken);
@@ -80,7 +97,7 @@ export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback }) 
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [authToken, canLoad, fileUrl, inView]);
+  }, [authToken, canLoad, candidateId, fileUrl, inView]);
 
   const loaded = canLoad && src && !failed;
 

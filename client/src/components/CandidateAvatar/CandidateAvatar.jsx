@@ -5,6 +5,7 @@ import AuthedDriveImage from "../AuthedDriveImage/AuthedDriveImage";
 export default function CandidateAvatar({
   name,
   headshot,
+  candidateId,
   size = 44,
   background = "#286241",
   color = "#FFF",
@@ -46,6 +47,7 @@ export default function CandidateAvatar({
     >
       <AuthedDriveImage
         fileUrl={headshot}
+        candidateId={candidateId}
         authToken={token}
         alt={name ? `${name} headshot` : "Candidate headshot"}
         fallback={fallback}

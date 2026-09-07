@@ -24,7 +24,7 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 18 | `add_candidate_summaries.sql` | Cached AI candidate summaries for the full application view |
 | 19 | `add_password_reset_tokens.sql` | One-time password-reset tokens + atomic reset RPC |
 | 20 | `add_resume_assignments.sql` | Admin-directed resume assignments for grader queues |
-| 21 | `add_resume_storage.sql` | Resume Storage metadata + grading-query indexes |
+| 21 | `add_resume_storage.sql` | **Superseded by #28** — its `resumes.storage_path` / `storage_synced_at` columns are unused; still run it for `idx_resumes_candidate_id` |
 | 22 | `add_round_auto_decision_percentages.sql` | Auto-advance/reject percentages + combined percentage constraint |
 | 23 | `backfill_resume_candidate_ids.sql` | **Optional data repair** — link orphan `resumes` to `candidates` by name / Drive file id |
 | 24 | `allow_frq_score_zero.sql` | **Existing databases only** — allows FRQ grades of 0 in the table constraint and save RPC |
@@ -32,13 +32,15 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 26 | `add_coffee_chat_scoring_and_groups.sql` | Coffee Chat random groups and per-evaluator Strong Yes / Yes / No / Strong No scoring |
 | 27 | `add_interview_group_member_assignments.sql` | Assign each member a persistent starting Coffee Chat table |
 | 28 | `add_demonstrated_interest.sql` | Demonstrated Interest events, attendance, per-cycle multiplier steps, and `candidates.university_id` |
-| 29 | `add_round_phases.sql` | Per-round phases (`setup` / `grading` / `deliberation` / `closed`), one-open-round-per-cycle index, phase-change audit columns |
-| 30 | `add_cycle_application_question_mapping.sql` | Cycle-specific question catalogs, gradable response snapshots, structured application fields, and the Fall '26 mapping repair |
+| 29 | `add_document_sync_queue.sql` | Candidate document sync queue — Drive → Supabase Storage, plus the private bucket |
+| 30 | `add_resume_document_sync.sql` | Atomic resume enqueueing, versioned claims, private queue access, and backfill RPC |
+| 31 | `add_round_phases.sql` | Per-round phases (`setup` / `grading` / `deliberation` / `closed`), one-open-round-per-cycle index, phase-change audit columns |
+| 32 | `add_cycle_application_question_mapping.sql` | Cycle-specific question catalogs, gradable response snapshots, structured application fields, and the Fall '26 mapping repair |
 
 ## Notes
 
 - **Fresh database:** run 1–4, then 6–13, 15–22, and 26–30 in order. Skip 5, 14, and 23–25 unless noted below. Fresh installs of the current `add_frq_reviews.sql` already allow 0–4 FRQ scores, so #24 is only needed on existing databases.
-- **Existing database:** skip scripts you have already applied. Each file uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` where possible, but re-running `init.sql` or seed blocks in `add_cycles_and_rounds.sql` may fail or duplicate data. Run #30 before deploying the cycle-specific application response UI, then re-sync the Fall '26 form once.
+- **Existing database:** skip scripts you have already applied. Each file uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` where possible, but re-running `init.sql` or seed blocks in `add_cycles_and_rounds.sql` may fail or duplicate data. Run #32 before deploying the cycle-specific application response UI, then re-sync the Fall '26 form once.
 - **`add_coffee_chat_scoring_and_groups.sql` (#26):** preserves legacy interview rows, changes new Coffee Chat evaluations to one row per evaluator, and adds persistent candidate-to-table assignments.
 - **`add_interview_group_member_assignments.sql` (#27):** run after #26 to let admins place members at starting tables. Candidate table movement continues to use the assignment table created by #26.
 - **`init.sql`** begins with a large commented block (legacy candidate/resume DDL); the active statements start at the `user_role` enum.

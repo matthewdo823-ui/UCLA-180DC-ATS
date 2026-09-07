@@ -33,6 +33,7 @@ router.patch('/candidate-referrals/:id/resolve', requireRoles('admin'), resumeCo
 router.get('/resume/:id/file', resumeController.getResumeFile);
 router.get('/view/pdf', resumeController.viewPdf);
 router.get('/view/image', resumeController.viewImage);
+router.get('/candidates/:candidateId/headshot-url', resumeController.getCandidateHeadshotUrl);
 router.get('/scoreboard/:resumeId/application/summary', resumeController.getScoreboardApplicationSummary);
 router.get('/scoreboard/:resumeId/application', resumeController.getScoreboardApplication);
 router.get('/scoreboard/:resumeId/application/admin-override', requireRoles('admin'), resumeController.getAdminOverride);
