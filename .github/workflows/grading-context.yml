@@ -1,0 +1,17 @@
+name: Grading context tests
+on:
+  pull_request:
+    paths:
+      - 'server/src/**'
+      - 'server/test/grading/**'
+      - '.github/workflows/grading-context.yml'
+jobs:
+  grading-context:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --prefix server
+      - run: node --test server/test/grading/*.test.js

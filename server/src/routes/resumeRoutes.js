@@ -19,6 +19,7 @@ router.patch('/assignments/coffee-chat/candidates/:candidateId', requireRoles('a
 router.put('/assignments/coffee-chat/members/:userId', requireRoles('admin'), assignmentController.updateCoffeeChatMemberTable);
 router.delete('/assignments/:assignmentId', requireRoles('admin'), assignmentController.deleteAssignmentById);
 router.get('/next-resume', resumeController.getNextResume);
+router.get('/resume/:id/grading-context', requireRoles('admin'), resumeController.getResumeGradingContext);
 router.get('/resume/:id', resumeController.getResumeById);
 router.get('/reviews', resumeController.listMyReviews);
 router.get('/reviews/:reviewId/resume', resumeController.getReviewResume);
