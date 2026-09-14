@@ -24,17 +24,6 @@ const COFFEE_RATINGS = [
   { id: "strong_yes", label: "Strong yes", color: coffeeRatingColors.strong_yes, bg: "rgba(6,78,59,0.16)" },
 ];
 
-function getBalancedColumnCount(candidateCount) {
-  if (candidateCount <= 1) return 1;
-  const targetColumns = Math.min(4, Math.ceil(candidateCount / 2));
-  if (candidateCount % 2 === 0) {
-    for (let columns = targetColumns; columns >= 2; columns -= 1) {
-      if (candidateCount % columns === 0) return columns;
-    }
-  }
-  return targetColumns;
-}
-
 function makeCoffeeDraft(candidate) {
   return {
     rating: candidate.evaluation?.rating || "",
@@ -92,14 +81,14 @@ function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave
   }
 
   return (
-    <article style={{ background: css.cardWhite, border: `1px solid ${validationError ? css.red : rating ? "rgba(29,158,117,0.28)" : css.borderLight}`, borderRadius: 14, padding: 22, boxShadow: validationError ? "0 0 0 3px rgba(226,75,74,0.08)" : "0 1px 3px rgba(0,0,0,0.035)" }}>
+    <article style={{ minWidth: 0, containerType: "inline-size", containerName: "coffee-card", background: css.cardWhite, border: `1px solid ${validationError ? css.red : rating ? "rgba(29,158,117,0.28)" : css.borderLight}`, borderRadius: 14, padding: 22, boxShadow: validationError ? "0 0 0 3px rgba(226,75,74,0.08)" : "0 1px 3px rgba(0,0,0,0.035)" }}>
       <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 18 }}>
         <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={56} background={css.greenDark} />
         <div style={{ minWidth: 0 }}>
           <button
             type="button"
             onClick={onOpenProfile}
-            style={{ border: "none", background: "transparent", padding: 0, margin: 0, fontFamily: sansFont, fontSize: 18, fontWeight: 700, color: css.greenDark, cursor: "pointer", textAlign: "left" }}
+            style={{ border: "none", background: "transparent", padding: 0, margin: 0, fontFamily: sansFont, fontSize: 18, fontWeight: 700, color: css.greenDark, cursor: "pointer", textAlign: "left", overflowWrap: "anywhere" }}
           >
             {candidate.name}
           </button>
@@ -107,11 +96,11 @@ function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave
         </div>
       </div>
 
-      <div role="group" aria-label={`Coffee Chat rating for ${candidate.name}`} style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, marginBottom: 15 }}>
+      <div className="coffee-rating-options" role="group" aria-label={`Coffee Chat rating for ${candidate.name}`} style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, marginBottom: 15 }}>
         {COFFEE_RATINGS.map((option) => {
           const selected = rating === option.id;
           return (
-            <button key={option.id} type="button" disabled={busy || saving} aria-pressed={selected} onClick={() => handleRatingChange(selected ? "" : option.id)} style={{ display: "flex", justifyContent: "center", border: `1px solid ${selected ? option.color : css.borderLight}`, borderRadius: 9, padding: "11px 8px", background: selected ? option.bg : css.cardWhite, color: selected ? option.color : css.textGray, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", cursor: busy || saving ? "wait" : "pointer", opacity: busy || saving ? 0.65 : 1 }}>
+            <button key={option.id} type="button" disabled={busy || saving} aria-pressed={selected} onClick={() => handleRatingChange(selected ? "" : option.id)} style={{ display: "flex", justifyContent: "center", minHeight: 44, alignItems: "center", border: `1px solid ${selected ? option.color : css.borderLight}`, borderRadius: 9, padding: "11px 8px", background: selected ? option.bg : css.cardWhite, color: selected ? option.color : css.textGray, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", cursor: busy || saving ? "wait" : "pointer", opacity: busy || saving ? 0.65 : 1 }}>
               {option.label}
             </button>
           );
@@ -358,7 +347,7 @@ export default function InterviewManagementPage() {
         queryClient.invalidateQueries({ queryKey: qk.assignments() }),
         queryClient.invalidateQueries({ queryKey: qk.coffeeChatGraderScoreboard() }),
       ]);
-      setTableSubmitNotice(`Starting at Table ${groupNumber}. List view will continue rotating from there.`);
+      setTableSubmitNotice(`Starting at Table ${groupNumber}. Table view will continue rotating from there.`);
     } catch (error) {
       setTableSubmitError(error);
     } finally {
@@ -469,16 +458,17 @@ export default function InterviewManagementPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
       <style>{`
-        @media (max-width: 1180px) {
-          .coffee-candidate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        @container coffee-card (max-width: 320px) {
+          .coffee-rating-options { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
         }
         @media (max-width: 820px) {
-          .coffee-candidate-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .coffee-page-content { padding: 20px 16px 32px !important; }
+          .coffee-table-section { padding: 16px !important; }
         }
       `}</style>
       <Topbar phaseLabel={phaseLabel} activeLabel={roundLabel} rightSlot={<></>} />
 
-      <div style={{ maxWidth: 1500, margin: "0 auto", width: "100%", boxSizing: "border-box", padding: "24px 32px 40px" }}>
+      <div className="coffee-page-content" style={{ maxWidth: isCoffeeChat ? 1720 : 1500, margin: "0 auto", width: "100%", boxSizing: "border-box", padding: "24px 32px 40px" }}>
         {!isCoffeeChat ? <div style={{ marginBottom: 20 }}>
           <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>{roundLabel}</h1>
           <p style={{ margin: 0, color: css.textGray, lineHeight: 1.5 }}>
@@ -525,7 +515,7 @@ export default function InterviewManagementPage() {
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 10, color: css.textGray, fontWeight: 700, letterSpacing: "0.06em" }}>VIEW</span>
-                  {[{ id: "list", label: "List view" }, { id: "scroll", label: "Scroll view" }].map((option) => {
+                  {[{ id: "list", label: "Table view" }, { id: "scroll", label: "Scroll view" }].map((option) => {
                     const selected = coffeeView === option.id;
                     return (
                       <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setCoffeeView(option.id); setTableSubmitError(null); setTableSubmitNotice(""); setInvalidCandidateIds(new Set()); }} style={{ border: `1px solid ${selected ? css.greenDark : css.borderLight}`, background: selected ? css.greenDark : css.cardWhite, color: selected ? "#FFF" : css.textDark, borderRadius: 8, padding: "8px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
@@ -594,17 +584,17 @@ export default function InterviewManagementPage() {
                   : "No candidates ready for interviews yet. Complete resume screening first, or use Scoreboard deliberation to advance candidates."}
               </div>
             ) : isCoffeeChat ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: coffeeView === "scroll" ? 72 : 20 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: coffeeView === "scroll" ? "clamp(48px, 5vw, 96px)" : 20 }}>
                 {(coffeeView === "list" ? coffeeGroups.filter(([number]) => number === activeGroupNumber) : coffeeGroups).map(([number, candidates]) => {
                   const currentIndex = coffeeGroups.findIndex(([groupNumber]) => groupNumber === number);
                   const nextGroupNumber = coffeeGroups[(currentIndex + 1) % coffeeGroups.length]?.[0] ?? number;
                   return (
-                    <section key={number} style={{ padding: coffeeView === "list" ? 28 : 22, background: number ? "rgba(29,158,117,0.035)" : "rgba(239,159,39,0.05)", border: `1px solid ${css.borderLight}`, borderRadius: 14 }}>
+                    <section className="coffee-table-section" key={number} style={{ minWidth: 0, padding: 28, background: number ? "rgba(29,158,117,0.035)" : "rgba(239,159,39,0.05)", border: `1px solid ${css.borderLight}`, borderRadius: 14 }}>
                       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
                         <h2 style={{ margin: 0, fontSize: 20, color: css.textDark }}>{number ? `Table ${number}` : "Unassigned candidates"}</h2>
                         <span style={{ fontSize: 13, color: css.textGray }}>{candidates.length} candidate{candidates.length === 1 ? "" : "s"}</span>
                       </div>
-                      <div className="coffee-candidate-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${getBalancedColumnCount(candidates.length)}, minmax(0, 1fr))`, gap: coffeeView === "list" ? 20 : 14 }}>
+                      <div className="coffee-candidate-grid" style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${coffeeView === "scroll" ? 460 : 360}px), 1fr))`, gap: coffeeView === "scroll" ? 32 : 24 }}>
                         {candidates.map((candidate) => (
                           <CoffeeChatCandidateCard
                             key={candidate.id}
