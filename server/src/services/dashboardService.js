@@ -1,3 +1,4 @@
+const { ELIGIBLE_YEAR_FILTER } = require('../utils/screeningEligibility');
 const supabase = require("../config/supabase");
 const {
   getActiveCycleRow,
@@ -128,7 +129,7 @@ async function countInterviewPool(cycleId, roundId) {
   const { data: candidates, error: candError } = await supabase
     .from("candidates")
     .select("id")
-    .is("screening_exclusion_reason", null)
+    .or(ELIGIBLE_YEAR_FILTER)
     .eq("cycle_id", cycleId);
 
   if (candError) throw candError;

@@ -1,4 +1,4 @@
-const { screeningAccessError } = require('../utils/screeningEligibility');
+const { screeningAccessError, ELIGIBLE_YEAR_FILTER } = require('../utils/screeningEligibility');
 const supabase = require("../config/supabase");
 const {
   getActiveCycleRow,
@@ -127,7 +127,7 @@ exports.listInterviewCandidates = async (req, res) => {
     const { data: candidates, error: candError } = await supabase
       .from("candidates")
       .select("id, name, email, major, year, gpa, headshot, cycle_id")
-      .is("screening_exclusion_reason", null)
+      .or(ELIGIBLE_YEAR_FILTER)
       .eq("cycle_id", ctx.cycle.id)
       .order("name", { ascending: true });
 
@@ -347,7 +347,7 @@ exports.upsertInterviewEvaluation = async (req, res) => {
 
     const { data: candidate, error: candError } = await supabase
       .from("candidates")
-      .select("id, cycle_id, screening_exclusion_reason")
+      .select("id, cycle_id, year")
       .eq("id", candidateId)
       .maybeSingle();
 
@@ -437,7 +437,7 @@ exports.assignInterviewGroups = async (req, res) => {
     const { data: candidates, error: candidateError } = await supabase
       .from("candidates")
       .select("id")
-      .is("screening_exclusion_reason", null)
+      .or(ELIGIBLE_YEAR_FILTER)
       .eq("cycle_id", ctx.cycle.id);
     if (candidateError) throw candidateError;
 

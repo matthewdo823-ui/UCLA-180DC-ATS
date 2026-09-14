@@ -1,3 +1,4 @@
+const { ELIGIBLE_YEAR_FILTER } = require('../utils/screeningEligibility');
 const supabase = require('../config/supabase');
 const {
     getActiveCycleRow,
@@ -33,10 +34,10 @@ async function loadAssignmentBoardData(cycleId) {
                 name,
                 review_count,
                 created_at,
-                candidates!inner ( id, name, year, major, gpa, screening_exclusion_reason )
+                candidates!inner ( id, name, year, major, gpa )
             `)
             .eq('cycle_id', cycleId)
-            .is('candidates.screening_exclusion_reason', null)
+            .or(ELIGIBLE_YEAR_FILTER, { referencedTable: "candidates" })
             .order('review_count', { ascending: true })
             .order('created_at', { ascending: true }),
         supabase
@@ -75,7 +76,7 @@ async function loadCoffeeChatAssignmentBoard(cycle, round) {
         supabase
             .from('candidates')
             .select('id, name, year, major, headshot')
-            .is('screening_exclusion_reason', null)
+            .or(ELIGIBLE_YEAR_FILTER)
             .eq('cycle_id', cycle.id)
             .order('name', { ascending: true }),
         supabase
@@ -401,9 +402,9 @@ exports.createAssignments = async (req, res) => {
 
         const { data: validResumes, error: resumeError } = await supabase
             .from('resumes')
-            .select('id, candidates!inner(screening_exclusion_reason)')
+            .select('id, candidates!inner(year)')
             .eq('cycle_id', cycle.id)
-            .is('candidates.screening_exclusion_reason', null)
+            .or(ELIGIBLE_YEAR_FILTER, { referencedTable: "candidates" })
             .in('id', resumeIds);
 
         if (resumeError) throw resumeError;
