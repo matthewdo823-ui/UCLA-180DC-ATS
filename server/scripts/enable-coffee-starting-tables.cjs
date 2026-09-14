@@ -29,13 +29,17 @@ async function main() {
       pooled.hostname = `aws-${index}-us-east-1.pooler.supabase.com`;
       pooled.port = '5432';
       pooled.username = `postgres.${expected}`;
+      // pg URL SSL options otherwise replace the explicit TLS config above.
+      for (const key of ['sslmode', 'sslcert', 'sslkey', 'sslrootcert']) pooled.searchParams.delete(key);
       client = new Client({ connectionString: pooled.toString(), ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 });
       try {
         await client.connect();
         connected = true;
         console.log('Connected to the expected project through its IPv4 session pooler.');
         break;
-      } catch {
+      } catch (poolError) {
+        const category = /tenant or user not found/i.test(poolError.message) ? 'project not on this pooler' : poolError.code || poolError.name;
+        console.log(`Session pooler ${index}: ${category}`);
         await client.end();
       }
     }
