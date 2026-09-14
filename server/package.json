@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test test/**/*.test.js",
     "discover-form-fields": "node scripts/discover-google-form-field-map.js",
     "gmail-oauth-setup": "node scripts/gmail-oauth-setup.js",
     "gmail-test-send": "node scripts/test-gmail-send.js",
@@ -13,7 +13,8 @@
     "worker": "node src/workers/documentSyncWorker.js",
     "migrate": "node scripts/apply-migrations.js",
     "migrate:plan": "node scripts/apply-migrations.js --plan",
-    "migrate:baseline": "node scripts/apply-migrations.js --baseline"
+    "migrate:baseline": "node scripts/apply-migrations.js --baseline",
+    "documents:backfill": "node scripts/backfill-resume-documents.js"
   },
   "keywords": [],
   "author": "",

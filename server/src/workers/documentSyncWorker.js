@@ -13,6 +13,7 @@
 require("dotenv").config();
 
 const supabase = require("../config/supabase");
+const { fetchDriveResume } = require('../utils/driveResume');
 const { fetchDriveThumbnail } = require("../utils/driveStream");
 const {
   HEADSHOT_SIZE,
@@ -39,7 +40,7 @@ function backoffMs(attempts) {
 }
 
 async function claimBatch() {
-  const { data, error } = await supabase.rpc("claim_pending_documents", {
+  const { data, error } = await supabase.rpc("claim_candidate_documents", {
     batch_size: BATCH_SIZE,
     lease_seconds: LEASE_SECONDS,
   });
@@ -47,8 +48,8 @@ async function claimBatch() {
   return data || [];
 }
 
-async function markReady(doc, { storagePath, contentType, sizeBytes }) {
-  const { error } = await supabase
+async function markReady(doc, { storagePath, contentType, sizeBytes }, client = supabase) {
+  const { error } = await client
     .from("documents")
     .update({
       storage_path: storagePath,
@@ -57,10 +58,14 @@ async function markReady(doc, { storagePath, contentType, sizeBytes }) {
       sync_status: "ready",
       last_error: null,
       claimed_at: null,
+      claim_token: null,
       synced_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq("id", doc.id);
+    .eq("id", doc.id)
+    .eq("source_version", doc.source_version)
+    .eq("claim_token", doc.claim_token)
+    .eq("sync_status", "active");
   if (error) throw error;
 }
 
@@ -69,18 +74,22 @@ async function markReady(doc, { storagePath, contentType, sizeBytes }) {
  * pending. An unbounded retry is exactly the fail -> retry -> fail loop that kept
  * the old image proxy hammering a rate-limited Drive for ~100 minutes.
  */
-async function markFailure(doc, err) {
+async function markFailure(doc, err, client = supabase) {
   const exhausted = doc.attempts >= MAX_ATTEMPTS;
-  const { error } = await supabase
+  const { error } = await client
     .from("documents")
     .update({
       sync_status: exhausted ? "failed" : "pending",
       last_error: String(err?.message || err).slice(0, 500),
       next_attempt_at: new Date(Date.now() + backoffMs(doc.attempts)).toISOString(),
       claimed_at: null,
+      claim_token: null,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", doc.id);
+    .eq("id", doc.id)
+    .eq("source_version", doc.source_version)
+    .eq("claim_token", doc.claim_token)
+    .eq("sync_status", "active");
   if (error) throw error;
 
   if (exhausted) {
@@ -91,27 +100,26 @@ async function markFailure(doc, err) {
   }
 }
 
-async function processDocument(doc) {
-  if (doc.kind !== "headshot") {
-    // Resumes are Stage 3; leaving them claimable would spin them through the
-    // retry budget until they went terminal.
-    throw new Error(`Unsupported document kind: ${doc.kind}`);
-  }
-
-  // Fetching Drive's rendered thumbnail rather than the original is both the size
-  // bound and the format guarantee — Drive transcodes HEIC (the iPhone default,
-  // and accepted by the Forms "Image" file type) into a browser-renderable JPEG.
-  const { buffer, contentType } = await fetchDriveThumbnail(doc.source_url, HEADSHOT_SIZE);
+async function processDocument(doc, {
+  fetchResume = fetchDriveResume, fetchThumbnail = fetchDriveThumbnail,
+  upload = uploadDocument, client = supabase,
+} = {}) {
+  const { buffer, contentType } = doc.kind === "resume"
+    ? await fetchResume(doc.source_url)
+    : doc.kind === "headshot"
+      ? await fetchThumbnail(doc.source_url, HEADSHOT_SIZE)
+      : (() => { throw new Error(`Unsupported document kind: ${doc.kind}`); })();
 
   const storagePath = documentStoragePath({
     cycleId: doc.cycle_id,
     candidateId: doc.candidate_id,
     kind: doc.kind,
     contentType,
+    sourceVersion: doc.source_version,
   });
 
-  await uploadDocument(storagePath, buffer, contentType);
-  await markReady(doc, { storagePath, contentType, sizeBytes: buffer.length });
+  await upload(storagePath, buffer, contentType);
+  await markReady(doc, { storagePath, contentType, sizeBytes: buffer.length }, client);
 }
 
 /** Fixed-size worker pool over one claimed batch. */
@@ -180,15 +188,18 @@ async function run() {
 
 // Render sends SIGTERM on deploy. Finish the document in flight, then exit; rows
 // still claimed are recovered by the lease rather than being stranded 'active'.
-for (const signal of ["SIGTERM", "SIGINT"]) {
-  process.on(signal, () => {
-    if (shuttingDown) process.exit(1);
-    console.log(`[docSync] ${signal} received, finishing in-flight work...`);
-    shuttingDown = true;
+if (require.main === module) {
+  for (const signal of ["SIGTERM", "SIGINT"]) {
+    process.on(signal, () => {
+      if (shuttingDown) process.exit(1);
+      console.log(`[docSync] ${signal} received, finishing in-flight work...`);
+      shuttingDown = true;
+    });
+  }
+  run().catch((err) => {
+    console.error("[docSync] Fatal:", err.message);
+    process.exit(1);
   });
 }
 
-run().catch((err) => {
-  console.error("[docSync] Fatal:", err);
-  process.exit(1);
-});
+module.exports = { processDocument, processBatch, markReady, markFailure, backoffMs };

@@ -18,21 +18,20 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60 * 12;
  * delivery guarantees will happen) overwrites one object rather than accumulating
  * copies, which is what makes worker retries safe.
  */
-function documentStoragePath({ cycleId, candidateId, kind, contentType }) {
-  const extension = contentType === 'image/png' ? 'png'
-    : contentType === 'image/webp' ? 'webp'
-    : kind === 'resume' ? 'pdf'
-    : 'jpg';
-  return `${cycleId}/${candidateId}/${kind}.${extension}`;
+function documentStoragePath({ cycleId, candidateId, kind, contentType, sourceVersion }) {
+  const extension = {
+    'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg',
+    'image/webp': 'webp', 'image/gif': 'gif',
+  }[contentType];
+  if (!extension || !sourceVersion) throw new Error('Document type and source version are required');
+  return `${cycleId}/${candidateId}/${kind}/${sourceVersion}.${extension}`;
 }
 
 async function uploadDocument(path, buffer, contentType) {
   const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, {
     contentType,
     upsert: true,
-    // Storage's own cache header, sent to the browser on a signed-URL hit. These
-    // objects are immutable — a re-uploaded resume arrives as a new Drive file id
-    // and therefore a new candidate document — so a long TTL is safe.
+    // A replacement receives a new source version and therefore a new URL.
     cacheControl: '86400',
   });
   if (error) throw error;

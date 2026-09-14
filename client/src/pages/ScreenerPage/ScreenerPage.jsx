@@ -558,7 +558,7 @@ export default function ScreenerPage() {
                   </div>
                 )
               ) : resume?.file_url ? (
-                <PdfViewer url={`${API}/view/pdf?url=${encodeURIComponent(resume.file_url)}`} authToken={token} />
+                <PdfViewer resumeId={resume.id} fileUrl={resume.file_url} authToken={token} />
               ) : (
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.textGray, fontSize: 13, padding: 24, textAlign: "center" }}>
                   {fetchError || "No resume available"}

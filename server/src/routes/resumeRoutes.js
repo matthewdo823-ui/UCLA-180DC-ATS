@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const resumeController = require('../controllers/resumeController');
+const resumeFileController = require('../controllers/resumeFileController');
 const demographicsController = require('../controllers/demographicsController');
 const assignmentController = require('../controllers/assignmentController');
 const { authenticateToken, requireRoles } = require('../middleware/authMiddleware');
@@ -31,6 +32,8 @@ router.patch('/candidate-flags/:id/resolve', requireRoles('admin'), resumeContro
 router.get('/candidate-referrals', requireRoles('admin'), resumeController.getCandidateReferrals);
 router.patch('/candidate-referrals/:id/resolve', requireRoles('admin'), resumeController.resolveCandidateReferral);
 router.get('/resume/:id/file', resumeController.getResumeFile);
+router.get('/resume/:id/file-access', resumeFileController.fileAccess);
+router.get('/resume/:id/file-content', resumeFileController.fileContent);
 router.get('/view/pdf', resumeController.viewPdf);
 router.get('/view/image', resumeController.viewImage);
 router.get('/candidates/:candidateId/headshot-url', resumeController.getCandidateHeadshotUrl);

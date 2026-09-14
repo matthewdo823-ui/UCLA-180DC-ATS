@@ -1,9 +1,8 @@
 import { useEffect } from "react";
 import PdfViewer from "../PdfViewer/PdfViewer";
-import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 
-export default function ResumeModal({ open, onClose, title, fileUrl, authToken }) {
+export default function ResumeModal({ open, onClose, title, resumeId, fileUrl, authToken }) {
   useEffect(() => {
     if (!open) return;
 
@@ -15,7 +14,7 @@ export default function ResumeModal({ open, onClose, title, fileUrl, authToken }
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open, onClose]);
 
-  if (!open || !fileUrl) return null;
+  if (!open || !resumeId) return null;
 
   return (
     <>
@@ -98,7 +97,8 @@ export default function ResumeModal({ open, onClose, title, fileUrl, authToken }
         </div>
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "#F8FAF6" }}>
           <PdfViewer
-            url={`${API}/view/pdf?url=${encodeURIComponent(fileUrl)}`}
+            resumeId={resumeId}
+            fileUrl={fileUrl}
             authToken={authToken}
           />
         </div>
