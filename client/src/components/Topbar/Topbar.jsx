@@ -47,7 +47,7 @@ export default function Topbar({
   const hasReviewControls = onHistory != null || reviewed != null || historyCount != null;
 
   return (
-    <div style={{ minHeight: 60, background: "transparent", borderBottom: `1px solid ${css.borderLight}`, display: "flex", alignItems: "center", padding: "10px 24px", gap: 12, flexShrink: 0 }}>
+    <div style={{ minHeight: 60, background: "transparent", borderBottom: `1px solid ${css.borderLight}`, display: "flex", flexWrap: "wrap", alignItems: "center", padding: "10px 24px", gap: 12, flexShrink: 0 }}>
       <span style={{ fontSize: 16, fontWeight: 700, color: css.greenDark, fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em" }}>180° Resume Screener</span>
       {phaseLabel ? (
         <>

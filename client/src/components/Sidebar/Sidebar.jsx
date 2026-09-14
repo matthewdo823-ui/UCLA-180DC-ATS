@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import logo180 from "@images/180logo.webp";
 import { useAuth } from "../../auth/AuthContext";
@@ -100,7 +101,7 @@ function isLinkActive(pathname, path) {
 
 function NavLink({ link, active, onNavigate }) {
   return (
-    <div
+    <button type="button"
       onClick={() => onNavigate(link.path)}
       onMouseOver={(e) => {
         if (!active) e.currentTarget.style.background = "#F3F4F6";
@@ -110,9 +111,12 @@ function NavLink({ link, active, onNavigate }) {
       }}
       style={{
         display: "flex",
+        border: "none",
+        textAlign: "left",
         alignItems: "center",
         gap: 12,
         padding: "10px 12px",
+        minHeight: 44,
         borderRadius: 8,
         cursor: "pointer",
         background: active ? css.greenDark : "transparent",
@@ -124,7 +128,7 @@ function NavLink({ link, active, onNavigate }) {
     >
       {link.icon}
       {link.label}
-    </div>
+    </button>
   );
 }
 
@@ -155,6 +159,7 @@ function NavSection({ title, links, pathname, onNavigate }) {
 }
 
 export default function Sidebar() {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -168,10 +173,15 @@ export default function Sidebar() {
       ? { ...link, label: "Admin Home" }
       : link
   ));
+  const navigateAndClose = (path) => {
+    setMobileOpen(false);
+    navigate(path);
+  };
 
   return (
-    <div style={{
+    <div className="app-sidebar" data-mobile-open={mobileOpen} style={{
       width: 240,
+      flexShrink: 0,
       height: "100%",
       background: css.cardWhite,
       borderRight: `1px solid ${css.borderLight}`,
@@ -179,7 +189,7 @@ export default function Sidebar() {
       flexDirection: "column",
       fontFamily: "'DM Sans', sans-serif",
     }}>
-      <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${css.borderLight}` }}>
+      <div className="app-sidebar-brand" style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${css.borderLight}`, flexShrink: 0 }}>
         <img
           src={logo180}
           alt="180 Degrees Consulting"
@@ -188,14 +198,18 @@ export default function Sidebar() {
         <div style={{ fontSize: 16, fontWeight: 700, color: css.textDark, letterSpacing: "-0.02em" }}>
           180DC ATS
         </div>
+        <button type="button" className="app-menu-toggle" aria-expanded={mobileOpen} aria-controls="app-navigation" onClick={() => setMobileOpen(open => !open)}>
+          {mobileOpen ? "Close menu" : "Menu"}
+        </button>
       </div>
 
+      <div id="app-navigation" className="app-sidebar-content">
       <div style={{ padding: "24px 16px", display: "flex", flexDirection: "column", gap: 24 }}>
         <NavSection
           title="Menu"
           links={menuLinks}
           pathname={location.pathname}
-          onNavigate={navigate}
+          onNavigate={navigateAndClose}
         />
 
         {isAdmin && (
@@ -203,7 +217,7 @@ export default function Sidebar() {
             title="Admin"
             links={adminLinks}
             pathname={location.pathname}
-            onNavigate={navigate}
+            onNavigate={navigateAndClose}
           />
         )}
       </div>
@@ -256,6 +270,7 @@ export default function Sidebar() {
             Sign out
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

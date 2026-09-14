@@ -51,6 +51,47 @@ body {
   overflow: hidden; /* App container will handle overflow */
 }
 
+.app-shell {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.app-sidebar-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.app-menu-toggle { display: none; }
+
+@media (max-width: 900px) {
+  .app-shell { flex-direction: column; }
+  .app-sidebar {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 75vh;
+    max-height: 75dvh;
+    border-right: 0 !important;
+  }
+  .app-sidebar-brand { padding: 10px 16px !important; }
+  .app-menu-toggle {
+    display: block;
+    margin-left: auto;
+    padding: 10px 12px;
+    min-height: 44px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+  }
+  .app-sidebar[data-mobile-open="false"] .app-sidebar-content { display: none; }
+}
+
 input, select, textarea {
   background: var(--color-surface);
   color: var(--color-text);
