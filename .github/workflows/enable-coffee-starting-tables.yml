@@ -1,0 +1,29 @@
+name: Enable Coffee Chat starting tables
+on:
+  push:
+    branches: [ops/enable-coffee-starting-tables]
+    paths:
+      - '.github/workflows/enable-coffee-starting-tables.yml'
+      - 'server/scripts/enable-coffee-starting-tables.cjs'
+permissions:
+  contents: read
+concurrency:
+  group: database-migrations
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install database client in runner temporary directory
+        run: npm install --prefix "$RUNNER_TEMP/coffee-migration" --no-save --no-package-lock pg@8.23.0
+      - name: Verify project and apply only the starting-table migration
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          EXPECTED_PROJECT_REF: rlzwhslxoxllrtafqwfc
+        run: NODE_PATH="$RUNNER_TEMP/coffee-migration/node_modules" node server/scripts/enable-coffee-starting-tables.cjs
