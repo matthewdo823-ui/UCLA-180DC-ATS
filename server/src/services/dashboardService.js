@@ -1,3 +1,4 @@
+const { ELIGIBLE_YEAR_FILTER } = require('../utils/screeningEligibility');
 const supabase = require("../config/supabase");
 const {
   getActiveCycleRow,
@@ -128,6 +129,7 @@ async function countInterviewPool(cycleId, roundId) {
   const { data: candidates, error: candError } = await supabase
     .from("candidates")
     .select("id")
+    .or(ELIGIBLE_YEAR_FILTER)
     .eq("cycle_id", cycleId);
 
   if (candError) throw candError;
@@ -304,7 +306,7 @@ async function loadResumePipelineStats(cycleId, deliberationRound, resumeRound, 
   const incompleteSummary = summarizeIncompleteDeliberation(pool);
   const undecidedCount = decisionCounts.pending + decisionCounts.hold;
   const reviewed = pool.filter((c) => c.numReviews > 0).length;
-  const awaitingReviews = pool.filter((c) => c.numReviews === 0).length;
+  const awaitingReviews = pool.filter((c) => c.numReviews === 0 && !c.screeningExclusionReason).length;
 
   return {
     mode: "resume",

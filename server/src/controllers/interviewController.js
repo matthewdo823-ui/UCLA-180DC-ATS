@@ -1,3 +1,4 @@
+const { screeningAccessError, ELIGIBLE_YEAR_FILTER } = require('../utils/screeningEligibility');
 const supabase = require("../config/supabase");
 const {
   getActiveCycleRow,
@@ -126,6 +127,7 @@ exports.listInterviewCandidates = async (req, res) => {
     const { data: candidates, error: candError } = await supabase
       .from("candidates")
       .select("id, name, email, major, year, gpa, headshot, cycle_id")
+      .or(ELIGIBLE_YEAR_FILTER)
       .eq("cycle_id", ctx.cycle.id)
       .order("name", { ascending: true });
 
@@ -345,7 +347,7 @@ exports.upsertInterviewEvaluation = async (req, res) => {
 
     const { data: candidate, error: candError } = await supabase
       .from("candidates")
-      .select("id, cycle_id")
+      .select("id, cycle_id, year")
       .eq("id", candidateId)
       .maybeSingle();
 
@@ -355,6 +357,8 @@ exports.upsertInterviewEvaluation = async (req, res) => {
       return res.status(400).json({ error: "Candidate is not in the active cycle" });
     }
 
+    const exclusion = screeningAccessError(candidate);
+    if (exclusion) return res.status(exclusion.status).json({ error: exclusion.error });
     const priorGate = await loadPriorRoundGate(ctx.cycle.id, ctx.round);
     if (!candidatePassesPriorRoundGate(candidateId, priorGate)) {
       const priorLabel = priorGate.priorRound?.name || "the previous round";
@@ -433,6 +437,7 @@ exports.assignInterviewGroups = async (req, res) => {
     const { data: candidates, error: candidateError } = await supabase
       .from("candidates")
       .select("id")
+      .or(ELIGIBLE_YEAR_FILTER)
       .eq("cycle_id", ctx.cycle.id);
     if (candidateError) throw candidateError;
 

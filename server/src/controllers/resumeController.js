@@ -1,3 +1,4 @@
+const { applyScreeningEligibility, screeningAccessError, screeningExclusionReason, ELIGIBLE_YEAR_FILTER } = require('../utils/screeningEligibility');
 const supabase = require('../config/supabase');
 const { extractDriveFileID, toDownloadURL, isGoogleDriveFileUrl } = require('../utils/drive');
 const { streamDriveFileToResponse, sendDriveProxyError } = require('../utils/driveStream');
@@ -354,9 +355,10 @@ async function fetchAssignedResumesForGrader({ gradedBy, cycleId, reviewedResume
     const { data, error } = await supabase
         .from('resumes')
         .select(`*,
-            candidates(year, major)
+            candidates!inner(year, major)
         `)
         .eq('cycle_id', cycleId)
+        .or(ELIGIBLE_YEAR_FILTER, { referencedTable: "candidates" })
         .in('id', pendingIds);
 
     if (error) throw error;
@@ -415,9 +417,10 @@ exports.getNextResume = async (req, res) => {
     let query = supabase
         .from('resumes')
         .select(`*,
-            candidates(year, major)
+            candidates!inner(year, major)
         `)
         .eq('cycle_id', screening.cycle.id)
+        .or(ELIGIBLE_YEAR_FILTER, { referencedTable: "candidates" })
         .order('review_count', { ascending: true })
         .order('created_at', { ascending: true });
 
@@ -488,6 +491,8 @@ async function userHasReviewForResume(gradedBy, resumeId, cycleId) {
 
 async function assertResumeAccessibleForScreening(resumeRow, { gradedBy, cycleId }) {
     const candidate = firstRel(resumeRow.candidates);
+    const exclusion = screeningAccessError(candidate);
+    if (exclusion) return exclusion;
     const resumeCycleId = resumeRow.cycle_id || candidate?.cycle_id || null;
 
     if (resumeCycleId) {
@@ -634,6 +639,8 @@ exports.saveReview = async (req, res) => {
     }
 
     const candidate = firstRel(resumeRow.candidates);
+    const exclusion = screeningAccessError(candidate);
+    if (exclusion) return res.status(exclusion.status).json({ error: exclusion.error });
     const rubricForYear = getRubricForYear(screening.round.rubric_config, candidate?.year);
     const { scores: normalizedScores, error: scoreError } = normalizeScreeningScoresInput(scores, rubricForYear);
     if (scoreError) {
@@ -785,6 +792,7 @@ exports.patchMyReview = async (req, res) => {
             decision,
             graded_by,
             rubric_snapshot,
+            cycle_id,
             resumes (
                 candidates ( year )
             )
@@ -805,6 +813,10 @@ exports.patchMyReview = async (req, res) => {
 
     const snapshot = existing.rubric_snapshot;
     const candidate = firstRel(firstRel(existing.resumes)?.candidates);
+    if (existing.cycle_id === screening.cycle.id) {
+        const exclusion = screeningAccessError(candidate);
+        if (exclusion) return res.status(exclusion.status).json({ error: exclusion.error });
+    }
     const cycleRubricConfig = screening.round.rubric_config;
     const rubricForYear = snapshot
         ? {
@@ -877,6 +889,7 @@ exports.patchMyReview = async (req, res) => {
             decision,
             submitted_at,
             rubric_snapshot,
+            cycle_id,
             normalized_score,
             resumes (
                 id,
@@ -990,7 +1003,7 @@ exports.getNextFrq = async (req, res) => {
             id,
             name,
             frq_review_count,
-            candidates (
+            candidates!inner (
                 year,
                 name,
                 major,
@@ -1000,6 +1013,7 @@ exports.getNextFrq = async (req, res) => {
             )
         `)
         .eq("cycle_id", screening.cycle.id)
+        .or(ELIGIBLE_YEAR_FILTER, { referencedTable: "candidates" })
         .order("frq_review_count", { ascending: true })
         .order("created_at", { ascending: true });
 
@@ -1126,7 +1140,7 @@ exports.saveFrqReview = async (req, res) => {
 
     const { data: resumeRow, error: resumeError } = await supabase
         .from("resumes")
-        .select("id, cycle_id")
+        .select("id, cycle_id, candidates(year)")
         .eq("id", resume_id)
         .maybeSingle();
 
@@ -1135,6 +1149,9 @@ exports.saveFrqReview = async (req, res) => {
     if (resumeRow.cycle_id && resumeRow.cycle_id !== screening.cycle.id) {
         return res.status(400).json({ error: "Resume is not part of the active cycle" });
     }
+
+    const exclusion = screeningAccessError(firstRel(resumeRow.candidates));
+    if (exclusion) return res.status(exclusion.status).json({ error: exclusion.error });
 
     const { data: existingReview, error: existingError } = await supabase
         .from("frq_reviews")
@@ -1200,7 +1217,7 @@ exports.patchMyFrqReview = async (req, res) => {
 
     const { data: existing, error: fetchError } = await supabase
         .from("frq_reviews")
-        .select("id")
+        .select("id, cycle_id, resumes(candidates(year))")
         .eq("id", reviewId)
         .eq("graded_by", gradedBy)
         .maybeSingle();
@@ -1208,6 +1225,11 @@ exports.patchMyFrqReview = async (req, res) => {
     if (fetchError) return respondWithServerError(res, fetchError, "patchMyFrqReview fetch");
     if (!existing) {
         return res.status(404).json({ error: "FRQ review not found" });
+    }
+
+    if (existing.cycle_id === await getActiveCycleId()) {
+        const exclusion = screeningAccessError(firstRel(firstRel(existing.resumes)?.candidates));
+        if (exclusion) return res.status(exclusion.status).json({ error: exclusion.error });
     }
 
     const { error: updateError } = await supabase
@@ -1985,6 +2007,7 @@ exports.getScoreboard = async (req, res) => {
                 major: linked.major,
                 gpa: linked.gpa,
                 year: linked.year,
+                screeningExclusionReason: viewingHistoricalCycle ? null : screeningExclusionReason(linked.year),
                 pronouns: linked.pronouns,
                 linkedin: linked.linkedin,
                 gm: linked.gm,
@@ -2035,6 +2058,7 @@ exports.getScoreboard = async (req, res) => {
                     major: linked.major,
                     gpa: linked.gpa,
                     year: linked.year,
+                    screeningExclusionReason: viewingHistoricalCycle ? null : screeningExclusionReason(linked.year),
                     pronouns: linked.pronouns,
                     linkedin: linked.linkedin,
                     gm: linked.gm,
@@ -2105,6 +2129,7 @@ exports.getScoreboard = async (req, res) => {
                 major: c.major,
                 gpa: c.gpa,
                 year: c.year,
+                screeningExclusionReason: c.screeningExclusionReason,
                 pronouns: c.pronouns,
                 linkedin: c.linkedin,
                 gm: c.gm,
@@ -2154,12 +2179,14 @@ exports.getScoreboard = async (req, res) => {
         ];
         const signalLookups = await loadCandidateSignalLookups(signalCandidateIds, req.user?.user_id);
         const candidatesWithSignals = candidatesWithComposite.map((c) =>
-            applyCandidateSignals(c, signalLookups)
+            applyScreeningEligibility(applyCandidateSignals(c, signalLookups), !viewingHistoricalCycle)
         );
 
         // Resume rank is retained as a tie-breaker after the cycle moves into
         // Coffee Chats; the Coffee Chat total becomes the primary ranking value.
         candidatesWithSignals.sort((a, b) => {
+            const eligibilityOrder = Number(Boolean(a.screeningExclusionReason)) - Number(Boolean(b.screeningExclusionReason));
+            if (eligibilityOrder) return eligibilityOrder;
             if (a.normalizedScore === null && b.normalizedScore === null) {
                 return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
             }
@@ -2389,7 +2416,7 @@ exports.bulkUpsertRoundDecisions = async (req, res) => {
         const [candidateResult, existingResult, priorRows] = await Promise.all([
             supabase
                 .from("candidates")
-                .select("id")
+                .select("id, year")
                 .eq("cycle_id", activeCycle.id)
                 .in("id", candidateIds),
             supabase
@@ -2404,6 +2431,7 @@ exports.bulkUpsertRoundDecisions = async (req, res) => {
         if (candidateResult.error) throw candidateResult.error;
         if (existingResult.error) throw existingResult.error;
 
+        const excludedCandidateIds = new Set((candidateResult.data || []).filter(c => screeningExclusionReason(c.year)).map(c => c.id));
         const validCandidateIds = new Set((candidateResult.data || []).map((row) => row.id));
         const existingLookup = buildDecisionLookup(existingResult.data || []);
         const priorLookup = buildDecisionLookup(priorRows || []);
@@ -2412,6 +2440,10 @@ exports.bulkUpsertRoundDecisions = async (req, res) => {
         const now = new Date().toISOString();
 
         const payloads = [...inputByCandidate.values()].flatMap((input) => {
+            if (excludedCandidateIds.has(input.candidateId)) {
+                skipped.push({ ...input, reason: "Automatically rejected by class standing" });
+                return [];
+            }
             if (!validCandidateIds.has(input.candidateId)) {
                 skipped.push({ ...input, reason: "Candidate is not in the active cycle" });
                 return [];
@@ -2572,6 +2604,7 @@ exports.exportScoreboardDecisions = async (req, res) => {
                 phoneNumber: linked.phoneNumber,
                 major: linked.major,
                 year: linked.year,
+                screeningExclusionReason: screeningExclusionReason(linked.year),
                 gpa: linked.gpa,
                 score: normalizedScore,
                 numReviews: scoredReviewCount,
@@ -2580,7 +2613,7 @@ exports.exportScoreboardDecisions = async (req, res) => {
             };
         });
 
-        const filteredExportRows = filterCandidatesForDeliberationRound(exportRows, {
+        const filteredExportRows = filterCandidatesForDeliberationRound(exportRows.map(candidate => applyScreeningEligibility(candidate)), {
             deliberationRound,
             priorDecisionRows: priorRoundDecisionRows,
         });
@@ -2622,6 +2655,7 @@ function mapApplicationCandidate(candidate) {
 
 async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = null) {
     let activeCycle = await getActiveCycleRow();
+    const applyStandingRule = !requestedCycleId || requestedCycleId === activeCycle?.id;
     if (requestedCycleId && requestedCycleId !== activeCycle?.id) {
         const { data, error } = await supabase
             .from('cycles')
@@ -2928,7 +2962,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
             reviewCount: numReviews,
             submittedAt: resumeRow.created_at,
         },
-        candidate: mapApplicationCandidate(candidate),
+        candidate: { ...mapApplicationCandidate(candidate), screeningExclusionReason: applyStandingRule ? screeningExclusionReason(candidate.year) : null },
         candidateId: candidate.id,
         resumeRoundId: resumeRound.id,
         activeCycleId,
@@ -3093,12 +3127,14 @@ exports.getScoreboardApplication = async (req, res) => {
             applyAdminOverrideToScoring(payload.scoring, adminOverride);
         }
 
+        const eligibility = applyScreeningEligibility({ ...payload.scoring, screeningExclusionReason: payload.candidate?.screeningExclusionReason });
+        payload.scoring = eligibility;
         const { candidateId, resumeRoundId, activeCycleId, ...responseBody } = payload;
         return res.json({
             ...responseBody,
             adminOverride,
             signals,
-            roundDecision: mapRoundDecision(roundDecisionResult.data),
+            roundDecision: eligibility.screeningExclusionReason ? eligibility.decision : mapRoundDecision(roundDecisionResult.data),
         });
     } catch (err) {
         return respondWithApplicationFetchError(res, err, 'getScoreboardApplication');
@@ -3244,6 +3280,8 @@ exports.upsertAdminOverride = async (req, res) => {
         }
 
         const payload = await fetchScoreboardApplicationPayload(resumeId);
+        const exclusion = screeningAccessError(payload.candidate);
+        if (exclusion) return res.status(exclusion.status).json({ error: exclusion.error });
         const adminUserId = req.user?.user_id;
 
         const upsertPayload = {

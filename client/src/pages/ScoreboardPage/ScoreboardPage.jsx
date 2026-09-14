@@ -2054,6 +2054,7 @@ export default function ScoreboardPage() {
                     {getCommitteeLinkWarning(c)}
                   </span>
                 ) : null}
+                {c.screeningExclusionReason && <span title={c.screeningExclusionReason} style={{ fontSize: 11, color: css.red, fontWeight: 600 }}>Automatically rejected · No grading required</span>}
                 <CandidateSignalBadges flagCount={c.flagCount} referralCount={c.referralCount} dark={false} />
               </div>
             </div>
