@@ -1,3 +1,4 @@
+const { mapApplicationCandidate } = require('../utils/applicationCandidate');
 const { applyScreeningEligibility, screeningAccessError, screeningExclusionReason, ELIGIBLE_YEAR_FILTER } = require('../utils/screeningEligibility');
 const supabase = require('../config/supabase');
 const { extractDriveFileID, toDownloadURL, isGoogleDriveFileUrl } = require('../utils/drive');
@@ -2515,36 +2516,6 @@ exports.bulkUpsertRoundDecisions = async (req, res) => {
         return respondWithServerError(res, err, "bulkUpsertRoundDecisions");
     }
 };
-
-function mapApplicationCandidate(candidate) {
-    if (!candidate) return null;
-    return {
-        id: candidate.id,
-        name: candidate.name || '',
-        email: candidate.email || '',
-        phoneNumber: candidate.phone_number || '',
-        major: candidate.major || '',
-        gpa: candidate.gpa || '',
-        year: candidate.year || '',
-        pronouns: candidate.pronouns || '',
-        urm: candidate.urm || '',
-        linkedin: candidate.linkedin || '',
-        gm: candidate.gm || '',
-        newbieTraining: candidate.newbie_training || '',
-        referralSource: candidate.referral_source || '',
-        previouslyApplied: candidate.previously_applied || '',
-        professionalDevelopment: candidate.professional_development || '',
-        consultingConnectInterest: candidate.consulting_connect_interest || '',
-        whyConsulting: candidate.why_consulting || '',
-        why180dc: candidate.why_180dc || '',
-        whySocialImpact: candidate.why_social_impact || '',
-        applicationResponses: Array.isArray(candidate.application_responses) ? candidate.application_responses : [],
-        extenuatingCircumstances: candidate.extenuating_circumstances || '',
-        headshot: candidate.headshot || '',
-        resumeFileUrl: candidate.resume_file_url || '',
-        appliedAt: candidate.created_at || null,
-    };
-}
 
 async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = null) {
     let activeCycle = await getActiveCycleRow();

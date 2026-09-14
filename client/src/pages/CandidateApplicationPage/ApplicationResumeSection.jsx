@@ -4,7 +4,7 @@ import { css } from "../../theme/colors";
 import ApplicationResponsesModal from "./ApplicationResponsesSection";
 import SectionCard from "./components/SectionCard";
 
-export default function ApplicationResumeSection({ candidate, resume, authToken, compact = false }) {
+export default function ApplicationResumeSection({ candidate, resume, authToken, compact = false, responsesState }) {
   const [resumeOpen, setResumeOpen] = useState(false);
   const [responsesOpen, setResponsesOpen] = useState(false);
 
@@ -51,7 +51,7 @@ export default function ApplicationResumeSection({ candidate, resume, authToken,
         fileUrl={resume?.fileUrl}
         authToken={authToken}
       />
-      <ApplicationResponsesModal open={responsesOpen} onClose={() => setResponsesOpen(false)} candidate={candidate} />
+      <ApplicationResponsesModal open={responsesOpen} onClose={() => setResponsesOpen(false)} candidate={candidate} {...responsesState} />
     </>
   );
 
