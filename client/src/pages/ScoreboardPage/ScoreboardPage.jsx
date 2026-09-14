@@ -2022,6 +2022,7 @@ export default function ScoreboardPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
                   <button
                     type="button"
+                    title="Open full candidate profile"
                     onClick={(e) => {
                       e.stopPropagation();
                       openCandidateWorkspace(c);
@@ -2108,11 +2109,11 @@ export default function ScoreboardPage() {
               />
               <button
                 type="button"
-                title="Open candidate workspace"
-                aria-label={`Open candidate workspace for ${c.name}`}
+                title="View candidate scorecard"
+                aria-label={`View scorecard for ${c.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  openCandidateWorkspace(c);
+                  setSelectedCandidate(c);
                 }}
                 style={rowIconBtnStyle(t, true)}
               >
