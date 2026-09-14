@@ -42,7 +42,7 @@ export function getSourceNormalizedScore(candidate) { return hasNumericScore(can
 export function normalizeMetricScore(candidate, metric) { const value = candidate?.categoryScores?.[metric]; return hasNumericScore(value) ? Number(value) : null; }
 
 export function computeScoreCutoffs(candidates) {
-  const scores = (candidates || []).map(getPerformanceSortScore).filter(hasNumericScore).map(Number).sort((a, b) => b - a);
+  const scores = (candidates || []).filter(c => !c.screeningExclusionReason).map(getPerformanceSortScore).filter(hasNumericScore).map(Number).sort((a, b) => b - a);
   const at = (fraction) => scores.length ? scores[Math.max(1, Math.ceil(scores.length * fraction)) - 1] : null;
   return { top: at(0.2), strong: at(0.3) };
 }
@@ -64,8 +64,8 @@ function matchesSearch(candidate, query) {
 export function filterCandidates(candidates, filters, searchQuery, cutoffs) {
   return candidates.filter((candidate) => {
     const reviews = getNumReviews(candidate); const headline = getHeadlineScore(candidate); const ranking = getPerformanceSortScore(candidate);
-    const scoreMatches = filters.scoreBand === "all" || (filters.scoreBand === "top" && cutoffs?.top != null && Number(ranking) >= cutoffs.top) || (filters.scoreBand === "strong" && cutoffs?.strong != null && Number(ranking) >= cutoffs.strong) || (filters.scoreBand === "low" && headline !== null && headline < 60 && reviews > 0) || (filters.scoreBand === "pending" && (reviews === 0 || headline === null));
-    const reviewMatches = filters.reviews === "all" || filters.reviews === String(reviews) || (filters.reviews === "1+" && reviews >= 1) || (filters.reviews === "2+" && reviews >= 2);
+    const scoreMatches = filters.scoreBand === "all" || (filters.scoreBand === "top" && cutoffs?.top != null && Number(ranking) >= cutoffs.top) || (filters.scoreBand === "strong" && cutoffs?.strong != null && Number(ranking) >= cutoffs.strong) || (filters.scoreBand === "low" && headline !== null && headline < 60 && (reviews > 0 || candidate.screeningExclusionReason)) || (filters.scoreBand === "pending" && !candidate.screeningExclusionReason && (reviews === 0 || headline === null));
+    const reviewMatches = filters.reviews === "all" || (filters.reviews === String(reviews) && !(filters.reviews === "0" && candidate.screeningExclusionReason)) || (filters.reviews === "1+" && reviews >= 1) || (filters.reviews === "2+" && reviews >= 2);
     const signalMatches = filters.signals === "all" || (filters.signals === "referred" && candidate.referralCount > 0) || (filters.signals === "flagged" && candidate.flagCount > 0);
     return matchesSearch(candidate, searchQuery) && (filters.major === "all" || (candidate.major || "Undeclared") === filters.major) && (filters.year === "all" || String(candidate.year || "").trim() === filters.year) && reviewMatches && scoreMatches && signalMatches && passesDecisionFilter(candidate, filters.decision);
   });
@@ -84,6 +84,10 @@ const compareNullable = (a, b, descending, missingFirst = false) => {
   return descending ? b - a : a - b;
 };
 export function compareCandidates(a, b, sortBy) {
+  if (sortBy === "performance_desc") {
+    const eligibilityOrder = Number(Boolean(a.screeningExclusionReason)) - Number(Boolean(b.screeningExclusionReason));
+    if (eligibilityOrder) return eligibilityOrder;
+  }
   let value = 0;
   if (sortBy === "performance_desc" || sortBy === "performance_asc") {
     const first = getPerformanceSortScore(a); const second = getPerformanceSortScore(b);

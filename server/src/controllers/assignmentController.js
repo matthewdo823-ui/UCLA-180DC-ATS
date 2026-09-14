@@ -33,9 +33,10 @@ async function loadAssignmentBoardData(cycleId) {
                 name,
                 review_count,
                 created_at,
-                candidates ( id, name, year, major, gpa )
+                candidates!inner ( id, name, year, major, gpa, screening_exclusion_reason )
             `)
             .eq('cycle_id', cycleId)
+            .is('candidates.screening_exclusion_reason', null)
             .order('review_count', { ascending: true })
             .order('created_at', { ascending: true }),
         supabase
@@ -74,6 +75,7 @@ async function loadCoffeeChatAssignmentBoard(cycle, round) {
         supabase
             .from('candidates')
             .select('id, name, year, major, headshot')
+            .is('screening_exclusion_reason', null)
             .eq('cycle_id', cycle.id)
             .order('name', { ascending: true }),
         supabase
@@ -203,7 +205,8 @@ exports.getAssignmentBoard = async (req, res) => {
         const assignmentsByResume = {};
         const mappedAssignments = [];
 
-        (assignments || []).forEach((row) => {
+        const eligibleResumeIds = new Set((resumes || []).map(row => row.id));
+        (assignments || []).filter(row => eligibleResumeIds.has(row.resume_id)).forEach((row) => {
             const grader = graderLookup[row.grader_id];
             const done = completedPairs.has(reviewKey(row.grader_id, row.resume_id));
 
@@ -398,15 +401,16 @@ exports.createAssignments = async (req, res) => {
 
         const { data: validResumes, error: resumeError } = await supabase
             .from('resumes')
-            .select('id')
+            .select('id, candidates!inner(screening_exclusion_reason)')
             .eq('cycle_id', cycle.id)
+            .is('candidates.screening_exclusion_reason', null)
             .in('id', resumeIds);
 
         if (resumeError) throw resumeError;
 
         const validResumeIds = (validResumes || []).map((row) => row.id);
         if (validResumeIds.length !== resumeIds.length) {
-            return res.status(400).json({ error: 'One or more candidates are not part of the active cycle' });
+            return res.status(400).json({ error: 'One or more candidates are outside the active cycle or automatically rejected' });
         }
 
         const { data: validGraders, error: graderError } = await supabase

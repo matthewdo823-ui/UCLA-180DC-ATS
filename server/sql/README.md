@@ -67,3 +67,44 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
   should happen only after the team decides how retired categories contribute
   to historical totals. That backfill could change rankings and is intentionally
   not included here.
+
+## Class-standing eligibility
+
+`add_screening_eligibility.sql` is an independent migration after the existing
+cycle, resume/FR review, round-decision, interview and assignment tables. Apply it
+in one transaction before deploying the eligibility API changes. It has no
+Storage migration dependency.
+
+It enables the policy for active/draft cycles and future cycles. Existing archived
+cycles retain their results. Exact `Junior` and `Senior` values receive a stored
+exclusion reason and an automatic resume-round reject decision; `Junior Transfer`,
+Freshman and Sophomore remain eligible. A later archival preserves the policy and
+its recorded outcomes. Candidate and review records are not deleted, and historical
+grades are not rewritten. Existing committee advances for newly excluded applicants
+become automatic rejects. No rejection email is sent by this migration.
+
+Both grading queues, assignments, dashboard work counts and interview eligibility
+exclude these applicants. The resume scoreboard and profile remain accessible,
+show 0% and explain why no grading is required. Bias adjustment cannot raise the
+policy score. Correcting a candidate's year clears policy-generated decisions and
+returns them to pending; original reviews are retained. This does not restore any
+previous acceptance that the policy superseded.
+
+Read-only rollout preview (before applying):
+
+```sql
+SELECT cy.name, c.year, count(*) AS affected
+FROM candidates c JOIN cycles cy ON cy.id = c.cycle_id
+WHERE (cy.status IN ('active', 'draft') OR cy.id = (SELECT active_cycle_id FROM app_settings WHERE id = 1))
+  AND c.year::text IN ('Junior', 'Senior')
+GROUP BY cy.name, c.year;
+```
+
+With `psql`, apply atomically using `psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f
+server/sql/add_screening_eligibility.sql`. If migration automation is introduced
+separately, register this file in its manifest before relying on automatic rollout.
+
+Validation: `node --test server/test/eligibility/*.test.js` and, against an empty
+**disposable test database**, `psql -X -v ON_ERROR_STOP=1 "$TEST_DATABASE_URL" -f
+server/test/eligibility/migration.sql`. The latter creates isolated fixtures and
+rolls back; CI runs it in a dedicated PostgreSQL service, with no production secret.

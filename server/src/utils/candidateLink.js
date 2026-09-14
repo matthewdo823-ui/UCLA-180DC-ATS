@@ -112,6 +112,7 @@ function pickCandidateFields(candidate) {
   }
 
   return {
+    screeningExclusionReason: candidate.screening_exclusion_reason || null,
     email: candidate.email || "",
     phoneNumber: candidate.phone_number || "",
     major: candidate.major || "Undeclared",

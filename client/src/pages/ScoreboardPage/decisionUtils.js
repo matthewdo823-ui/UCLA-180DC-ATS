@@ -79,7 +79,7 @@ export function patchScoreboardWithDecision(scoreboardData, candidateId, decisio
 
 /** Whether admin can record a committee decision for this row. */
 export function canRecordCommitteeDecision(candidate) {
-  if (!candidate?.id) return false;
+  if (!candidate?.id || candidate.screeningExclusionReason) return false;
   if (candidate.linkAmbiguous) return false;
   if (candidate.canDecide === true) return true;
   if (candidate.candidateId) return true;

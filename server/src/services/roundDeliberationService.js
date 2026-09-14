@@ -1,3 +1,4 @@
+const { applyScreeningEligibility, screeningAccessError } = require('../utils/screeningEligibility');
 const supabase = require("../config/supabase");
 const { getRoundsForCycle } = require("../utils/cycleContext");
 const { firstRel } = require("../utils/supabaseHelpers");
@@ -66,6 +67,7 @@ function filterCandidatesForDeliberationRound(candidates, { deliberationRound, p
   const priorDeliberationStarted = deliberationHasStarted(priorDecisionRows);
 
   return (candidates || []).filter((candidate) => {
+    if (candidate.screeningExclusionReason) return false;
     if (!candidate.numReviews) return false;
     if (!priorDeliberationStarted) return true;
     const priorStatus = normalizeRoundDecision(priorLookup[candidate.candidateId]?.decision);
@@ -102,7 +104,7 @@ async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRo
       id,
       name,
       candidate_id,
-      candidates ( id, email, major, year, gpa )
+      candidates ( id, email, major, year, gpa, screening_exclusion_reason )
     `)
     .eq("cycle_id", cycleId);
 
@@ -110,7 +112,7 @@ async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRo
 
   const { data: cycleCandidates, error: cycleCandError } = await supabase
     .from("candidates")
-    .select("id, name, email, major, year, gpa, resume_file_url")
+    .select("id, name, email, major, year, gpa, screening_exclusion_reason, resume_file_url")
     .eq("cycle_id", cycleId);
 
   if (cycleCandError) throw cycleCandError;
@@ -148,12 +150,13 @@ async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRo
       id: resume.id,
       candidateId: linked.candidateId,
       name: resume.name || "Unknown",
+      screeningExclusionReason: linked.screeningExclusionReason,
       numReviews: reviewCountByResume[resume.id] || 0,
       decision: resolveCandidateDecision(linked.candidateId, decisionLookup, { provisional: false }),
     };
   });
 
-  return filterCandidatesForDeliberationRound(poolRows, {
+  return filterCandidatesForDeliberationRound(poolRows.map(applyScreeningEligibility), {
     deliberationRound,
     priorDecisionRows: priorRoundDecisionRows,
   });
@@ -198,6 +201,11 @@ async function assertCandidateEligibleForRoundDecision({
   if (!activeRound || activeRound.status !== "active") {
     return { error: "This round is closed — activate a round in Cycle Management to record decisions.", status: 400 };
   }
+
+  const { data: candidate, error } = await supabase.from("candidates").select("screening_exclusion_reason").eq("id", candidateId).eq("cycle_id", cycleId).maybeSingle();
+  if (error) throw error;
+  const exclusion = screeningAccessError(candidate);
+  if (exclusion) return exclusion;
 
   if (isResumeScreenType(activeRound.type) || !resumeRound) {
     return null;
