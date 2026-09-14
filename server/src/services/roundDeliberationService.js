@@ -1,6 +1,6 @@
 const { applyScreeningEligibility, screeningAccessError } = require('../utils/screeningEligibility');
 const supabase = require("../config/supabase");
-const { getRoundsForCycle } = require("../utils/cycleContext");
+const { getRoundsForCycle, getActiveCycleId } = require("../utils/cycleContext");
 const { firstRel } = require("../utils/supabaseHelpers");
 const {
   normalizeRoundDecision,
@@ -97,6 +97,7 @@ async function loadPriorRoundDecisionRows(cycleId, deliberationRound, cycleRound
 
 async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRound, cycleRounds = null) {
   const rounds = cycleRounds || await getRoundsForCycle(cycleId);
+  const applyStandingRule = cycleId === await getActiveCycleId();
 
   const { data: resumes, error: resumeError } = await supabase
     .from("resumes")
@@ -104,7 +105,7 @@ async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRo
       id,
       name,
       candidate_id,
-      candidates ( id, email, major, year, gpa, screening_exclusion_reason )
+      candidates ( id, email, major, year, gpa )
     `)
     .eq("cycle_id", cycleId);
 
@@ -112,7 +113,7 @@ async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRo
 
   const { data: cycleCandidates, error: cycleCandError } = await supabase
     .from("candidates")
-    .select("id, name, email, major, year, gpa, screening_exclusion_reason, resume_file_url")
+    .select("id, name, email, major, year, gpa, resume_file_url")
     .eq("cycle_id", cycleId);
 
   if (cycleCandError) throw cycleCandError;
@@ -150,13 +151,13 @@ async function loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRo
       id: resume.id,
       candidateId: linked.candidateId,
       name: resume.name || "Unknown",
-      screeningExclusionReason: linked.screeningExclusionReason,
+      year: linked.year,
       numReviews: reviewCountByResume[resume.id] || 0,
       decision: resolveCandidateDecision(linked.candidateId, decisionLookup, { provisional: false }),
     };
   });
 
-  return filterCandidatesForDeliberationRound(poolRows.map(applyScreeningEligibility), {
+  return filterCandidatesForDeliberationRound(poolRows.map(candidate => applyScreeningEligibility(candidate, applyStandingRule)), {
     deliberationRound,
     priorDecisionRows: priorRoundDecisionRows,
   });
@@ -202,7 +203,7 @@ async function assertCandidateEligibleForRoundDecision({
     return { error: "This round is closed — activate a round in Cycle Management to record decisions.", status: 400 };
   }
 
-  const { data: candidate, error } = await supabase.from("candidates").select("screening_exclusion_reason").eq("id", candidateId).eq("cycle_id", cycleId).maybeSingle();
+  const { data: candidate, error } = await supabase.from("candidates").select("year").eq("id", candidateId).eq("cycle_id", cycleId).maybeSingle();
   if (error) throw error;
   const exclusion = screeningAccessError(candidate);
   if (exclusion) return exclusion;
