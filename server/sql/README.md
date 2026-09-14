@@ -72,6 +72,8 @@ That writes every manifest entry into `schema_migrations` **without executing
 anything**. Until it is run, the runner refuses to touch a database that has
 application tables but no migration history.
 
+| 29 | `add_resume_document_sync.sql` | Atomic resume enqueueing, versioned claims, private queue access, and backfill RPC |
+
 ## Notes
 
 - **Fresh database:** run 1–4, then 6–13, 15–22, and 26–30 in order. Skip 5, 14, and 23–25 unless noted below. Fresh installs of the current `add_frq_reviews.sql` already allow 0–4 FRQ scores, so #24 is only needed on existing databases.
@@ -115,3 +117,7 @@ application tables but no migration history.
   should happen only after the team decides how retired categories contribute
   to historical totals. That backfill could change rankings and is intentionally
   not included here.
+
+## Resume Storage rollout
+
+Migration #29 follows #28. See [document storage](../docs/document-storage.md) for worker deployment and the explicit historical backfill.

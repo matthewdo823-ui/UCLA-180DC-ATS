@@ -148,6 +148,11 @@
       "order": 28,
       "file": "add_document_sync_queue.sql",
       "mode": "auto"
+    },
+    {
+      "order": 29,
+      "file": "add_resume_document_sync.sql",
+      "mode": "auto"
     }
   ]
 }

@@ -13,7 +13,8 @@
     "worker": "node src/workers/documentSyncWorker.js",
     "migrate": "node scripts/apply-migrations.js",
     "migrate:plan": "node scripts/apply-migrations.js --plan",
-    "migrate:baseline": "node scripts/apply-migrations.js --baseline"
+    "migrate:baseline": "node scripts/apply-migrations.js --baseline",
+    "documents:backfill": "node scripts/backfill-resume-documents.js"
   },
   "keywords": [],
   "author": "",

@@ -1,4 +1,5 @@
 const { isGoogleDriveFileUrl, extractDriveFileID } = require("../utils/drive");
+const { randomUUID } = require('node:crypto');
 
 /**
  * Enqueue candidate headshots for background copy into Supabase Storage.
@@ -87,10 +88,13 @@ async function requeueChangedHeadshots(client, rows) {
           next_attempt_at: new Date().toISOString(),
           claimed_at: null,
           storage_path: null,
+          source_version: randomUUID(),
+          claim_token: null,
           synced_at: null,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", row.id);
+        .eq("id", row.id)
+        .eq("drive_file_id", row.drive_file_id);
     })
   );
 

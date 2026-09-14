@@ -4,6 +4,7 @@ import { isStaffRole } from "../utils/auth";
 import { queryClient } from "../lib/queryClient";
 import { clearDriveFileCache } from "../utils/driveFileCache";
 import { clearHeadshotUrlCache } from "../utils/headshotUrl";
+import { clearResumeFileCache } from "../utils/resumeFiles";
 import { formatNetworkError, formatResponseError } from "../utils/errors";
 
 const TOKEN_STORAGE_KEY = "resume_screener_jwt";
@@ -60,6 +61,7 @@ export function AuthProvider({ children }) {
     queryClient.clear();
     clearDriveFileCache();
     clearHeadshotUrlCache();
+    clearResumeFileCache();
   }, []);
 
   useEffect(() => {

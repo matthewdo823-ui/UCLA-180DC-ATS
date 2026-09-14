@@ -7,6 +7,22 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: ats_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:test-only@localhost:5432/ats_test
+      SUPABASE_URL: http://localhost:54321
+      SUPABASE_SERVICE_KEY: test-only
     steps:
       - uses: actions/checkout@v4
       - name: Reject tracked secrets
@@ -22,7 +38,5 @@ jobs:
       - run: npm ci --prefix server
       - run: npm run lint --prefix client
       - run: npm run build --prefix client
-      - run: |
-          if find server/test -name '*.test.js' -print -quit 2>/dev/null | grep -q .; then
-            node --test server/test/**/*.test.js
-          fi
+      - run: npm test --prefix server
+      - run: npm test --prefix client

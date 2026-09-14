@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { css } from "../../theme/colors";
-import { fetchDriveDocumentBlob } from "../../utils/driveFileCache";
+import { loadResumeBlob } from "../../utils/resumeFiles";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 // Code-split: pdfjs-dist is only pulled into a chunk when a PdfViewer actually mounts.
@@ -58,7 +58,7 @@ function PageCanvas({ page, viewport }) {
   );
 }
 
-export default function PdfViewer({ url, authToken }) {
+export default function PdfViewer({ resumeId, fileUrl, authToken }) {
   const containerRef = useRef(null);
   const [pages, setPages] = useState([]);
   const [imageUrl, setImageUrl] = useState(null);
@@ -66,7 +66,7 @@ export default function PdfViewer({ url, authToken }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!url) return;
+    if (!resumeId) return;
     let cancelled = false;
     let objectUrl = null;
 
@@ -90,7 +90,7 @@ export default function PdfViewer({ url, authToken }) {
         // PDF.js's httpHeaders — PDF.js doesn't reliably attach them to the
         // request its worker/range logic issues, so the proxy rejects it with
         // "Missing bearer token". This mirrors AuthedDriveImage's blob approach.
-        const blob = await fetchDriveDocumentBlob(url, authToken);
+        const blob = await loadResumeBlob({ resumeId, sourceUrl: fileUrl, authToken });
         if (cancelled) return;
         // PDF.js can detach its input buffer, so always give it a fresh typed array.
         const data = new Uint8Array(await blob.arrayBuffer());
@@ -133,7 +133,7 @@ export default function PdfViewer({ url, authToken }) {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [authToken, url]);
+  }, [authToken, resumeId, fileUrl]);
 
   return (
     <div ref={containerRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", background: "transparent", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "0", scrollbarWidth: "thin", scrollbarColor: `${css.borderLight} transparent` }}>

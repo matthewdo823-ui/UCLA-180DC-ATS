@@ -36,6 +36,7 @@ function createBlobCache(maxEntries) {
   const blobs = new Map();
   const inflight = new Map();
   const failures = new Map();
+  let generation = 0;
 
   function remember(url, blob) {
     blobs.delete(url);
@@ -46,23 +47,25 @@ function createBlobCache(maxEntries) {
   }
 
   function fetchBlob(url, authToken) {
-    const cached = blobs.get(url);
+    const key = JSON.stringify([url, authToken || null]);
+    const cached = blobs.get(key);
     if (cached) {
-      remember(url, cached);
+      remember(key, cached);
       return Promise.resolve(cached);
     }
 
-    const pending = inflight.get(url);
+    const pending = inflight.get(key);
     if (pending) return pending;
 
-    const failedAt = failures.get(url);
+    const failedAt = failures.get(key);
     if (failedAt !== undefined) {
       if (Date.now() - failedAt < FAILURE_TTL_MS) {
         return Promise.reject(new Error('Recently failed'));
       }
-      failures.delete(url);
+      failures.delete(key);
     }
 
+    const startGeneration = generation;
     const request = fetch(
       url,
       authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : undefined
@@ -70,24 +73,25 @@ function createBlobCache(maxEntries) {
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const blob = await res.blob();
-        remember(url, blob);
+        if (startGeneration === generation) remember(key, blob);
         return blob;
       })
       .catch((err) => {
-        failures.set(url, Date.now());
+        if (startGeneration === generation) failures.set(key, Date.now());
         throw err;
       })
       .finally(() => {
-        inflight.delete(url);
+        if (inflight.get(key) === request) inflight.delete(key);
       });
 
-    inflight.set(url, request);
+    inflight.set(key, request);
     return request;
   }
 
   return {
     fetchBlob,
     clear() {
+      generation += 1;
       blobs.clear();
       inflight.clear();
       failures.clear();
