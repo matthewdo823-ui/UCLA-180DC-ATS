@@ -6,6 +6,9 @@ function logServerError(context, err) {
 }
 
 function respondWithServerError(res, err, context = 'Request failed', clientMessage = GENERIC_SERVER_ERROR) {
+    if (err?.code === '23514' && /automatically rejected/i.test(err.message || '')) {
+        return res.status(409).json({ error: err.message });
+    }
     logServerError(context, err);
     return res.status(500).json({ error: clientMessage });
 }

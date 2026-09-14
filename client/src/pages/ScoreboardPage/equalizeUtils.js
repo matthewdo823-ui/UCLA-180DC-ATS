@@ -22,7 +22,7 @@ function stdDev(values, avg) {
 
 function collectReviewEntries(candidates) {
   const entries = [];
-  (candidates || []).forEach(candidate => {
+  (candidates || []).filter(candidate => !candidate.screeningExclusionReason).forEach(candidate => {
     (candidate.reviews || []).forEach(review => {
       entries.push({ candidate, review });
     });
@@ -32,7 +32,7 @@ function collectReviewEntries(candidates) {
 
 function collectFrqEntries(candidates) {
   const entries = [];
-  (candidates || []).forEach(candidate => {
+  (candidates || []).filter(candidate => !candidate.screeningExclusionReason).forEach(candidate => {
     (candidate.frqReviews || []).forEach(review => {
       entries.push({ candidate, review });
     });
@@ -265,6 +265,7 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
     : {};
 
   return (candidates || []).map(candidate => {
+    if (candidate.screeningExclusionReason) return { ...candidate, score: 0, normalizedScore: 0, aggregateScore: 0 };
     const reviews = candidate.reviews || [];
     const frqReviews = candidate.frqReviews || [];
 
