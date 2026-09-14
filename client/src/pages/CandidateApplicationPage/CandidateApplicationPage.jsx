@@ -20,8 +20,8 @@ export default function CandidateApplicationPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { token } = useAuth();
-  const { candidate, resume, scoring, signals, roundDecision, contextLabel, loading, error, refresh } = useCandidateApplication(resumeId, cycleId);
-  const summaryState = useCandidateApplicationSummary(resumeId, !loading && !error && Boolean(candidate), cycleId);
+  const { candidate, resume, scoring, signals, roundDecision, contextLabel, loading, error, refresh, verified, detailsLoading, detailsError, refreshDetails, responsesState } = useCandidateApplication(resumeId, cycleId);
+  const summaryState = useCandidateApplicationSummary(resumeId, verified, cycleId);
   const cachedScoreboard = queryClient
     .getQueriesData({ queryKey: qk.scoreboardRoot() })
     .map(([, cached]) => cached)
@@ -36,7 +36,7 @@ export default function CandidateApplicationPage() {
 
   function returnToSource() {
     if (returnTo) {
-      navigate(returnTo);
+      navigate(returnTo, { state: { selectedCandidateId: resumeId } });
       return;
     }
     if ((window.history.state?.idx ?? 0) > 0) {
@@ -86,6 +86,9 @@ export default function CandidateApplicationPage() {
               candidate={candidate}
               resume={resume}
               scoring={scoring}
+              detailsLoading={detailsLoading}
+              detailsError={detailsError}
+              responsesState={responsesState}
               authToken={token}
               candidateCount={candidateCount}
               resumeScreenRank={resumeScreenRank}
@@ -96,8 +99,12 @@ export default function CandidateApplicationPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
               <ApplicationSummarySection {...summaryState} onRefresh={summaryState.refresh} />
               <ApplicationContactSection candidate={candidate} resume={resume} />
-              <ApplicationSignalsSection signals={signals} />
-              <ApplicationRoundsSection scoring={scoring} roundDecision={roundDecision} />
+              {detailsError ? <ErrorBanner error={detailsError} onRetry={refreshDetails} /> : detailsLoading ? (
+                <div role="status" style={{ padding: 24, color: css.textGray }}>Loading scores, flags, and referrals…</div>
+              ) : <>
+                <ApplicationSignalsSection signals={signals} />
+                <ApplicationRoundsSection scoring={scoring} roundDecision={roundDecision} />
+              </>}
             </div>
           </div>
         )}

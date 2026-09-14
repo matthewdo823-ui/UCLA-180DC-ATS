@@ -5,7 +5,7 @@ import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { qk } from "../../lib/queryKeys";
 import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
-import { candidateApplicationQueryOptions } from "../../lib/candidateApplicationQuery";
+import { candidateProfileQueryOptions } from "../../lib/candidateApplicationQuery";
 import { css } from "../../theme/colors";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import Topbar from "../../components/Topbar/Topbar";
@@ -65,7 +65,7 @@ const SCOREBOARD_THEME = {
   accent: css.greenDark,
   titleAccent: css.greenDark,
   rowBg: css.cardWhite,
-  rowFocus: "rgba(40, 98, 65, 0.06)",
+  rowFocus: "rgba(128, 128, 128, 0.18)",
   statValue: css.textDark,
   btnGhostBg: css.cardWhite,
   btnGhostText: css.textDark,
@@ -657,7 +657,7 @@ export default function ScoreboardPage() {
   const [bulkDecisionBusy, setBulkDecisionBusy] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [viewingRoundId, setViewingRoundId] = useState(null);
-  const [focusedCandidateId, setFocusedCandidateId] = useState(null);
+  const [focusedCandidateId, setFocusedCandidateId] = useState(location.state?.selectedCandidateId ?? null);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const adminMenuRef = useRef(null);
   const rowRefs = useRef({});
@@ -721,12 +721,14 @@ export default function ScoreboardPage() {
     return queryClient.invalidateQueries({ queryKey: scoreboardKey });
   }, [queryClient, scoreboardKey]);
 
+  const profileCycleId = cycleId || data.context?.cycle?.id || null;
   const prefetchCandidateApplication = useCallback((resumeId) => {
-    queryClient.prefetchQuery(candidateApplicationQueryOptions(authedFetch, resumeId, cycleId));
-  }, [authedFetch, cycleId, queryClient]);
+    queryClient.prefetchQuery(candidateProfileQueryOptions(authedFetch, resumeId, profileCycleId));
+  }, [authedFetch, profileCycleId, queryClient]);
 
   const openCandidateWorkspace = useCallback((candidate) => {
-    const cycleQuery = cycleId ? `?cycleId=${encodeURIComponent(cycleId)}` : "";
+    setFocusedCandidateId(candidate.id);
+    const cycleQuery = profileCycleId ? `?cycleId=${encodeURIComponent(profileCycleId)}` : "";
     navigate(`/candidates/${candidate.id}${cycleQuery}`, {
       state: {
         returnTo: `${location.pathname}${location.search}`,
@@ -738,7 +740,7 @@ export default function ScoreboardPage() {
         coffeeChatEvaluationCount: candidate.coffeeChatEvaluationCount,
       },
     });
-  }, [cycleId, data.stats?.applicants, location.pathname, location.search, navigate]);
+  }, [profileCycleId, data.stats?.applicants, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (scoreboardQuery.error) {
@@ -1059,16 +1061,14 @@ export default function ScoreboardPage() {
   }, [candidates]);
 
   useEffect(() => {
-    if (!deliberationMode || !canEditDeliberations) return undefined;
     function onKeyDown(event) {
       const tag = event.target?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      if (tag === "input" || tag === "textarea" || tag === "select" || event.target?.isContentEditable || event.target?.closest?.('[role="dialog"]') || event.metaKey || event.ctrlKey || event.altKey) return;
 
       const list = filteredCandidates;
       if (!list.length) return;
 
       let index = list.findIndex(c => String(c.id) === String(focusedCandidateId));
-      if (index < 0) index = 0;
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -1083,7 +1083,8 @@ export default function ScoreboardPage() {
         return;
       }
 
-      const focused = list[index];
+      if (!deliberationMode || !canEditDeliberations) return;
+      const focused = list[Math.max(index, 0)];
       if (!canRecordCommitteeDecision(focused)) return;
 
       const key = event.key.toLowerCase();
@@ -1105,10 +1106,7 @@ export default function ScoreboardPage() {
   }, [canEditDeliberations, deliberationMode, filteredCandidates, focusedCandidateId, saveDecision]);
 
   useEffect(() => {
-    if (!deliberationMode) {
-      setFocusedCandidateId(null);
-      return;
-    }
+    if (loading) return;
     if (!filteredCandidates.length) {
       setFocusedCandidateId(null);
       return;
@@ -1119,7 +1117,7 @@ export default function ScoreboardPage() {
     ) {
       setFocusedCandidateId(null);
     }
-  }, [deliberationMode, filteredCandidates, focusedCandidateId]);
+  }, [loading, filteredCandidates, focusedCandidateId]);
 
   const effectiveSummaryFilters = {
     ...filters,
@@ -1981,7 +1979,7 @@ export default function ScoreboardPage() {
           const isHistoricalCut = viewingFinalizedRound && decisionStatus !== "advance";
           const displayDecisionStatus = isHistoricalCut ? "reject" : decisionStatus;
           const decisionStyle = DECISION_STYLE[displayDecisionStatus];
-          const isFocused = deliberationMode && focusedCandidateId != null && String(focusedCandidateId) === String(c.id);
+          const isFocused = focusedCandidateId != null && String(focusedCandidateId) === String(c.id);
           const rowSaving = savingDecisionId === c.id;
           const headlineScore = getHeadlineScore(c);
           const rowBg = isFocused
@@ -1993,11 +1991,13 @@ export default function ScoreboardPage() {
           return (
           <div
             key={c.id}
+            data-candidate-id={c.id}
+            aria-current={isFocused ? "true" : undefined}
             ref={el => { rowRefs.current[c.id] = el; }}
             onMouseEnter={() => prefetchCandidateApplication(c.id)}
+            onFocusCapture={() => { setFocusedCandidateId(c.id); prefetchCandidateApplication(c.id); }}
             onClick={() => {
-              if (!deliberationMode) return;
-              setFocusedCandidateId(prev => (String(prev) === String(c.id) ? null : c.id));
+              setFocusedCandidateId(c.id);
             }}
             style={{
               display: "grid",
@@ -2006,7 +2006,7 @@ export default function ScoreboardPage() {
               borderBottom: `1px solid ${t.border}`,
               alignItems: "center",
               background: rowBg,
-              outline: isFocused ? `2px solid ${t.accent}` : "none",
+              outline: isFocused ? `1px solid ${t.border}` : "none",
               outlineOffset: -2,
               transition: "background 0.15s ease",
             }}

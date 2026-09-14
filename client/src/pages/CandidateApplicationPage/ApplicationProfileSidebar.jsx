@@ -7,13 +7,14 @@ import { hasText } from "./applicationUtils";
 import { cardGreen, cardMint, cardPale, ROUND_1_LABEL, UPCOMING_EVALUATION_ROUNDS } from "./constants";
 import ApplicationResumeSection from "./ApplicationResumeSection";
 
-export default function ApplicationProfileSidebar({ candidate, resume, scoring, authToken, candidateCount, resumeScreenRank, coffeeChatScore, coffeeChatEvaluationCount }) {
+export default function ApplicationProfileSidebar({ candidate, resume, scoring, authToken, candidateCount, resumeScreenRank, coffeeChatScore, coffeeChatEvaluationCount, detailsLoading, detailsError, responsesState }) {
   return (
     <aside style={{ position: "sticky", top: 16 }}>
       <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
         <div style={{ background: cardGreen, padding: "22px 20px 18px", textAlign: "center" }}>
           <div style={{ margin: "0 auto 14px", width: 132 }}>
             <CandidateAvatar
+              candidateId={candidate.id}
               name={candidate.name}
               headshot={candidate.headshot}
               size={132}
@@ -47,6 +48,7 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring, 
               candidate={candidate}
               resume={resume}
               authToken={authToken}
+              responsesState={responsesState}
               compact
             />
           </div>
@@ -78,7 +80,7 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring, 
                   </p>
                 </>
               ) : (
-                <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>No score yet</p>
+                <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>{detailsError ? "Scores unavailable" : detailsLoading ? "Loading scores…" : "No score yet"}</p>
               )}
             </div>
             <div>
@@ -87,10 +89,10 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring, 
               </p>
               <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
                 <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: coffeeChatScore > 0 ? cardGreen : coffeeChatScore < 0 ? "#E24B4A" : css.textGray }}>
-                  {coffeeChatScore} pts
+                  {detailsLoading ? "Loading…" : detailsError ? "Unavailable" : `${coffeeChatScore} pts`}
                 </p>
                 <p style={{ margin: 0, fontSize: 11, color: css.textGray }}>
-                  {coffeeChatEvaluationCount} rating{coffeeChatEvaluationCount === 1 ? "" : "s"}
+                  {!detailsLoading && !detailsError && `${coffeeChatEvaluationCount} rating${coffeeChatEvaluationCount === 1 ? "" : "s"}`}
                 </p>
               </div>
             </div>

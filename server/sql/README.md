@@ -48,6 +48,7 @@ The table below documents the order and intent; it is kept in sync with
 | 26 | `add_coffee_chat_scoring_and_groups.sql` | Coffee Chat random groups and per-evaluator Strong Yes / Yes / No / Strong No scoring |
 | 27 | `add_interview_group_member_assignments.sql` | Assign each member a persistent starting Coffee Chat table |
 | 28 | `add_document_sync_queue.sql` | Candidate document sync queue — Drive → Supabase Storage, plus the private bucket |
+| 29 | `add_resume_document_sync.sql` | Atomic resume enqueueing, versioned claims, private queue access, and backfill RPC |
 
 ## First-time setup on a new database
 
@@ -68,7 +69,6 @@ That writes every manifest entry into `schema_migrations` **without executing
 anything**. Until it is run, the runner refuses to touch a database that has
 application tables but no migration history.
 
-| 29 | `add_resume_document_sync.sql` | Atomic resume enqueueing, versioned claims, private queue access, and backfill RPC |
 
 ## Notes
 
@@ -76,7 +76,7 @@ application tables but no migration history.
 - **Existing database:** skip scripts you have already applied. Each file uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` where possible, but re-running `init.sql` or seed blocks in `add_cycles_and_rounds.sql` may fail or duplicate data.
 - **`add_coffee_chat_scoring_and_groups.sql` (#26):** preserves legacy interview rows, changes new Coffee Chat evaluations to one row per evaluator, and adds persistent candidate-to-table assignments.
 - **`add_interview_group_member_assignments.sql` (#27):** run after #26 to let admins place members at starting tables. Candidate table movement continues to use the assignment table created by #26.
-- **`init.sql`** begins with a large commented block (legacy candidate/resume DDL); the active statements start at the `user_role` enum.
+- **`init.sql`** restores the candidate/resume core DDL for fresh databases; existing production tables remain guarded.
 - **`fix_candidates_form_sync_upsert.sql` (#5):** Run only if you applied an older `add_cycle_form_config.sql` that created a **partial** unique index (`WHERE google_form_response_id IS NOT NULL`). Fresh installs get the full index from #4 and can skip this. The server also handles form sync without relying on PostgREST upsert.
 - **`alter_resume_review_overrides_scores.sql` (#14):** Run only if `resume_review_overrides` was created with a single `override_score` column and no `override_scores`. **Do not run** if you applied the current `add_resume_review_overrides.sql`, which creates both columns.
 - **`add_round_auto_decision_percentages.sql` (#22):** Fresh schemas already have the percentage columns from #2, but this script also adds the combined `advance + reject <= 100` constraint, so run it once.

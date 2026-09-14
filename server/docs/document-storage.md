@@ -68,3 +68,28 @@ transactional intake/lease/backfill tests; they never use `SUPABASE_DB_URL` or t
 application's configured Supabase project. CI provisions this database. Run
 `npm test`, `npm run lint`, and `npm run build` in `client/` for the viewer protocol
 and production build.
+
+## Profile loading
+
+The profile UI first reads `GET /scoreboard/:resumeId/application/profile` (basic
+candidate fields, contact details and resume reference). Scoreboard navigation uses
+its cached candidate as placeholder data while this request completes, and hover
+prefetches only this lightweight endpoint. After a successful profile read, free
+responses (`/application/responses`), grades/signals (the existing `/application`)
+and the AI summary load independently. Each section reports its own loading/error
+state. Resume bytes begin downloading after a 150 ms paint window and share the
+viewer's cache; PDF rendering still waits until the resume modal is opened.
+Neither new endpoint fetches grade history. Both use existing staff authentication
+and validate the requested cycle against the resume and candidate.
+
+A read-only sample against the configured database (same candidate, three runs)
+measured 94–250 ms for profile, 96–123 ms for responses, and 700–844 ms for the
+full application handler. These are local handler/database request timings, not
+production browser paint or cold-start guarantees. The profile endpoint includes
+`Server-Timing` for subsequent measurement. No additional database index is needed
+for this split: its lookup uses the existing resume primary key and candidate FK.
+
+Scoreboard rows use neutral gray selection for clicks, keyboard focus and Up/Down
+navigation in both normal and deliberation views. Returning with the profile Back
+button restores the selected row. Decision shortcuts remain restricted to editable
+deliberations.

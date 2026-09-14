@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const resumeController = require('../controllers/resumeController');
+const applicationProfileController = require('../controllers/applicationProfileController');
 const resumeFileController = require('../controllers/resumeFileController');
 const demographicsController = require('../controllers/demographicsController');
 const assignmentController = require('../controllers/assignmentController');
@@ -37,6 +38,8 @@ router.get('/resume/:id/file-content', resumeFileController.fileContent);
 router.get('/view/pdf', resumeController.viewPdf);
 router.get('/view/image', resumeController.viewImage);
 router.get('/candidates/:candidateId/headshot-url', resumeController.getCandidateHeadshotUrl);
+router.get('/scoreboard/:resumeId/application/profile', applicationProfileController.profile);
+router.get('/scoreboard/:resumeId/application/responses', applicationProfileController.responses);
 router.get('/scoreboard/:resumeId/application/summary', resumeController.getScoreboardApplicationSummary);
 router.get('/scoreboard/:resumeId/application', resumeController.getScoreboardApplication);
 router.get('/scoreboard/:resumeId/application/admin-override', requireRoles('admin'), resumeController.getAdminOverride);
