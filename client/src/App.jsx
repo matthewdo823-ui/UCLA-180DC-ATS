@@ -34,9 +34,9 @@ function AppShell() {
   const hideSidebar = location.pathname === "/login" || location.pathname === "/no-access";
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+    <div className="app-shell">
       {!hideSidebar && <Sidebar />}
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div className="app-page" style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto" }}>
         {/* Page-level boundary: a render crash in one page keeps the sidebar,
             and re-keying on pathname clears the error automatically on nav. */}
         <ErrorBoundary key={location.pathname}>
