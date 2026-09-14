@@ -15,9 +15,33 @@ async function main() {
     throw new Error('Database secret does not identify the expected Supabase project; no SQL was applied');
   }
   // Match the repository migration runner's Supabase TLS configuration.
-  const client = new Client({ connectionString, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 });
+  let client = new Client({ connectionString, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 });
   try {
     await client.connect();
+  } catch (error) {
+    await client.end();
+    if (!directRef || !['ENETUNREACH', 'EHOSTUNREACH'].includes(error.code)) throw error;
+    // This project's DNS address belongs to AWS us-east-1. Session pooling
+    // preserves the advisory lock and transaction and supports IPv4 runners.
+    let connected = false;
+    for (const index of [0, 1, 2]) {
+      const pooled = new URL(url);
+      pooled.hostname = `aws-${index}-us-east-1.pooler.supabase.com`;
+      pooled.port = '5432';
+      pooled.username = `postgres.${expected}`;
+      client = new Client({ connectionString: pooled.toString(), ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 });
+      try {
+        await client.connect();
+        connected = true;
+        console.log('Connected to the expected project through its IPv4 session pooler.');
+        break;
+      } catch {
+        await client.end();
+      }
+    }
+    if (!connected) throw new Error('No session pooler accepted the configured project credentials; no SQL was applied');
+  }
+  try {
     await client.query("SET statement_timeout = '30s'");
     await client.query('SELECT pg_advisory_lock($1)', [8150423]);
     const parents = await client.query("SELECT to_regclass('public.cycles') AS cycles, to_regclass('public.rounds') AS rounds, to_regclass('public.users') AS users");
@@ -36,7 +60,7 @@ async function main() {
 
 main().catch(error => {
   // Never print the database URL or a connection object's credentials.
-  const safeMessages = ['Missing database connection or expected project reference', 'Database secret does not identify the expected Supabase project; no SQL was applied', 'Required parent tables are missing; no SQL was applied', 'Starting-table uniqueness constraint is missing'];
+  const safeMessages = ['Missing database connection or expected project reference', 'Database secret does not identify the expected Supabase project; no SQL was applied', 'Required parent tables are missing; no SQL was applied', 'Starting-table uniqueness constraint is missing', 'No session pooler accepted the configured project credentials; no SQL was applied'];
   console.error(safeMessages.includes(error.message) ? error.message : `Starting-table setup failed (${error.code || error.name}). Inspect database connectivity/schema; connection details omitted.`);
   process.exitCode = 1;
 });
