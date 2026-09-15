@@ -71,9 +71,18 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring, 
                       <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: scoring?.adminOverride?.overrideScore != null ? "#E24B4A" : cardGreen, lineHeight: 1 }}>
                         {formatScore(scoring.normalizedScore)}<span style={{ fontSize: 14 }}>%</span>
                       </p>
-                      <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>Overall average</p>
+                      <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
+                        {scoring?.adminOverride?.overrideScore == null && Number(scoring?.interestMultiplier) !== 1 && hasNumericScore(scoring?.baseNormalizedScore)
+                          ? `${formatScore(scoring.baseNormalizedScore)}% × ${Number(scoring.interestMultiplier).toFixed(3).replace(/0$/, "")} interest`
+                          : "Overall average"}
+                      </p>
                     </div>
                   </div>
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: css.textGray, lineHeight: 1.5 }}>
+                    {scoring?.interestEvents?.length
+                      ? `Attended: ${scoring.interestEvents.map((event) => event.name).join(", ")}`
+                      : "No Demonstrated Interest events logged"}
+                  </p>
                   <p style={{ margin: "8px 0 0", fontSize: 12, color: css.textGray, lineHeight: 1.5, whiteSpace: "pre-line" }}>
                     {formatReviewCountsStacked(scoring)}
                   </p>

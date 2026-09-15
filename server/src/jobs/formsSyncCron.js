@@ -10,6 +10,7 @@
 
 const cron = require("node-cron");
 const { syncFormResponsesToDatabase, isSyncConfigured } = require("../services/formsSyncService");
+const { syncAllInterestEvents } = require("../services/interestSyncService");
 
 const DEFAULT_CRON = "*/10 * * * *";
 
@@ -20,6 +21,12 @@ async function runFormsSync(source) {
     console.log(`[formsSync] Done. processed=${processed} errors=${errors}`);
   } catch (e) {
     console.error("[formsSync] Sync failed:", e.message || e);
+  }
+  try {
+    const cycles = await syncAllInterestEvents();
+    console.log(`[interestSync] Done. cycles=${cycles.length}`);
+  } catch (e) {
+    console.error("[interestSync] Sync failed:", e.message || e);
   }
 }
 

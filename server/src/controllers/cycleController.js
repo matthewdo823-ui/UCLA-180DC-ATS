@@ -13,6 +13,7 @@ const {
   isGoogleFormsConfigured,
 } = require("../utils/googleForm");
 const { respondWithServerError } = require("../utils/httpErrors");
+const { DEFAULT_MULTIPLIER_STEPS, validateMultiplierSteps } = require("../utils/demonstratedInterest");
 const {
   ROUND_TYPES,
   DEFAULT_CYCLE_ROUNDS,
@@ -64,6 +65,9 @@ function mapCycle(row, extras = {}) {
     formHeadshotQuestionId: row.form_headshot_question_id || null,
     lastFormSyncAt: row.last_form_sync_at || null,
     hasFormConfig: Boolean(row.google_form_id && row.form_field_map),
+    interestMultiplierSteps: Array.isArray(row.interest_multiplier_steps)
+      ? row.interest_multiplier_steps
+      : DEFAULT_MULTIPLIER_STEPS,
     ...extras,
   };
 }
@@ -351,6 +355,13 @@ exports.patchCycle = async (req, res) => {
   }
   if (req.body?.headshotQuestionId !== undefined) {
     updates.form_headshot_question_id = req.body.headshotQuestionId || null;
+  }
+  if (req.body?.interestMultiplierSteps !== undefined) {
+    const stepsError = validateMultiplierSteps(req.body.interestMultiplierSteps);
+    if (stepsError) {
+      return res.status(400).json({ error: stepsError });
+    }
+    updates.interest_multiplier_steps = req.body.interestMultiplierSteps;
   }
 
   if (!Object.keys(updates).length) {

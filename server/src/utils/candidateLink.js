@@ -11,6 +11,11 @@ function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
+/** UCLA UIDs are written as "123456789" or "123-456-789"; compare digits only. */
+function normalizeUniversityId(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
 function sameDriveFile(urlA, urlB) {
   const idA = extractDriveFileID(urlA);
   const idB = extractDriveFileID(urlB);
@@ -145,6 +150,8 @@ function applyResumeCandidateLink(resume, embeddedCandidate, candidateLinkLookup
 
 module.exports = {
   normalizePersonName,
+  normalizeEmail,
+  normalizeUniversityId,
   buildCandidateLinkLookups,
   resolveCandidateLink,
   pickCandidateFields,

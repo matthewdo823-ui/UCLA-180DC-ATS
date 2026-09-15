@@ -27,6 +27,8 @@ const { firstRel } = require('../utils/supabaseHelpers');
 const { getUserName } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
 const { isMissingSchemaError } = require('../utils/schemaCompatibility');
+const { applyDemonstratedInterestToCandidates, maxInterestMultiplier } = require('../utils/demonstratedInterest');
+const { loadAttendedEventsByCandidate } = require('../services/interestSyncService');
 const {
     normalizeRoundDecision,
     mapRoundDecision,
@@ -1870,6 +1872,7 @@ exports.getScoreboard = async (req, res) => {
             frqResult,
             interviewEvaluationResult,
             coffeeMemberAssignmentResult,
+            attendedEventsByCandidate,
         ] = await Promise.all([
             supabase
                 .from('resumes')
@@ -1963,6 +1966,7 @@ exports.getScoreboard = async (req, res) => {
                     .select("user_id")
                     .eq("round_id", deliberationRound.id)
                 : Promise.resolve({ data: [], error: null }),
+            loadAttendedEventsByCandidate(activeCycleId),
         ]);
 
         const { data: resumes, error: resumeError } = resumeResult;
@@ -2164,10 +2168,15 @@ exports.getScoreboard = async (req, res) => {
         );
 
         const frqByResumeId = groupFrqReviewsByResumeId(frqRows, gradedByUserLookup);
-        const candidatesWithComposite = applyCompositeScoringToCandidates(candidatesWithOverrides, {
-            frqByResumeId,
-            rubricConfig: resumeRound.rubric_config,
-        });
+        // Demonstrated Interest multiplies the composite before eligibility zeroing and ranking.
+        const candidatesWithComposite = applyDemonstratedInterestToCandidates(
+            applyCompositeScoringToCandidates(candidatesWithOverrides, {
+                frqByResumeId,
+                rubricConfig: resumeRound.rubric_config,
+            }),
+            attendedEventsByCandidate,
+            activeCycle.interest_multiplier_steps
+        );
         // Display only the current rubric's categories — the `metrics` union above still
         // carries retired categories from older reviews' snapshots (needed for override/score
         // math), but those should not surface in the scorecard breakdown.
@@ -2659,7 +2668,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     if (requestedCycleId && requestedCycleId !== activeCycle?.id) {
         const { data, error } = await supabase
             .from('cycles')
-            .select('id, name')
+            .select('*')
             .eq('id', requestedCycleId)
             .maybeSingle();
         if (error) {
@@ -2922,10 +2931,19 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     const coffeeChatEvaluations = interviewEvaluations.filter(
         (evaluation) => evaluation.roundType === ROUND_TYPES.COFFEE_CHAT
     );
-    const compositeCandidate = applyCompositeScoringToCandidate(candidateWithOverrides, {
-        frqReviews,
-        rubricConfig: resumeRound.rubric_config,
-    });
+    const attendedEvents = await loadAttendedEventsByCandidate(activeCycleId, { candidateId: candidate.id });
+    const interestMultiplierSteps = activeCycle.interest_multiplier_steps;
+    const [compositeCandidate] = applyDemonstratedInterestToCandidates(
+        [{
+            ...applyCompositeScoringToCandidate(candidateWithOverrides, {
+                frqReviews,
+                rubricConfig: resumeRound.rubric_config,
+            }),
+            candidateId: candidate.id,
+        }],
+        attendedEvents,
+        interestMultiplierSteps
+    );
     const roundGrades = [
         {
             roundId: resumeRound.id,
@@ -2966,6 +2984,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
         candidateId: candidate.id,
         resumeRoundId: resumeRound.id,
         activeCycleId,
+        interestMultiplierSteps,
         scoring: {
             metrics: appendFrqMetric(currentMetrics.length ? currentMetrics : [...metricSet]),
             maxPerCategory: resumeRound.rubric_config?.maxPerCategory || 4,
@@ -2973,6 +2992,9 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
             aggregateScore: compositeCandidate.aggregateScore,
             normalizedScore: compositeCandidate.normalizedScore,
             score: compositeCandidate.score,
+            baseNormalizedScore: compositeCandidate.baseNormalizedScore,
+            interestMultiplier: compositeCandidate.interestMultiplier,
+            interestEvents: compositeCandidate.interestEvents,
             resumeAggregateScore: compositeCandidate.resumeAggregateScore,
             resumeNormalizedScore: compositeCandidate.resumeNormalizedScore,
             resumeMax: compositeCandidate.resumeMax,
@@ -3275,11 +3297,12 @@ exports.upsertAdminOverride = async (req, res) => {
         const rawScore = req.body?.overrideScore;
         const overrideScore = rawScore != null && rawScore !== '' ? Number(rawScore) : null;
 
-        if (overrideScore !== null && (!Number.isFinite(overrideScore) || overrideScore < 0 || overrideScore > 100)) {
-            return res.status(400).json({ error: 'overrideScore must be a number between 0 and 100' });
-        }
-
         const payload = await fetchScoreboardApplicationPayload(resumeId);
+        // Demonstrated Interest can lift scores past 100%, so overrides may match its ceiling.
+        const maxOverride = Number((100 * maxInterestMultiplier(payload.interestMultiplierSteps)).toFixed(1));
+        if (overrideScore !== null && (!Number.isFinite(overrideScore) || overrideScore < 0 || overrideScore > maxOverride)) {
+            return res.status(400).json({ error: `overrideScore must be a number between 0 and ${maxOverride}` });
+        }
         const exclusion = screeningAccessError(payload.candidate);
         if (exclusion) return res.status(exclusion.status).json({ error: exclusion.error });
         const adminUserId = req.user?.user_id;

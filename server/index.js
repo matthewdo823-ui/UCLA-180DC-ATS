@@ -77,6 +77,7 @@ app.listen(PORT, () => {
     const resumeRoutes = require('./src/routes/resumeRoutes');
     const dashboardRoutes = require('./src/routes/dashboardRoutes');
     const userRoutes = require('./src/routes/userRoutes');
+    const interestRoutes = require('./src/routes/interestRoutes');
     const { startFormsSyncCron } = require('./src/jobs/formsSyncCron');
 
     app.use(cronRoutes);
@@ -85,6 +86,7 @@ app.listen(PORT, () => {
     app.use('/', resumeRoutes);
     app.use('/', dashboardRoutes);
     app.use('/', userRoutes);
+    app.use('/', interestRoutes);
 
     console.log('API routes loaded');
     startFormsSyncCron();

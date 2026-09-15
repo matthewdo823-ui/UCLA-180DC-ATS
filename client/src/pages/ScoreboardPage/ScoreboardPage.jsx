@@ -413,6 +413,12 @@ function ScorecardModal({
               {candidate.gpa && <span style={chipStyle}>GPA {candidate.gpa}</span>}
               {candidate.gm && <span style={chipStyle}>GM {candidate.gm}</span>}
             </div>
+            {candidate.interestEvents?.length ? (
+              <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ color: "#9FE1CB", fontSize: 10, fontWeight: 700, letterSpacing: "0.05em" }}>ATTENDED</span>
+                {candidate.interestEvents.map((event) => <span key={event.id} style={chipStyle}>{event.name}</span>)}
+              </div>
+            ) : null}
           </div>
 
           <div style={{ background: cardPale, padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #DCE7D2" }}>
@@ -431,6 +437,11 @@ function ScorecardModal({
                 <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
                   Average across submitted reviews
                   {candidate.frqPending ? " · FRQ pending" : ""}
+                </p>
+              ) : null}
+              {hasNumericScore(candidate.baseNormalizedScore) && Number(candidate.interestMultiplier) !== 1 ? (
+                <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0", fontWeight: 600 }}>
+                  {formatScore(candidate.baseNormalizedScore)}% × {Number(candidate.interestMultiplier).toFixed(3).replace(/0$/, "")} Demonstrated Interest
                 </p>
               ) : null}
             </div>
@@ -2064,6 +2075,14 @@ export default function ScoreboardPage() {
                 {isCoffeeChatRanking
                   ? `${formatScore(c.coffeeChatScore || 0)} pts`
                   : hasNumericScore(headlineScore) ? `${formatScore(headlineScore)}%` : "—"}
+                {!isCoffeeChatRanking && hasNumericScore(headlineScore) && Number(c.interestMultiplier) > 1 ? (
+                  <span
+                    title={`Demonstrated Interest: ${(c.interestEvents || []).map((event) => event.name).join(", ")}`}
+                    style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: css.greenDark, background: "rgba(29,158,117,0.12)", borderRadius: 999, padding: "2px 6px", verticalAlign: "middle" }}
+                  >
+                    ×{Number(c.interestMultiplier).toFixed(3).replace(/0$/, "")}
+                  </span>
+                ) : null}
               </div>
               {!isCoffeeChatRanking ? (
                 <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4, lineHeight: 1.45, whiteSpace: "pre-line" }}>

@@ -37,7 +37,8 @@ export function getNormalizedScore(candidate) { return hasNumericScore(candidate
 export function getPerformanceSortScore(candidate) {
   return hasNumericScore(candidate?.rankingScore) ? Number(candidate.rankingScore) : getNormalizedScore(candidate);
 }
-export function getHeadlineScore(candidate) { const score = getNormalizedScore(candidate); return score == null ? null : Math.min(100, score); }
+// Not clamped: the rubric already caps the base at 100, and Demonstrated Interest may lift it past that.
+export function getHeadlineScore(candidate) { return getNormalizedScore(candidate); }
 export function getSourceNormalizedScore(candidate) { return hasNumericScore(candidate?.sourceNormalizedScore) ? Number(candidate.sourceNormalizedScore) : getNormalizedScore(candidate); }
 export function normalizeMetricScore(candidate, metric) { const value = candidate?.categoryScores?.[metric]; return hasNumericScore(value) ? Number(value) : null; }
 

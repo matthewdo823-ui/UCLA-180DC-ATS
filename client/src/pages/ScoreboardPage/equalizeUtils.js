@@ -183,6 +183,12 @@ function averageFrqScore(frqReviews = []) {
   return Number((sum / frqReviews.length).toFixed(1));
 }
 
+// Server scores arrive with Demonstrated Interest applied; fallbacks must use the pre-DI base
+// or the multiplier would be applied twice.
+function preInterestScore(candidate) {
+  return candidate.baseNormalizedScore ?? candidate.normalizedScore;
+}
+
 function applyCompositeFromParts(candidate, resumeAggregateScore, resumePossibleScore, resumeNormalizedScore, frqReviews) {
   const frqAvg = averageFrqScore(frqReviews);
   const frqPending = !frqReviews.length;
@@ -311,7 +317,7 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
     } else if (reviews.length) {
       resumeAggregateScore = candidate.resumeAggregateScore ?? candidate.aggregateScore ?? null;
       resumePossibleScore = candidate.resumePossiblePoints ?? candidate.resumeMax ?? null;
-      resumeNormalizedScore = candidate.resumeNormalizedScore ?? candidate.normalizedScore ?? null;
+      resumeNormalizedScore = candidate.resumeNormalizedScore ?? preInterestScore(candidate) ?? null;
     }
 
     if (frqReviews.length) {
@@ -322,9 +328,14 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
       candidate,
       resumeAggregateScore ?? candidate.resumeAggregateScore ?? candidate.aggregateScore,
       resumePossibleScore ?? candidate.resumePossiblePoints ?? candidate.resumeMax,
-      resumeNormalizedScore ?? candidate.resumeNormalizedScore ?? candidate.normalizedScore,
+      resumeNormalizedScore ?? candidate.resumeNormalizedScore ?? preInterestScore(candidate),
       equalizedFrqReviews
     );
+    // Re-apply the server's Demonstrated Interest multiplier once, after equalization.
+    const interestMultiplier = Number(candidate.interestMultiplier) || 1;
+    const adjustedScore = composite.normalizedScore == null
+      ? null
+      : Number((composite.normalizedScore * interestMultiplier).toFixed(1));
 
     const resumeCategoryScores = reviews.length && resumeMetrics.length
       ? buildCategoryScores(equalizedReviews, resumeMetrics)
@@ -340,14 +351,16 @@ export function equalizeCandidateScores(candidates, { metrics = [], maxPerCatego
       resumePossiblePoints: resumePossibleScore,
       resumeNormalizedScore,
       aggregateScore: composite.aggregateScore,
-      normalizedScore: composite.normalizedScore,
+      baseNormalizedScore: composite.normalizedScore,
+      normalizedScore: adjustedScore,
       categoryScores: { ...resumeCategoryScores, [FRQ_METRIC]: composite.frqScore },
       frqScore: composite.frqScore,
       frqPending: composite.frqPending,
       compositeMax: composite.compositeMax,
       earnedPoints: composite.aggregateScore,
       possiblePoints: composite.compositeMax,
-      score: composite.score,
+      score: adjustedScore == null ? null : Math.round(adjustedScore),
+      interestMultiplier,
       sourceNormalizedScore: candidate.normalizedScore ?? candidate.score ?? null,
       sourceAggregateScore: candidate.aggregateScore ?? null,
       equalized: true,

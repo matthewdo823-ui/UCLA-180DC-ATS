@@ -132,7 +132,7 @@ function escapeCsvField(value) {
   return str;
 }
 
-const EXPORT_HEADERS = ["name", "email", "phone", "major", "year", "gpa", "score_normalized_percent", "num_resume_grades", "num_free_response_grades", "decision", "notes"];
+const EXPORT_HEADERS = ["name", "email", "phone", "major", "year", "gpa", "score_normalized_percent", "score_before_di_percent", "di_events_attended", "di_multiplier", "num_resume_grades", "num_free_response_grades", "decision", "notes"];
 
 function triggerCsvDownload(csvText, filename) {
   const blob = new Blob(["\uFEFF", csvText], { type: "text/csv;charset=utf-8" });
@@ -156,6 +156,9 @@ function candidateToCsvRow(candidate) {
     escapeCsvField(candidate.year),
     escapeCsvField(candidate.gpa),
     escapeCsvField(candidate.normalizedScore ?? candidate.score ?? ""),
+    escapeCsvField(candidate.baseNormalizedScore ?? ""),
+    escapeCsvField(candidate.interestEvents?.length ?? 0),
+    escapeCsvField(candidate.interestMultiplier ?? 1),
     escapeCsvField(candidate.numReviews ?? candidate.reviews?.length ?? 0),
     escapeCsvField(candidate.numFrqReviews ?? candidate.frqReviews?.length ?? 0),
     escapeCsvField(getCandidateDecisionStatus(candidate)),

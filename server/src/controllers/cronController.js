@@ -1,4 +1,5 @@
 const { syncFormResponsesToDatabase, isSyncConfigured } = require("../services/formsSyncService");
+const { syncAllInterestEvents } = require("../services/interestSyncService");
 const { respondWithServerError } = require("../utils/httpErrors");
 
 function verifyCronSecret(req, res) {
@@ -25,10 +26,19 @@ exports.syncForms = async (req, res) => {
 
   try {
     const result = await syncFormResponsesToDatabase();
+    // After the application sync, so attendance can match candidates created in the same run.
+    let interest;
+    try {
+      interest = await syncAllInterestEvents();
+    } catch (err) {
+      console.error("[cron] Demonstrated Interest sync failed:", err.message || err);
+      interest = { error: "Demonstrated Interest sync failed" };
+    }
     return res.json({
       processed: result.processed,
       errors: result.errors,
       cycles: result.cycles,
+      interest,
     });
   } catch (err) {
     return respondWithServerError(res, err, "syncForms", "Form sync failed");

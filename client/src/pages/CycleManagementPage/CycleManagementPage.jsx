@@ -20,6 +20,8 @@ import { formatDate } from "../../utils/format";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { ROUND_TYPES, formatRoundTypeLabel, isResumeScreenType, normalizeRoundType } from "../../constants/rounds";
 import { formatReviewCountPair } from "../../utils/reviewCounts";
+import ActionButton from "./ActionButton";
+import DemonstratedInterestSection from "./DemonstratedInterestSection";
 
 const CYCLE_STATUS_STYLE = {
   active: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
@@ -53,31 +55,6 @@ function StatusBadge({ status, styles }) {
   );
 }
 
-function ActionButton({ label, onClick, disabled, variant = "secondary" }) {
-  const isPrimary = variant === "primary";
-  const isDanger = variant === "danger";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        border: `1px solid ${isPrimary ? css.greenDark : isDanger ? css.red : css.borderLight}`,
-        background: isPrimary ? css.greenDark : "#FFF",
-        color: isPrimary ? "#FFF" : isDanger ? css.red : css.textDark,
-        borderRadius: 8,
-        padding: "8px 12px",
-        fontSize: 12,
-        fontWeight: 700,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
 const COLUMN_OPTIONS = [
   { value: "", label: "— Skip —" },
   { value: "name", label: "Name" },
@@ -97,6 +74,7 @@ const COLUMN_OPTIONS = [
   { value: "resume_file_url", label: "Resume upload" },
   { value: "extenuating_circumstances", label: "Extenuating circumstances" },
   { value: "headshot", label: "Headshot" },
+  { value: "university_id", label: "University ID" },
 ];
 
 function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
@@ -817,6 +795,7 @@ function CycleCard({ cycle, busy, authedFetch, interviewPool, onReload, onActiva
       {expanded ? (
         <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 12, background: "#FCFDFC" }}>
           <FormConfigPanel cycle={cycle} busy={busy} authedFetch={authedFetch} onSaved={onReload} />
+          <DemonstratedInterestSection cycle={cycle} busy={busy} authedFetch={authedFetch} onCycleSaved={onReload} />
           {(cycle.rounds || []).map((round) => (
             <RoundCard
               key={round.id}
