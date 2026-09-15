@@ -17,7 +17,7 @@ const {
   applyDemonstratedInterestToCandidates,
 } = require('../../src/utils/demonstratedInterest');
 const { normalizeUniversityId } = require('../../src/utils/candidateLink');
-const { buildSuggestedFieldMap, INTEREST_TITLE_HINTS, validateInterestFieldMap } = require('../../src/utils/googleForm');
+const { buildSuggestedFieldMap, INTEREST_TITLE_HINTS, validateInterestFieldMap, parseGoogleFormId, googleFormUrlError } = require('../../src/utils/googleForm');
 const { applyScreeningEligibility } = require('../../src/utils/screeningEligibility');
 
 test('default steps follow the 180DC matrix for 0–4 events', () => {
@@ -137,6 +137,17 @@ test('attendance forms get Name/Email/UID suggestions from their question titles
   assert.equal(validateInterestFieldMap(map), null);
   assert.ok(validateInterestFieldMap({ a: 'name' }));
   assert.ok(validateInterestFieldMap({ a: 'major' }));
+});
+
+test('form edit URLs parse to the form id; share links are rejected with guidance', () => {
+  const id = '1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcd';
+  assert.equal(parseGoogleFormId(`https://docs.google.com/forms/d/${id}/edit`), id);
+  assert.equal(parseGoogleFormId(`https://docs.google.com/forms/d/${id}/edit?usp=drive_web&ouid=123`), id);
+  assert.equal(parseGoogleFormId(id), id);
+  const shareLink = 'https://docs.google.com/forms/d/e/1FAIpQLSdPublishIdOnly/viewform?usp=sf_link';
+  assert.equal(parseGoogleFormId(shareLink), null);
+  assert.match(googleFormUrlError(shareLink), /share link/);
+  assert.match(googleFormUrlError('not a url'), /Invalid Google Form URL/);
 });
 
 test('each event counts once per candidate, however many times they submitted', () => {

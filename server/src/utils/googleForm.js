@@ -71,16 +71,28 @@ function getDriveImpersonateUser() {
   ).trim();
 }
 
+// Share links (/forms/d/e/<publishId>/viewform) carry a publish id, not the form id the API needs.
+function isGoogleFormResponderUrl(input) {
+  return /\/forms\/d\/e\//.test(String(input || ""));
+}
+
 function parseGoogleFormId(input) {
   const trimmed = String(input || "").trim();
-  if (!trimmed) return null;
+  if (!trimmed || isGoogleFormResponderUrl(trimmed)) return null;
 
   if (/^[a-zA-Z0-9_-]{10,}$/.test(trimmed) && !trimmed.includes("/")) {
     return trimmed;
   }
 
-  const match = trimmed.match(/\/forms\/d\/(?:e\/)?([a-zA-Z0-9_-]+)/);
+  const match = trimmed.match(/\/forms\/d\/([a-zA-Z0-9_-]+)/);
   return match ? match[1] : null;
+}
+
+/** Error to show when parseGoogleFormId(input) returns null. */
+function googleFormUrlError(input) {
+  return isGoogleFormResponderUrl(input)
+    ? "That's the form's share link, which the Google Forms API can't read. Open the form in edit mode and paste that URL instead (docs.google.com/forms/d/.../edit)."
+    : "Invalid Google Form URL or ID. Use the form edit URL (docs.google.com/forms/d/.../edit).";
 }
 
 function normalizeTitle(title) {
@@ -298,6 +310,8 @@ module.exports = {
   SCOPES_READ,
   getKeyFilePath,
   parseGoogleFormId,
+  isGoogleFormResponderUrl,
+  googleFormUrlError,
   suggestColumnForTitle,
   buildSuggestedFieldMap,
   inferFileQuestionIds,

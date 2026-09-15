@@ -6,6 +6,7 @@ const { syncFormResponsesToDatabase } = require("../services/formsSyncService");
 const {
   CANDIDATE_COLUMNS,
   parseGoogleFormId,
+  googleFormUrlError,
   discoverFormQuestions,
   buildSuggestedFieldMap,
   inferFileQuestionIds,
@@ -337,7 +338,7 @@ exports.patchCycle = async (req, res) => {
       const formId = parseGoogleFormId(raw);
       if (!formId) {
         return res.status(400).json({
-          error: "Invalid Google Form URL or ID. Use the form edit URL (docs.google.com/forms/d/.../edit).",
+          error: googleFormUrlError(raw),
         });
       }
       updates.google_form_id = formId;
@@ -588,7 +589,7 @@ exports.discoverCycleFormFields = async (req, res) => {
     const formId = parseGoogleFormId(formInput);
     if (!formId) {
       return res.status(400).json({
-        error: "Provide a Google Form edit URL or save one on this cycle first.",
+        error: formInput ? googleFormUrlError(formInput) : "Provide a Google Form edit URL or save one on this cycle first.",
       });
     }
 

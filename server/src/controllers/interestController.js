@@ -4,6 +4,7 @@ const {
   INTEREST_FIELD_TARGETS,
   INTEREST_TITLE_HINTS,
   parseGoogleFormId,
+  googleFormUrlError,
   discoverFormQuestions,
   buildSuggestedFieldMap,
   validateInterestFieldMap,
@@ -97,7 +98,7 @@ exports.createInterestEvent = async (req, res) => {
   let googleFormId = null;
   if (req.body?.formUrl) {
     googleFormId = parseGoogleFormId(req.body.formUrl);
-    if (!googleFormId) return res.status(400).json({ error: "Invalid Google Form URL or ID" });
+    if (!googleFormId) return res.status(400).json({ error: googleFormUrlError(req.body.formUrl) });
   }
 
   try {
@@ -143,7 +144,7 @@ exports.patchInterestEvent = async (req, res) => {
     let formChanged = false;
     if (req.body?.formUrl !== undefined) {
       const formId = req.body.formUrl ? parseGoogleFormId(req.body.formUrl) : null;
-      if (req.body.formUrl && !formId) return res.status(400).json({ error: "Invalid Google Form URL or ID" });
+      if (req.body.formUrl && !formId) return res.status(400).json({ error: googleFormUrlError(req.body.formUrl) });
       formChanged = formId !== event.google_form_id;
       if (formChanged) {
         // Rows belong to the form they came from; a different form starts from scratch.
@@ -215,8 +216,11 @@ exports.discoverInterestEventFields = async (req, res) => {
     const event = await fetchEvent(eventId);
     if (!event) return res.status(404).json({ error: "Event not found" });
 
-    const formId = parseGoogleFormId(req.body?.formUrl ?? event.google_form_id);
-    if (!formId) return res.status(400).json({ error: "Provide a Google Form edit URL or save one on this event first." });
+    const formInput = req.body?.formUrl ?? event.google_form_id;
+    const formId = parseGoogleFormId(formInput);
+    if (!formId) {
+      return res.status(400).json({ error: formInput ? googleFormUrlError(formInput) : "Provide a Google Form edit URL or save one on this event first." });
+    }
 
     const discovered = await discoverFormQuestions(formId);
     return res.json({
