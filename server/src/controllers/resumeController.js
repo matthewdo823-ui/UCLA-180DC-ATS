@@ -16,7 +16,6 @@ const {
     buildRubricSnapshot,
     computeRawScore,
     computeNormalizedScore,
-    computeNormalizedFromAggregate,
     getMetricsFromRubricConfig,
     getRubricMaxScore,
     resolveReviewNormalizedValue,
@@ -37,7 +36,6 @@ const {
     countDecisions,
     deliberationHasStarted,
     summarizeIncompleteDeliberation,
-    buildDecisionsCsv,
 } = require('../utils/roundDecisions');
 const { ROUND_TYPES, getRoundByType, isInterviewRoundType, isResumeScreenType, normalizeRoundType } = require('../utils/rounds');
 const {
@@ -2505,135 +2503,6 @@ exports.bulkUpsertRoundDecisions = async (req, res) => {
         });
     } catch (err) {
         return respondWithServerError(res, err, "bulkUpsertRoundDecisions");
-    }
-};
-
-exports.exportScoreboardDecisions = async (req, res) => {
-    const rawFilter = String(req.query?.decision || "all").trim().toLowerCase();
-    const allowed = new Set(["all", "advance", "hold", "reject", "pending"]);
-    const exportFilter = allowed.has(rawFilter) ? rawFilter : "all";
-
-    try {
-        const activeCycle = await getActiveCycleRow();
-        const activeCycleId = activeCycle?.id || null;
-        const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
-        const { resumeRound, deliberationRound } = resolveDeliberationRounds(cycleRounds);
-
-        if (!activeCycleId || !resumeRound || !deliberationRound) {
-            return res.status(503).json({ error: "No active resume screening cycle" });
-        }
-
-        const { data: resumes, error: resumeError } = await supabase
-            .from("resumes")
-            .select(`
-                id,
-                name,
-                candidate_id,
-                file_url,
-                candidates ( id, email, major, year, gpa )
-            `)
-            .eq("cycle_id", activeCycleId);
-
-        if (resumeError) return respondWithServerError(res, resumeError, "exportScoreboardDecisions resumes");
-
-        const { data: cycleCandidates, error: cycleCandError } = await supabase
-            .from("candidates")
-            .select("id, name, email, major, year, gpa, resume_file_url")
-            .eq("cycle_id", activeCycleId);
-
-        if (cycleCandError) return respondWithServerError(res, cycleCandError, "exportScoreboardDecisions candidates");
-
-        const candidateLinkLookups = buildCandidateLinkLookups(cycleCandidates);
-
-        const { data: roundDecisionRows, error: decisionError } = await supabase
-            .from("round_decisions")
-            .select("*")
-            .eq("cycle_id", activeCycleId)
-            .eq("round_id", deliberationRound.id);
-
-        if (decisionError) return respondWithServerError(res, decisionError, "exportScoreboardDecisions decisions");
-
-        const decisionLookup = buildDecisionLookup(roundDecisionRows);
-
-        const priorRoundDecisionRows = await loadPriorRoundDecisionRows(
-            activeCycleId,
-            deliberationRound,
-            cycleRounds
-        );
-
-        const { data: reviews, error: reviewError } = await supabase
-            .from("resume_reviews")
-            .select("resume_id, normalized_score, rubric_snapshot, scores")
-            .eq("cycle_id", activeCycleId)
-            .eq("round_id", resumeRound.id);
-
-        if (reviewError) return respondWithServerError(res, reviewError, "exportScoreboardDecisions reviews");
-
-        const { data: frqReviews, error: frqReviewError } = await supabase
-            .from("frq_reviews")
-            .select("resume_id")
-            .eq("cycle_id", activeCycleId)
-            .eq("round_id", resumeRound.id);
-
-        if (frqReviewError) return respondWithServerError(res, frqReviewError, "exportScoreboardDecisions FRQ reviews");
-
-        const reviewsByResume = {};
-        (reviews || []).forEach((review) => {
-            if (!reviewsByResume[review.resume_id]) reviewsByResume[review.resume_id] = [];
-            reviewsByResume[review.resume_id].push(review);
-        });
-        const frqReviewCountByResume = {};
-        (frqReviews || []).forEach((review) => {
-            frqReviewCountByResume[review.resume_id] = (frqReviewCountByResume[review.resume_id] || 0) + 1;
-        });
-
-        const exportRows = (resumes || []).map((resume) => {
-            const embedded = firstRel(resume.candidates) || {};
-            const linked = applyResumeCandidateLink(resume, embedded, candidateLinkLookups);
-            const resumeReviews = reviewsByResume[resume.id] || [];
-            let totalRaw = 0;
-            let totalPossible = 0;
-            let scoredReviewCount = 0;
-            resumeReviews.forEach((review) => {
-                const scoring = getReviewScoring(review, {
-                    rubricConfig: resumeRound.rubric_config,
-                    candidateYear: linked.year,
-                });
-                if (!Number.isFinite(scoring.score) || !Number.isFinite(scoring.maxScore) || scoring.maxScore <= 0) return;
-                totalRaw += scoring.score;
-                totalPossible += scoring.maxScore;
-                scoredReviewCount += 1;
-            });
-            const normalizedScore = computeNormalizedFromAggregate(totalRaw, totalPossible);
-
-            return {
-                candidateId: linked.candidateId,
-                name: resume.name || "Unknown",
-                email: linked.email,
-                phoneNumber: linked.phoneNumber,
-                major: linked.major,
-                year: linked.year,
-                screeningExclusionReason: screeningExclusionReason(linked.year),
-                gpa: linked.gpa,
-                score: normalizedScore,
-                numReviews: scoredReviewCount,
-                numFrqReviews: frqReviewCountByResume[resume.id] || 0,
-                decision: resolveCandidateDecision(linked.candidateId, decisionLookup),
-            };
-        });
-
-        const filteredExportRows = filterCandidatesForDeliberationRound(exportRows.map(candidate => applyScreeningEligibility(candidate)), {
-            deliberationRound,
-            priorDecisionRows: priorRoundDecisionRows,
-        });
-
-        const csv = buildDecisionsCsv(filteredExportRows, { decisionFilter: exportFilter });
-        const suffix = exportFilter === "all" ? "all" : exportFilter;
-        res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        res.setHeader("Content-Disposition", `attachment; filename="scoreboard-decisions-${suffix}.csv"`);
-        return res.send(csv);
-    } catch (err) {
-        return respondWithServerError(res, err, "exportScoreboardDecisions");
     }
 };
 
