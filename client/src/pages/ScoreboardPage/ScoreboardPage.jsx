@@ -1554,6 +1554,15 @@ export default function ScoreboardPage() {
                     type="button"
                     role="menuitem"
                     disabled={exportBusy}
+                    onClick={() => { handleExport("hold"); setAdminMenuOpen(false); }}
+                    style={adminMenuItemStyle(t)}
+                  >
+                    Export on hold
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={exportBusy}
                     onClick={() => { handleExport("reject"); setAdminMenuOpen(false); }}
                     style={adminMenuItemStyle(t)}
                   >

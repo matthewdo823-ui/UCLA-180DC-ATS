@@ -166,16 +166,22 @@ function candidateToCsvRow(candidate) {
   ].join(",");
 }
 
+const EXPORT_TYPES = {
+  advance: { filename: "advanced-candidates.csv", noun: "advanced candidates" },
+  hold: { filename: "on-hold-candidates.csv", noun: "candidates on hold" },
+  reject: { filename: "rejected-candidates.csv", noun: "rejected candidates" },
+};
+
 /** Export deliberation decisions from the live scoreboard roster (matches UI). */
 export function exportCandidatesDecisionCsv(candidates, decisionType) {
-  if (decisionType !== "advance" && decisionType !== "reject") {
+  const exportType = EXPORT_TYPES[decisionType];
+  if (!exportType) {
     throw new Error("Unsupported export type");
   }
 
-  const label = decisionType === "advance" ? "advanced" : "rejected";
   const rows = (candidates || []).filter((c) => getCandidateDecisionStatus(c) === decisionType);
   if (!rows.length) {
-    throw new Error(`No ${label} candidates to export yet. Mark candidates in deliberation first.`);
+    throw new Error(`No ${exportType.noun} to export yet. Mark candidates in deliberation first.`);
   }
 
   const lines = [EXPORT_HEADERS.join(",")];
@@ -183,5 +189,5 @@ export function exportCandidatesDecisionCsv(candidates, decisionType) {
     lines.push(candidateToCsvRow(candidate));
   });
 
-  triggerCsvDownload(lines.join("\n"), `${label}-candidates.csv`);
+  triggerCsvDownload(lines.join("\n"), exportType.filename);
 }
