@@ -49,7 +49,9 @@ function startFormsSyncCron() {
     return null;
   }
 
-  const task = cron.schedule(expression, () => runFormsSync("scheduled"));
+  // noOverlap: a slow run (many events x paged Google fetches) must not have the
+  // next tick start a second concurrent pass over the same tables.
+  const task = cron.schedule(expression, () => runFormsSync("scheduled"), { noOverlap: true });
 
   console.log(`[formsSync] Cron scheduled: ${expression}`);
   runFormsSync("startup");
