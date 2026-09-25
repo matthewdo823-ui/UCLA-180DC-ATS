@@ -132,7 +132,7 @@ function escapeCsvField(value) {
   return str;
 }
 
-const EXPORT_HEADERS = ["name", "email", "phone", "major", "year", "gpa", "score_normalized_percent", "num_resume_grades", "num_free_response_grades", "decision", "notes"];
+const EXPORT_HEADERS = ["name", "email", "phone", "major", "year", "gpa", "score_normalized_percent", "score_before_di_percent", "di_events_attended", "di_multiplier", "num_resume_grades", "num_free_response_grades", "decision", "notes"];
 
 function triggerCsvDownload(csvText, filename) {
   const blob = new Blob(["\uFEFF", csvText], { type: "text/csv;charset=utf-8" });
@@ -156,6 +156,9 @@ function candidateToCsvRow(candidate) {
     escapeCsvField(candidate.year),
     escapeCsvField(candidate.gpa),
     escapeCsvField(candidate.normalizedScore ?? candidate.score ?? ""),
+    escapeCsvField(candidate.baseNormalizedScore ?? ""),
+    escapeCsvField(candidate.interestEvents?.length ?? 0),
+    escapeCsvField(candidate.interestMultiplier ?? 1),
     escapeCsvField(candidate.numReviews ?? candidate.reviews?.length ?? 0),
     escapeCsvField(candidate.numFrqReviews ?? candidate.frqReviews?.length ?? 0),
     escapeCsvField(getCandidateDecisionStatus(candidate)),
@@ -163,16 +166,22 @@ function candidateToCsvRow(candidate) {
   ].join(",");
 }
 
+const EXPORT_TYPES = {
+  advance: { filename: "advanced-candidates.csv", noun: "advanced candidates" },
+  hold: { filename: "on-hold-candidates.csv", noun: "candidates on hold" },
+  reject: { filename: "rejected-candidates.csv", noun: "rejected candidates" },
+};
+
 /** Export deliberation decisions from the live scoreboard roster (matches UI). */
 export function exportCandidatesDecisionCsv(candidates, decisionType) {
-  if (decisionType !== "advance" && decisionType !== "reject") {
+  const exportType = EXPORT_TYPES[decisionType];
+  if (!exportType) {
     throw new Error("Unsupported export type");
   }
 
-  const label = decisionType === "advance" ? "advanced" : "rejected";
   const rows = (candidates || []).filter((c) => getCandidateDecisionStatus(c) === decisionType);
   if (!rows.length) {
-    throw new Error(`No ${label} candidates to export yet. Mark candidates in deliberation first.`);
+    throw new Error(`No ${exportType.noun} to export yet. Mark candidates in deliberation first.`);
   }
 
   const lines = [EXPORT_HEADERS.join(",")];
@@ -180,5 +189,5 @@ export function exportCandidatesDecisionCsv(candidates, decisionType) {
     lines.push(candidateToCsvRow(candidate));
   });
 
-  triggerCsvDownload(lines.join("\n"), `${label}-candidates.csv`);
+  triggerCsvDownload(lines.join("\n"), exportType.filename);
 }

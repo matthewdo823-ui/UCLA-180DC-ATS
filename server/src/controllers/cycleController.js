@@ -6,6 +6,7 @@ const { syncFormResponsesToDatabase } = require("../services/formsSyncService");
 const {
   CANDIDATE_COLUMNS,
   parseGoogleFormId,
+  googleFormUrlError,
   discoverFormQuestions,
   buildSuggestedFieldMap,
   inferFileQuestionIds,
@@ -13,6 +14,7 @@ const {
   isGoogleFormsConfigured,
 } = require("../utils/googleForm");
 const { respondWithServerError } = require("../utils/httpErrors");
+const { DEFAULT_MULTIPLIER_STEPS, validateMultiplierSteps } = require("../utils/demonstratedInterest");
 const {
   ROUND_TYPES,
   DEFAULT_CYCLE_ROUNDS,
@@ -64,6 +66,9 @@ function mapCycle(row, extras = {}) {
     formHeadshotQuestionId: row.form_headshot_question_id || null,
     lastFormSyncAt: row.last_form_sync_at || null,
     hasFormConfig: Boolean(row.google_form_id && row.form_field_map),
+    interestMultiplierSteps: Array.isArray(row.interest_multiplier_steps)
+      ? row.interest_multiplier_steps
+      : DEFAULT_MULTIPLIER_STEPS,
     ...extras,
   };
 }
@@ -333,7 +338,7 @@ exports.patchCycle = async (req, res) => {
       const formId = parseGoogleFormId(raw);
       if (!formId) {
         return res.status(400).json({
-          error: "Invalid Google Form URL or ID. Use the form edit URL (docs.google.com/forms/d/.../edit).",
+          error: googleFormUrlError(raw),
         });
       }
       updates.google_form_id = formId;
@@ -351,6 +356,13 @@ exports.patchCycle = async (req, res) => {
   }
   if (req.body?.headshotQuestionId !== undefined) {
     updates.form_headshot_question_id = req.body.headshotQuestionId || null;
+  }
+  if (req.body?.interestMultiplierSteps !== undefined) {
+    const stepsError = validateMultiplierSteps(req.body.interestMultiplierSteps);
+    if (stepsError) {
+      return res.status(400).json({ error: stepsError });
+    }
+    updates.interest_multiplier_steps = req.body.interestMultiplierSteps;
   }
 
   if (!Object.keys(updates).length) {
@@ -577,7 +589,7 @@ exports.discoverCycleFormFields = async (req, res) => {
     const formId = parseGoogleFormId(formInput);
     if (!formId) {
       return res.status(400).json({
-        error: "Provide a Google Form edit URL or save one on this cycle first.",
+        error: formInput ? googleFormUrlError(formInput) : "Provide a Google Form edit URL or save one on this cycle first.",
       });
     }
 

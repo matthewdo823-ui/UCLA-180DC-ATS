@@ -16,7 +16,6 @@ const {
     buildRubricSnapshot,
     computeRawScore,
     computeNormalizedScore,
-    computeNormalizedFromAggregate,
     getMetricsFromRubricConfig,
     getRubricMaxScore,
     resolveReviewNormalizedValue,
@@ -27,6 +26,8 @@ const { firstRel } = require('../utils/supabaseHelpers');
 const { getUserName } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
 const { isMissingSchemaError } = require('../utils/schemaCompatibility');
+const { applyDemonstratedInterestToCandidates, maxInterestMultiplier } = require('../utils/demonstratedInterest');
+const { loadAttendedEventsByCandidate } = require('../services/interestSyncService');
 const {
     normalizeRoundDecision,
     mapRoundDecision,
@@ -35,7 +36,6 @@ const {
     countDecisions,
     deliberationHasStarted,
     summarizeIncompleteDeliberation,
-    buildDecisionsCsv,
 } = require('../utils/roundDecisions');
 const { ROUND_TYPES, getRoundByType, isInterviewRoundType, isResumeScreenType, normalizeRoundType } = require('../utils/rounds');
 const {
@@ -1870,6 +1870,7 @@ exports.getScoreboard = async (req, res) => {
             frqResult,
             interviewEvaluationResult,
             coffeeMemberAssignmentResult,
+            attendedEventsByCandidate,
         ] = await Promise.all([
             supabase
                 .from('resumes')
@@ -1963,6 +1964,7 @@ exports.getScoreboard = async (req, res) => {
                     .select("user_id")
                     .eq("round_id", deliberationRound.id)
                 : Promise.resolve({ data: [], error: null }),
+            loadAttendedEventsByCandidate(activeCycleId),
         ]);
 
         const { data: resumes, error: resumeError } = resumeResult;
@@ -2164,10 +2166,15 @@ exports.getScoreboard = async (req, res) => {
         );
 
         const frqByResumeId = groupFrqReviewsByResumeId(frqRows, gradedByUserLookup);
-        const candidatesWithComposite = applyCompositeScoringToCandidates(candidatesWithOverrides, {
-            frqByResumeId,
-            rubricConfig: resumeRound.rubric_config,
-        });
+        // Demonstrated Interest multiplies the composite before eligibility zeroing and ranking.
+        const candidatesWithComposite = applyDemonstratedInterestToCandidates(
+            applyCompositeScoringToCandidates(candidatesWithOverrides, {
+                frqByResumeId,
+                rubricConfig: resumeRound.rubric_config,
+            }),
+            attendedEventsByCandidate,
+            activeCycle.interest_multiplier_steps
+        );
         // Display only the current rubric's categories — the `metrics` union above still
         // carries retired categories from older reviews' snapshots (needed for override/score
         // math), but those should not surface in the scorecard breakdown.
@@ -2499,135 +2506,6 @@ exports.bulkUpsertRoundDecisions = async (req, res) => {
     }
 };
 
-exports.exportScoreboardDecisions = async (req, res) => {
-    const rawFilter = String(req.query?.decision || "all").trim().toLowerCase();
-    const allowed = new Set(["all", "advance", "hold", "reject", "pending"]);
-    const exportFilter = allowed.has(rawFilter) ? rawFilter : "all";
-
-    try {
-        const activeCycle = await getActiveCycleRow();
-        const activeCycleId = activeCycle?.id || null;
-        const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
-        const { resumeRound, deliberationRound } = resolveDeliberationRounds(cycleRounds);
-
-        if (!activeCycleId || !resumeRound || !deliberationRound) {
-            return res.status(503).json({ error: "No active resume screening cycle" });
-        }
-
-        const { data: resumes, error: resumeError } = await supabase
-            .from("resumes")
-            .select(`
-                id,
-                name,
-                candidate_id,
-                file_url,
-                candidates ( id, email, major, year, gpa )
-            `)
-            .eq("cycle_id", activeCycleId);
-
-        if (resumeError) return respondWithServerError(res, resumeError, "exportScoreboardDecisions resumes");
-
-        const { data: cycleCandidates, error: cycleCandError } = await supabase
-            .from("candidates")
-            .select("id, name, email, major, year, gpa, resume_file_url")
-            .eq("cycle_id", activeCycleId);
-
-        if (cycleCandError) return respondWithServerError(res, cycleCandError, "exportScoreboardDecisions candidates");
-
-        const candidateLinkLookups = buildCandidateLinkLookups(cycleCandidates);
-
-        const { data: roundDecisionRows, error: decisionError } = await supabase
-            .from("round_decisions")
-            .select("*")
-            .eq("cycle_id", activeCycleId)
-            .eq("round_id", deliberationRound.id);
-
-        if (decisionError) return respondWithServerError(res, decisionError, "exportScoreboardDecisions decisions");
-
-        const decisionLookup = buildDecisionLookup(roundDecisionRows);
-
-        const priorRoundDecisionRows = await loadPriorRoundDecisionRows(
-            activeCycleId,
-            deliberationRound,
-            cycleRounds
-        );
-
-        const { data: reviews, error: reviewError } = await supabase
-            .from("resume_reviews")
-            .select("resume_id, normalized_score, rubric_snapshot, scores")
-            .eq("cycle_id", activeCycleId)
-            .eq("round_id", resumeRound.id);
-
-        if (reviewError) return respondWithServerError(res, reviewError, "exportScoreboardDecisions reviews");
-
-        const { data: frqReviews, error: frqReviewError } = await supabase
-            .from("frq_reviews")
-            .select("resume_id")
-            .eq("cycle_id", activeCycleId)
-            .eq("round_id", resumeRound.id);
-
-        if (frqReviewError) return respondWithServerError(res, frqReviewError, "exportScoreboardDecisions FRQ reviews");
-
-        const reviewsByResume = {};
-        (reviews || []).forEach((review) => {
-            if (!reviewsByResume[review.resume_id]) reviewsByResume[review.resume_id] = [];
-            reviewsByResume[review.resume_id].push(review);
-        });
-        const frqReviewCountByResume = {};
-        (frqReviews || []).forEach((review) => {
-            frqReviewCountByResume[review.resume_id] = (frqReviewCountByResume[review.resume_id] || 0) + 1;
-        });
-
-        const exportRows = (resumes || []).map((resume) => {
-            const embedded = firstRel(resume.candidates) || {};
-            const linked = applyResumeCandidateLink(resume, embedded, candidateLinkLookups);
-            const resumeReviews = reviewsByResume[resume.id] || [];
-            let totalRaw = 0;
-            let totalPossible = 0;
-            let scoredReviewCount = 0;
-            resumeReviews.forEach((review) => {
-                const scoring = getReviewScoring(review, {
-                    rubricConfig: resumeRound.rubric_config,
-                    candidateYear: linked.year,
-                });
-                if (!Number.isFinite(scoring.score) || !Number.isFinite(scoring.maxScore) || scoring.maxScore <= 0) return;
-                totalRaw += scoring.score;
-                totalPossible += scoring.maxScore;
-                scoredReviewCount += 1;
-            });
-            const normalizedScore = computeNormalizedFromAggregate(totalRaw, totalPossible);
-
-            return {
-                candidateId: linked.candidateId,
-                name: resume.name || "Unknown",
-                email: linked.email,
-                phoneNumber: linked.phoneNumber,
-                major: linked.major,
-                year: linked.year,
-                screeningExclusionReason: screeningExclusionReason(linked.year),
-                gpa: linked.gpa,
-                score: normalizedScore,
-                numReviews: scoredReviewCount,
-                numFrqReviews: frqReviewCountByResume[resume.id] || 0,
-                decision: resolveCandidateDecision(linked.candidateId, decisionLookup),
-            };
-        });
-
-        const filteredExportRows = filterCandidatesForDeliberationRound(exportRows.map(candidate => applyScreeningEligibility(candidate)), {
-            deliberationRound,
-            priorDecisionRows: priorRoundDecisionRows,
-        });
-
-        const csv = buildDecisionsCsv(filteredExportRows, { decisionFilter: exportFilter });
-        const suffix = exportFilter === "all" ? "all" : exportFilter;
-        res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        res.setHeader("Content-Disposition", `attachment; filename="scoreboard-decisions-${suffix}.csv"`);
-        return res.send(csv);
-    } catch (err) {
-        return respondWithServerError(res, err, "exportScoreboardDecisions");
-    }
-};
-
 function mapApplicationCandidate(candidate) {
     if (!candidate) return null;
     return {
@@ -2659,7 +2537,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     if (requestedCycleId && requestedCycleId !== activeCycle?.id) {
         const { data, error } = await supabase
             .from('cycles')
-            .select('id, name')
+            .select('*')
             .eq('id', requestedCycleId)
             .maybeSingle();
         if (error) {
@@ -2922,10 +2800,19 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     const coffeeChatEvaluations = interviewEvaluations.filter(
         (evaluation) => evaluation.roundType === ROUND_TYPES.COFFEE_CHAT
     );
-    const compositeCandidate = applyCompositeScoringToCandidate(candidateWithOverrides, {
-        frqReviews,
-        rubricConfig: resumeRound.rubric_config,
-    });
+    const attendedEvents = await loadAttendedEventsByCandidate(activeCycleId, { candidateId: candidate.id });
+    const interestMultiplierSteps = activeCycle.interest_multiplier_steps;
+    const [compositeCandidate] = applyDemonstratedInterestToCandidates(
+        [{
+            ...applyCompositeScoringToCandidate(candidateWithOverrides, {
+                frqReviews,
+                rubricConfig: resumeRound.rubric_config,
+            }),
+            candidateId: candidate.id,
+        }],
+        attendedEvents,
+        interestMultiplierSteps
+    );
     const roundGrades = [
         {
             roundId: resumeRound.id,
@@ -2966,6 +2853,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
         candidateId: candidate.id,
         resumeRoundId: resumeRound.id,
         activeCycleId,
+        interestMultiplierSteps,
         scoring: {
             metrics: appendFrqMetric(currentMetrics.length ? currentMetrics : [...metricSet]),
             maxPerCategory: resumeRound.rubric_config?.maxPerCategory || 4,
@@ -2973,6 +2861,9 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
             aggregateScore: compositeCandidate.aggregateScore,
             normalizedScore: compositeCandidate.normalizedScore,
             score: compositeCandidate.score,
+            baseNormalizedScore: compositeCandidate.baseNormalizedScore,
+            interestMultiplier: compositeCandidate.interestMultiplier,
+            interestEvents: compositeCandidate.interestEvents,
             resumeAggregateScore: compositeCandidate.resumeAggregateScore,
             resumeNormalizedScore: compositeCandidate.resumeNormalizedScore,
             resumeMax: compositeCandidate.resumeMax,
@@ -3275,11 +3166,12 @@ exports.upsertAdminOverride = async (req, res) => {
         const rawScore = req.body?.overrideScore;
         const overrideScore = rawScore != null && rawScore !== '' ? Number(rawScore) : null;
 
-        if (overrideScore !== null && (!Number.isFinite(overrideScore) || overrideScore < 0 || overrideScore > 100)) {
-            return res.status(400).json({ error: 'overrideScore must be a number between 0 and 100' });
-        }
-
         const payload = await fetchScoreboardApplicationPayload(resumeId);
+        // Demonstrated Interest can lift scores past 100%, so overrides may match its ceiling.
+        const maxOverride = Number((100 * maxInterestMultiplier(payload.interestMultiplierSteps)).toFixed(1));
+        if (overrideScore !== null && (!Number.isFinite(overrideScore) || overrideScore < 0 || overrideScore > maxOverride)) {
+            return res.status(400).json({ error: `overrideScore must be a number between 0 and ${maxOverride}` });
+        }
         const exclusion = screeningAccessError(payload.candidate);
         if (exclusion) return res.status(exclusion.status).json({ error: exclusion.error });
         const adminUserId = req.user?.user_id;

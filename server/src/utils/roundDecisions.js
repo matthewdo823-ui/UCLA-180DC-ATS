@@ -75,42 +75,6 @@ function summarizeIncompleteDeliberation(candidates) {
   return { incompleteCount: incomplete.length, pendingCount: pending, holdCount: hold };
 }
 
-function escapeCsvField(value) {
-  const str = value == null ? "" : String(value);
-  if (/[",\n\r]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function buildDecisionsCsv(rows, { decisionFilter = "all" } = {}) {
-  const filtered = (rows || []).filter((row) => {
-    if (decisionFilter === "all") return true;
-    return normalizeRoundDecision(row.decision?.status) === decisionFilter;
-  });
-
-  const header = ["name", "email", "phone", "major", "year", "gpa", "score_normalized_percent", "num_resume_grades", "num_free_response_grades", "decision", "notes"];
-  const lines = [header.join(",")];
-
-  filtered.forEach((row) => {
-    lines.push([
-      escapeCsvField(row.name),
-      escapeCsvField(row.email),
-      escapeCsvField(row.phoneNumber),
-      escapeCsvField(row.major),
-      escapeCsvField(row.year),
-      escapeCsvField(row.gpa),
-      escapeCsvField(row.score ?? ""),
-      escapeCsvField(row.numReviews ?? 0),
-      escapeCsvField(row.numFrqReviews ?? 0),
-      escapeCsvField(row.decision?.status || "pending"),
-      escapeCsvField(row.decision?.notes || ""),
-    ].join(","));
-  });
-
-  return `\uFEFF${lines.join("\n")}`;
-}
-
 module.exports = {
   VALID_ROUND_DECISIONS,
   normalizeRoundDecision,
@@ -122,5 +86,4 @@ module.exports = {
   isFinalCommitteeDecision,
   findIncompleteDeliberationCandidates,
   summarizeIncompleteDeliberation,
-  buildDecisionsCsv,
 };

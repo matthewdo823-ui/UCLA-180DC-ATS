@@ -29,9 +29,12 @@ const CANDIDATE_COLUMNS = [
   "resume_file_url",
   "extenuating_circumstances",
   "headshot",
+  "university_id",
 ];
 
+// Bare "uid" is omitted on purpose: titles match by substring, so it would hit "guide" or "fluid".
 const TITLE_COLUMN_HINTS = [
+  { column: "university_id", patterns: ["university id", "student id", "ucla id", "bruin id"] },
   { column: "name", patterns: ["full name", "your name", "name"] },
   { column: "email", patterns: ["email address", "email", "e-mail"] },
   { column: "phone_number", patterns: ["phone number", "phone", "mobile"] },
@@ -51,6 +54,10 @@ const TITLE_COLUMN_HINTS = [
   { column: "headshot", patterns: ["headshot", "photo", "profile picture", "picture of yourself"] },
 ];
 
+// Demonstrated Interest attendance forms only need identity fields for matching.
+const INTEREST_FIELD_TARGETS = ["name", "email", "university_id"];
+const INTEREST_TITLE_HINTS = TITLE_COLUMN_HINTS.filter((hint) => INTEREST_FIELD_TARGETS.includes(hint.column));
+
 function getKeyFilePath() {
   return process.env.GOOGLE_CLOUD_KEY_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS || "";
 }
@@ -64,16 +71,28 @@ function getDriveImpersonateUser() {
   ).trim();
 }
 
+// Share links (/forms/d/e/<publishId>/viewform) carry a publish id, not the form id the API needs.
+function isGoogleFormResponderUrl(input) {
+  return /\/forms\/d\/e\//.test(String(input || ""));
+}
+
 function parseGoogleFormId(input) {
   const trimmed = String(input || "").trim();
-  if (!trimmed) return null;
+  if (!trimmed || isGoogleFormResponderUrl(trimmed)) return null;
 
   if (/^[a-zA-Z0-9_-]{10,}$/.test(trimmed) && !trimmed.includes("/")) {
     return trimmed;
   }
 
-  const match = trimmed.match(/\/forms\/d\/(?:e\/)?([a-zA-Z0-9_-]+)/);
+  const match = trimmed.match(/\/forms\/d\/([a-zA-Z0-9_-]+)/);
   return match ? match[1] : null;
+}
+
+/** Error to show when parseGoogleFormId(input) returns null. */
+function googleFormUrlError(input) {
+  return isGoogleFormResponderUrl(input)
+    ? "That's the form's share link, which the Google Forms API can't read. Open the form in edit mode and paste that URL instead (docs.google.com/forms/d/.../edit)."
+    : "Invalid Google Form URL or ID. Use the form edit URL (docs.google.com/forms/d/.../edit).";
 }
 
 function normalizeTitle(title) {
@@ -83,11 +102,11 @@ function normalizeTitle(title) {
     .trim();
 }
 
-function suggestColumnForTitle(title) {
+function suggestColumnForTitle(title, hints = TITLE_COLUMN_HINTS) {
   const normalized = normalizeTitle(title);
   if (!normalized) return null;
 
-  for (const hint of TITLE_COLUMN_HINTS) {
+  for (const hint of hints) {
     for (const pattern of hint.patterns) {
       const p = pattern.trim();
       if (normalized === p || normalized.includes(p)) {
@@ -98,12 +117,12 @@ function suggestColumnForTitle(title) {
   return null;
 }
 
-function buildSuggestedFieldMap(questions) {
+function buildSuggestedFieldMap(questions, hints = TITLE_COLUMN_HINTS) {
   const fieldMap = {};
   const usedColumns = new Set();
 
   for (const q of questions) {
-    const column = suggestColumnForTitle(q.title);
+    const column = suggestColumnForTitle(q.title, hints);
     if (!column || usedColumns.has(column)) continue;
     fieldMap[q.questionId] = column;
     usedColumns.add(column);
@@ -155,6 +174,32 @@ function validateFieldMap(fieldMap) {
   const hasEmail = entries.some(([, col]) => col === "email");
   if (!hasName || !hasEmail) {
     return "fieldMap must map at least name and email";
+  }
+
+  return null;
+}
+
+function validateInterestFieldMap(fieldMap) {
+  if (!fieldMap || typeof fieldMap !== "object" || Array.isArray(fieldMap)) {
+    return "fieldMap must be an object";
+  }
+
+  const targets = [];
+  for (const [questionId, target] of Object.entries(fieldMap)) {
+    if (!questionId || typeof questionId !== "string") {
+      return "fieldMap keys must be question ids";
+    }
+    if (typeof target !== "string" || !INTEREST_FIELD_TARGETS.includes(target)) {
+      return `Invalid field "${target}" for question ${questionId}`;
+    }
+    if (targets.includes(target)) {
+      return `Only one question can map to ${target}`;
+    }
+    targets.push(target);
+  }
+
+  if (!targets.includes("email") && !targets.includes("university_id")) {
+    return "Map at least an Email or University ID question so attendance can be matched";
   }
 
   return null;
@@ -260,13 +305,18 @@ function isGoogleFormsConfigured() {
 
 module.exports = {
   CANDIDATE_COLUMNS,
+  INTEREST_FIELD_TARGETS,
+  INTEREST_TITLE_HINTS,
   SCOPES_READ,
   getKeyFilePath,
   parseGoogleFormId,
+  isGoogleFormResponderUrl,
+  googleFormUrlError,
   suggestColumnForTitle,
   buildSuggestedFieldMap,
   inferFileQuestionIds,
   validateFieldMap,
+  validateInterestFieldMap,
   cycleRowToFormConfig,
   loadLegacyFormConfig,
   getFormsClient,

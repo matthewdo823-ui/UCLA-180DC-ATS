@@ -43,7 +43,6 @@ router.get('/scoreboard', resumeController.getScoreboard);
 router.get('/demographics', demographicsController.getDemographics);
 router.post('/scoreboard/decisions/bulk', requireRoles('admin'), resumeController.bulkUpsertRoundDecisions);
 router.post('/scoreboard/decisions', requireRoles('admin'), resumeController.upsertRoundDecision);
-router.get('/scoreboard/decisions/export', requireRoles('admin'), resumeController.exportScoreboardDecisions);
 router.get('/grader-scoreboard', requireRoles('admin'), resumeController.getGraderScoreboard);
 router.get('/frq-grader-scoreboard', requireRoles('admin'), resumeController.getFrqGraderScoreboard);
 

@@ -35,6 +35,8 @@ export const qk = {
   // entry every page reads — exactly what should happen when the active cycle or
   // round changes.
   cycles: () => ["cycles"],
+  interestEvents: (cycleId) => ["interest-events", cycleId],
+  interestAttendance: (cycleId) => ["interest-attendance", cycleId],
   // Flags and referrals share a page but hit different endpoints; keying by the
   // endpoint gives each mode its own cache entry that survives toggling between them.
   candidateSignals: (endpoint) => [endpoint],

@@ -4,6 +4,7 @@
  */
 
 const { isGoogleDriveFileUrl } = require('./drive');
+const { normalizeUniversityId } = require('./candidateLink');
 
 const DEFAULT_TEXT = "";
 
@@ -171,12 +172,14 @@ function mapFormResponseToCandidate(response, config) {
   for (const [questionId, rawColumn] of Object.entries(fieldMap)) {
     if (typeof rawColumn !== "string") continue;
     const columnName = normalizeTargetColumn(rawColumn);
-    const allowed = CANDIDATE_TEXT_COLUMNS.includes(columnName) || columnName === "year";
+    const allowed = CANDIDATE_TEXT_COLUMNS.includes(columnName) || columnName === "year" || columnName === "university_id";
     if (!allowed) continue;
     const answer = answers[questionId];
     if (columnName === "year") {
       const raw = extractTextFromAnswer(answer);
       columnValues.year = normalizeYear(raw);
+    } else if (columnName === "university_id") {
+      columnValues.university_id = normalizeUniversityId(extractTextFromAnswer(answer)) || null;
     } else {
       columnValues[columnName] = extractValueForColumn(answer, columnName);
     }
@@ -215,6 +218,8 @@ function mapFormResponseToCandidate(response, config) {
     extenuating_circumstances: columnValues.extenuating_circumstances ?? DEFAULT_TEXT,
     headshot: columnValues.headshot ?? DEFAULT_TEXT,
   };
+  // Only written when mapped, so cycles that don't map a UID question never touch the column.
+  if ("university_id" in columnValues) candidateRow.university_id = columnValues.university_id;
 
   const resumeDerived = {
     name: candidateRow.name || "Unknown",
