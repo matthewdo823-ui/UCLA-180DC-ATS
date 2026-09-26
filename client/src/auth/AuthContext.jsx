@@ -118,6 +118,11 @@ export function AuthProvider({ children }) {
     }
 
     if (!res.ok) {
+      if (res.status === 401) {
+        const error = new Error("Invalid email or password");
+        error.status = 401;
+        throw error;
+      }
       throw await formatResponseError(res, "signing in", "Check /auth/login credentials or server logs.");
     }
 
