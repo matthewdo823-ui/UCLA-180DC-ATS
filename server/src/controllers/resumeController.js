@@ -946,6 +946,7 @@ function formatFrqCandidateRow(row) {
             why_consulting: candidate.why_consulting,
             why_180dc: candidate.why_180dc,
             why_social_impact: candidate.why_social_impact,
+            applicationResponses: Array.isArray(candidate.application_responses) ? candidate.application_responses : [],
         } : null,
     };
 }
@@ -969,7 +970,8 @@ async function fetchFrqReviewRowById(reviewId, gradedBy) {
                     name,
                     why_consulting,
                     why_180dc,
-                    why_social_impact
+                    why_social_impact,
+                    application_responses
                 )
             )
         `)
@@ -1015,7 +1017,8 @@ exports.getNextFrq = async (req, res) => {
                 major,
                 why_consulting,
                 why_180dc,
-                why_social_impact
+                why_social_impact,
+                application_responses
             )
         `)
         .eq("cycle_id", screening.cycle.id)
@@ -2527,9 +2530,14 @@ function mapApplicationCandidate(candidate) {
         linkedin: candidate.linkedin || '',
         gm: candidate.gm || '',
         newbieTraining: candidate.newbie_training || '',
+        referralSource: candidate.referral_source || '',
+        previouslyApplied: candidate.previously_applied || '',
+        professionalDevelopment: candidate.professional_development || '',
+        consultingConnectInterest: candidate.consulting_connect_interest || '',
         whyConsulting: candidate.why_consulting || '',
         why180dc: candidate.why_180dc || '',
         whySocialImpact: candidate.why_social_impact || '',
+        applicationResponses: Array.isArray(candidate.application_responses) ? candidate.application_responses : [],
         extenuatingCircumstances: candidate.extenuating_circumstances || '',
         headshot: candidate.headshot || '',
         resumeFileUrl: candidate.resume_file_url || '',
@@ -2589,9 +2597,14 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
                     linkedin,
                     gm,
                     newbie_training,
+                    referral_source,
+                    previously_applied,
+                    professional_development,
+                    consulting_connect_interest,
                     why_consulting,
                     why_180dc,
                     why_social_impact,
+                    application_responses,
                     extenuating_circumstances,
                     headshot,
                     resume_file_url,
@@ -2926,6 +2939,7 @@ async function fetchScoreboardApplicationSummarySource(resumeId, requestedCycleI
                     why_consulting,
                     why_180dc,
                     why_social_impact,
+                    application_responses,
                     cycle_id
                 )
             `)

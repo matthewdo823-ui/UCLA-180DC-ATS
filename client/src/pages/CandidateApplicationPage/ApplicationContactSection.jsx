@@ -16,6 +16,10 @@ export default function ApplicationContactSection({ candidate, resume }) {
         <DetailField label="URM" value={candidate.urm} />
         <DetailField label="GM interest" value={candidate.gm} />
         <DetailField label="Newbie training" value={candidate.newbieTraining} />
+        <DetailField label="How they heard about 180DC" value={candidate.referralSource} />
+        <DetailField label="Previously applied" value={candidate.previouslyApplied} />
+        <DetailField label="Consulting Connect interest" value={candidate.consultingConnectInterest} />
+        <DetailField label="Upcoming professional development" value={candidate.professionalDevelopment} />
         <DetailField label="Applied" value={formatDate(candidate.appliedAt || resume?.submittedAt, { style: "datetime" })} />
       </div>
     </SectionCard>

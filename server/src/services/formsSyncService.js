@@ -23,7 +23,7 @@ const {
 async function fetchCyclesWithFormConfig(client = supabase) {
   const { data, error } = await client
     .from("cycles")
-    .select("id, google_form_id, form_field_map, form_resume_question_id, form_headshot_question_id, status, last_form_sync_at")
+    .select("id, google_form_id, form_field_map, form_resume_question_id, form_headshot_question_id, form_question_catalog, form_gradable_question_ids, status, last_form_sync_at")
     .in("status", ["active", "draft"])
     .not("google_form_id", "is", null);
 
@@ -332,7 +332,7 @@ async function syncFormResponsesToDatabase(cycleId) {
   if (cycleId) {
     const { data: cycle, error } = await supabase
       .from("cycles")
-      .select("id, google_form_id, form_field_map, form_resume_question_id, form_headshot_question_id, last_form_sync_at")
+      .select("id, google_form_id, form_field_map, form_resume_question_id, form_headshot_question_id, form_question_catalog, form_gradable_question_ids, last_form_sync_at")
       .eq("id", cycleId)
       .maybeSingle();
 

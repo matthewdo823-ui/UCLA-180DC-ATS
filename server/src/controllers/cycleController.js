@@ -11,6 +11,8 @@ const {
   buildSuggestedFieldMap,
   inferFileQuestionIds,
   validateFieldMap,
+  validateQuestionCatalog,
+  validateGradableQuestionIds,
   isGoogleFormsConfigured,
 } = require("../utils/googleForm");
 const { respondWithServerError } = require("../utils/httpErrors");
@@ -72,6 +74,8 @@ function mapCycle(row, extras = {}) {
     formFieldMap: row.form_field_map || null,
     formResumeQuestionId: row.form_resume_question_id || null,
     formHeadshotQuestionId: row.form_headshot_question_id || null,
+    formQuestionCatalog: Array.isArray(row.form_question_catalog) ? row.form_question_catalog : [],
+    formGradableQuestionIds: Array.isArray(row.form_gradable_question_ids) ? row.form_gradable_question_ids : [],
     lastFormSyncAt: row.last_form_sync_at || null,
     hasFormConfig: Boolean(row.google_form_id && row.form_field_map),
     interestMultiplierSteps: Array.isArray(row.interest_multiplier_steps)
@@ -364,6 +368,19 @@ exports.patchCycle = async (req, res) => {
   }
   if (req.body?.headshotQuestionId !== undefined) {
     updates.form_headshot_question_id = req.body.headshotQuestionId || null;
+  }
+  if (req.body?.questionCatalog !== undefined) {
+    const catalogError = validateQuestionCatalog(req.body.questionCatalog);
+    if (catalogError) return res.status(400).json({ error: catalogError });
+    updates.form_question_catalog = req.body.questionCatalog;
+  }
+  if (req.body?.gradableQuestionIds !== undefined) {
+    const catalog = req.body.questionCatalog !== undefined
+      ? req.body.questionCatalog
+      : [];
+    const gradableError = validateGradableQuestionIds(req.body.gradableQuestionIds, catalog);
+    if (gradableError) return res.status(400).json({ error: gradableError });
+    updates.form_gradable_question_ids = req.body.gradableQuestionIds;
   }
   if (req.body?.interestMultiplierSteps !== undefined) {
     const stepsError = validateMultiplierSteps(req.body.interestMultiplierSteps);

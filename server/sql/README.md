@@ -33,11 +33,12 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 27 | `add_interview_group_member_assignments.sql` | Assign each member a persistent starting Coffee Chat table |
 | 28 | `add_demonstrated_interest.sql` | Demonstrated Interest events, attendance, per-cycle multiplier steps, and `candidates.university_id` |
 | 29 | `add_round_phases.sql` | Per-round phases (`setup` / `grading` / `deliberation` / `closed`), one-open-round-per-cycle index, phase-change audit columns |
+| 30 | `add_cycle_application_question_mapping.sql` | Cycle-specific question catalogs, gradable response snapshots, structured application fields, and the Fall '26 mapping repair |
 
 ## Notes
 
-- **Fresh database:** run 1–4, then 6–13, 15–22, and 26–29 in order. Skip 5, 14, and 23–25 unless noted below. Fresh installs of the current `add_frq_reviews.sql` already allow 0–4 FRQ scores, so #24 is only needed on existing databases.
-- **Existing database:** skip scripts you have already applied. Each file uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` where possible, but re-running `init.sql` or seed blocks in `add_cycles_and_rounds.sql` may fail or duplicate data.
+- **Fresh database:** run 1–4, then 6–13, 15–22, and 26–30 in order. Skip 5, 14, and 23–25 unless noted below. Fresh installs of the current `add_frq_reviews.sql` already allow 0–4 FRQ scores, so #24 is only needed on existing databases.
+- **Existing database:** skip scripts you have already applied. Each file uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` where possible, but re-running `init.sql` or seed blocks in `add_cycles_and_rounds.sql` may fail or duplicate data. Run #30 before deploying the cycle-specific application response UI, then re-sync the Fall '26 form once.
 - **`add_coffee_chat_scoring_and_groups.sql` (#26):** preserves legacy interview rows, changes new Coffee Chat evaluations to one row per evaluator, and adds persistent candidate-to-table assignments.
 - **`add_interview_group_member_assignments.sql` (#27):** run after #26 to let admins place members at starting tables. Candidate table movement continues to use the assignment table created by #26.
 - **`init.sql`** begins with a large commented block (legacy candidate/resume DDL); the active statements start at the `user_role` enum.

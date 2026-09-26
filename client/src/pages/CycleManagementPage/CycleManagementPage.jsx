@@ -58,6 +58,8 @@ function StatusBadge({ status, styles }) {
 const COLUMN_OPTIONS = [
   { value: "", label: "— Skip —" },
   { value: "name", label: "Name" },
+  { value: "first_name", label: "First name" },
+  { value: "last_name", label: "Last name" },
   { value: "email", label: "Email" },
   { value: "phone_number", label: "Phone" },
   { value: "major", label: "Major" },
@@ -68,20 +70,25 @@ const COLUMN_OPTIONS = [
   { value: "linkedin", label: "LinkedIn" },
   { value: "gm", label: "GM interest" },
   { value: "newbie_training", label: "Newbie training" },
-  { value: "why_consulting", label: "Why consulting" },
-  { value: "why_180dc", label: "Why 180DC" },
-  { value: "why_social_impact", label: "Why social impact" },
+  { value: "why_consulting", label: "Legacy: Why consulting", disabled: true },
+  { value: "why_180dc", label: "Legacy: Why 180DC", disabled: true },
+  { value: "why_social_impact", label: "Legacy: Why social impact", disabled: true },
   { value: "resume_file_url", label: "Resume upload" },
   { value: "extenuating_circumstances", label: "Extenuating circumstances" },
   { value: "headshot", label: "Headshot" },
   { value: "university_id", label: "University ID" },
+  { value: "referral_source", label: "Referral source" },
+  { value: "previously_applied", label: "Previously applied" },
+  { value: "professional_development", label: "Professional development" },
+  { value: "consulting_connect_interest", label: "Consulting Connect interest" },
 ];
 
 function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
   const [expanded, setExpanded] = useState(!cycle.hasFormConfig);
   const [formUrl, setFormUrl] = useState(cycle.googleFormId ? `https://docs.google.com/forms/d/${cycle.googleFormId}/edit` : "");
-  const [questions, setQuestions] = useState([]);
+  const [questions, setQuestions] = useState(cycle.formQuestionCatalog || []);
   const [fieldMap, setFieldMap] = useState(cycle.formFieldMap || {});
+  const [gradableQuestionIds, setGradableQuestionIds] = useState(cycle.formGradableQuestionIds || []);
   const [resumeQuestionId, setResumeQuestionId] = useState(cycle.formResumeQuestionId || "");
   const [headshotQuestionId, setHeadshotQuestionId] = useState(cycle.formHeadshotQuestionId || "");
   const [formTitle, setFormTitle] = useState("");
@@ -94,11 +101,13 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
   useEffect(() => {
     setFormUrl(cycle.googleFormId ? `https://docs.google.com/forms/d/${cycle.googleFormId}/edit` : "");
     setFieldMap(cycle.formFieldMap || {});
+    setQuestions(cycle.formQuestionCatalog || []);
+    setGradableQuestionIds(cycle.formGradableQuestionIds || []);
     setResumeQuestionId(cycle.formResumeQuestionId || "");
     setHeadshotQuestionId(cycle.formHeadshotQuestionId || "");
     setPanelError("");
     setPanelMessage("");
-  }, [cycle.id, cycle.googleFormId, cycle.formFieldMap, cycle.formResumeQuestionId, cycle.formHeadshotQuestionId]);
+  }, [cycle.id, cycle.googleFormId, cycle.formFieldMap, cycle.formQuestionCatalog, cycle.formGradableQuestionIds, cycle.formResumeQuestionId, cycle.formHeadshotQuestionId]);
 
   async function handleDiscover() {
     setDiscovering(true);
@@ -113,10 +122,11 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
       if (!res.ok) throw await formatResponseError(res, "discovering form fields");
       const body = await res.json().catch(() => ({}));
 
-      setQuestions(body.questions || []);
-      setFieldMap(body.suggestedFieldMap || {});
-      setResumeQuestionId(body.resumeQuestionId || "");
-      setHeadshotQuestionId(body.headshotQuestionId || "");
+      const discoveredQuestions = body.questions || [];
+      setQuestions(discoveredQuestions);
+      setFieldMap((current) => ({ ...(body.suggestedFieldMap || {}), ...current }));
+      setResumeQuestionId((current) => current || body.resumeQuestionId || "");
+      setHeadshotQuestionId((current) => current || body.headshotQuestionId || "");
       setFormTitle(body.formTitle || "");
       setPanelMessage(`Found ${body.questions?.length || 0} questions. Review mappings, then save.`);
     } catch (e) {
@@ -136,12 +146,24 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
         if (col) cleanedMap[qid] = col;
       });
 
+      const duplicateTargets = Object.values(cleanedMap).filter((target, index, targets) => targets.indexOf(target) !== index);
+      if (duplicateTargets.length) {
+        throw new Error(`Each candidate field can only be mapped once. Duplicate: ${[...new Set(duplicateTargets)].join(", ")}`);
+      }
+
+      const unresolved = questions.filter((question) => !cleanedMap[question.questionId] && !gradableQuestionIds.includes(question.questionId));
+      if (unresolved.length && !window.confirm(`${unresolved.length} question${unresolved.length === 1 ? " is" : "s are"} neither mapped nor marked for grading. Save anyway?`)) {
+        return;
+      }
+
       const res = await authedFetch(`${API}/cycles/${cycle.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           formUrl: formUrl.trim(),
           fieldMap: cleanedMap,
+          questionCatalog: questions,
+          gradableQuestionIds,
           resumeQuestionId: resumeQuestionId || null,
           headshotQuestionId: headshotQuestionId || null,
         }),
@@ -179,6 +201,8 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
     : Object.keys(fieldMap).map((questionId) => ({ questionId, title: questionId }));
 
   const panelBusy = busy || discovering || saving || syncing;
+  const duplicateTargets = Object.values(fieldMap).filter((target, index, targets) => target && targets.indexOf(target) !== index);
+  const unresolvedQuestions = questions.filter((question) => !fieldMap[question.questionId] && !gradableQuestionIds.includes(question.questionId));
   const fieldCount = Object.keys(cycle.formFieldMap || fieldMap).filter((k) => (cycle.formFieldMap || fieldMap)[k]).length;
 
   return (
@@ -269,7 +293,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         <ActionButton label={discovering ? "Discovering…" : "Discover fields"} onClick={handleDiscover} disabled={panelBusy || !formUrl.trim()} variant="primary" />
-        <ActionButton label={saving ? "Saving…" : "Save config"} onClick={handleSave} disabled={panelBusy || !formUrl.trim()} />
+        <ActionButton label={saving ? "Saving…" : "Save config"} onClick={handleSave} disabled={panelBusy || !formUrl.trim() || duplicateTargets.length > 0} />
         <ActionButton label={syncing ? "Syncing…" : "Sync now"} onClick={handleSync} disabled={panelBusy || !cycle.hasFormConfig} variant="primary" />
         {cycle.hasFormConfig ? (
           <ActionButton label="Collapse" onClick={() => setExpanded(false)} disabled={panelBusy} />
@@ -289,6 +313,16 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
         <p style={{ margin: "0 0 10px", fontSize: 12, color: "#1D9E75" }}>{panelMessage}</p>
       ) : null}
 
+      {duplicateTargets.length ? (
+        <p style={{ margin: "0 0 10px", padding: "8px 10px", borderRadius: 7, background: "rgba(226,75,74,0.08)", fontSize: 12, color: css.red }}>
+          Duplicate destinations must be fixed before saving: {[...new Set(duplicateTargets)].join(", ")}.
+        </p>
+      ) : unresolvedQuestions.length ? (
+        <p style={{ margin: "0 0 10px", padding: "8px 10px", borderRadius: 7, background: "rgba(239,159,39,0.10)", fontSize: 12, color: "#9A6110" }}>
+          {unresolvedQuestions.length} question{unresolvedQuestions.length === 1 ? " is" : "s are"} neither mapped to a profile field nor marked as a gradable response.
+        </p>
+      ) : null}
+
       {mappedQuestions.length ? (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -296,6 +330,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
               <tr style={{ textAlign: "left", color: css.textGray }}>
                 <th style={{ padding: "6px 8px", borderBottom: `1px solid ${css.borderLight}` }}>Question</th>
                 <th style={{ padding: "6px 8px", borderBottom: `1px solid ${css.borderLight}` }}>Maps to</th>
+                <th style={{ padding: "6px 8px", borderBottom: `1px solid ${css.borderLight}`, textAlign: "center" }}>Grade response</th>
               </tr>
             </thead>
             <tbody>
@@ -322,9 +357,21 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
                       style={{ width: "100%", padding: "6px 8px", borderRadius: 6, border: `1px solid ${css.borderLight}` }}
                     >
                       {COLUMN_OPTIONS.map((opt) => (
-                        <option key={opt.value || "skip"} value={opt.value}>{opt.label}</option>
+                        <option key={opt.value || "skip"} value={opt.value} disabled={opt.disabled}>{opt.label}</option>
                       ))}
                     </select>
+                  </td>
+                  <td style={{ padding: "8px", borderBottom: `1px solid ${css.borderLight}`, textAlign: "center", verticalAlign: "top" }}>
+                    <input
+                      type="checkbox"
+                      checked={gradableQuestionIds.includes(q.questionId)}
+                      onChange={(event) => {
+                        setGradableQuestionIds((current) => event.target.checked
+                          ? [...new Set([...current, q.questionId])]
+                          : current.filter((questionId) => questionId !== q.questionId));
+                      }}
+                      aria-label={`Grade response for ${q.title}`}
+                    />
                   </td>
                 </tr>
               ))}

@@ -2,12 +2,7 @@ import { useEffect } from "react";
 import { css } from "../../theme/colors";
 import { hasText } from "./applicationUtils";
 import EssayBlock from "./components/EssayBlock";
-
-const ESSAY_FIELDS = [
-  { key: "whyConsulting", label: "Why consulting?" },
-  { key: "why180dc", label: "Why 180 Degrees Consulting?" },
-  { key: "whySocialImpact", label: "Why social impact?" },
-];
+import { getGradableApplicationResponses } from "../../utils/applicationResponses";
 
 export default function ApplicationResponsesModal({ open, onClose, candidate }) {
   useEffect(() => {
@@ -22,6 +17,7 @@ export default function ApplicationResponsesModal({ open, onClose, candidate }) 
   }, [open, onClose]);
 
   if (!open) return null;
+  const responses = getGradableApplicationResponses(candidate);
 
   return (
     <div
@@ -69,8 +65,8 @@ export default function ApplicationResponsesModal({ open, onClose, candidate }) 
           </button>
         </div>
         <div style={{ overflowY: "auto", padding: "20px 22px" }}>
-          {ESSAY_FIELDS.map(({ key, label }) => (
-            <EssayBlock key={key} label={label} text={candidate[key]} />
+          {responses.map(({ questionId, title, answer }) => (
+            <EssayBlock key={questionId} label={title} text={answer} />
           ))}
           <div>
             <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: css.textGray }}>Extenuating circumstances</p>
