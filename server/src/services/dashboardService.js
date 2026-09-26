@@ -241,7 +241,7 @@ async function loadGraderSummary(cycleId, resumeRound) {
   const { data: users, error: userError } = await supabase
     .from("users")
     .select("user_id, email, first_name, last_name, role")
-    .in("role", ["admin", "member"])
+    .in("role", ["admin", "member", "board"])
     .order("first_name", { ascending: true });
 
   if (userError) throw userError;

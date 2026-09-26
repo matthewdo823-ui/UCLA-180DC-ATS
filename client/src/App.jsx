@@ -49,7 +49,7 @@ function AppShell() {
             <Route
               path="/no-access"
               element={
-                <ProtectedRoute allowedRoles={["admin", "member", "applicant"]}>
+                <ProtectedRoute allowedRoles={["admin", "member", "board", "applicant"]}>
                   <NoAccessPage />
                 </ProtectedRoute>
               }
@@ -105,7 +105,7 @@ function AppShell() {
             <Route
               path="/candidates/:candidateId"
               element={
-                <ProtectedRoute allowedRoles={["admin", "member"]}>
+                <ProtectedRoute allowedRoles={["admin", "member", "board"]}>
                   <CandidateApplicationPage />
                 </ProtectedRoute>
               }
@@ -113,7 +113,7 @@ function AppShell() {
             <Route
               path="/scoreboard/:candidateId/application"
               element={
-                <ProtectedRoute allowedRoles={["admin", "member"]}>
+                <ProtectedRoute allowedRoles={["admin", "member", "board"]}>
                   <CandidateApplicationPage />
                 </ProtectedRoute>
               }

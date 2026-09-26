@@ -5,13 +5,13 @@ const demographicsController = require('../controllers/demographicsController');
 const assignmentController = require('../controllers/assignmentController');
 const { authenticateToken, requireRoles } = require('../middleware/authMiddleware');
 
-router.use(authenticateToken, requireRoles('admin', 'member'));
+router.use(authenticateToken, requireRoles('admin', 'member', 'board'));
 
-router.get('/next-frq', requireRoles('admin'), resumeController.getNextFrq);
-router.get('/frq-reviews', requireRoles('admin'), resumeController.listMyFrqReviews);
-router.get('/frq-reviews/:reviewId/candidate', requireRoles('admin'), resumeController.getFrqReviewCandidate);
-router.post('/frq-reviews', requireRoles('admin'), resumeController.saveFrqReview);
-router.patch('/frq-reviews/:reviewId', requireRoles('admin'), resumeController.patchMyFrqReview);
+router.get('/next-frq', requireRoles('admin', 'board'), resumeController.getNextFrq);
+router.get('/frq-reviews', requireRoles('admin', 'board'), resumeController.listMyFrqReviews);
+router.get('/frq-reviews/:reviewId/candidate', requireRoles('admin', 'board'), resumeController.getFrqReviewCandidate);
+router.post('/frq-reviews', requireRoles('admin', 'board'), resumeController.saveFrqReview);
+router.patch('/frq-reviews/:reviewId', requireRoles('admin', 'board'), resumeController.patchMyFrqReview);
 router.get('/assignments', requireRoles('admin'), assignmentController.getAssignmentBoard);
 router.post('/assignments', requireRoles('admin'), assignmentController.createAssignments);
 router.delete('/assignments', requireRoles('admin'), assignmentController.deleteAssignments);

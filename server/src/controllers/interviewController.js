@@ -648,7 +648,7 @@ exports.getCoffeeChatGraderScoreboard = async (req, res) => {
         ? supabase
           .from("users")
           .select("user_id, email, role, first_name, last_name, created_at, last_login")
-          .in("role", ["admin", "member"])
+          .in("role", ["admin", "member", "board"])
           .in("user_id", memberIds)
         : { data: [], error: null },
       candidateIds.length

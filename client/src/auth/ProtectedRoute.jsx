@@ -3,7 +3,7 @@ import { css } from "../theme/colors";
 import { normalizeRole } from "../utils/auth";
 import { useAuth } from "./AuthContext";
 
-const staffRoles = ["admin", "member"];
+const staffRoles = ["admin", "member", "board"];
 
 function LoadingSession() {
   return (

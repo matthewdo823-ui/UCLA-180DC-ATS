@@ -13,6 +13,7 @@ import { pageTitleStyle } from "../../theme/typography";
 import { displayName, formatDate } from "../../utils/format";
 const ASSIGNABLE_ROLES = [
   { value: "member", label: "Member" },
+  { value: "board", label: "Board" },
   { value: "admin", label: "Admin" },
 ];
 
@@ -20,6 +21,8 @@ function roleBadgeStyle(role) {
   switch (role) {
     case "admin":
       return { background: "rgba(29,158,117,0.12)", color: css.greenDark, border: "1px solid rgba(29,158,117,0.28)" };
+    case "board":
+      return { background: "rgba(155,89,182,0.12)", color: "#8E44AD", border: "1px solid rgba(155,89,182,0.28)" };
     case "member":
       return { background: "rgba(91,163,224,0.12)", color: "#4A7FB8", border: "1px solid rgba(91,163,224,0.28)" };
     default:
@@ -69,7 +72,7 @@ export default function UserManagementPage() {
   const error = saveError || usersQuery.error;
 
   const staffCount = useMemo(
-    () => users.filter((u) => u.role === "admin" || u.role === "member").length,
+    () => users.filter((u) => u.role === "admin" || u.role === "member" || u.role === "board").length,
     [users]
   );
 
@@ -220,7 +223,7 @@ export default function UserManagementPage() {
                   const selectedRole = pendingRemoval
                     ? user.role
                     : pendingRole
-                    ?? (user.role === "member" || user.role === "admin" ? user.role : "");
+                    ?? (user.role === "member" || user.role === "admin" || user.role === "board" ? user.role : "");
                   const isSelf = user.user_id === currentUser?.user_id;
 
                   return (

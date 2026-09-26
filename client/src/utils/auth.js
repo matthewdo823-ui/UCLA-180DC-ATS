@@ -4,9 +4,18 @@ export function normalizeRole(role) {
 
 export function isStaffRole(role) {
   const normalized = normalizeRole(role);
-  return normalized === "admin" || normalized === "member";
+  return normalized === "admin" || normalized === "member" || normalized === "board";
 }
 
 export function isAdminRole(role) {
   return normalizeRole(role) === "admin";
+}
+
+export function isBoardRole(role) {
+  return normalizeRole(role) === "board";
+}
+
+export function canGradeFrq(role) {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "board";
 }
