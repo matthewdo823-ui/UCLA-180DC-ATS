@@ -8,7 +8,7 @@ import {
   phaseIndex,
 } from "../../constants/roundPhases";
 import PhaseBadge from "../../components/PhaseBadge/PhaseBadge";
-import ActionButton from "./ActionButton";
+import ActionButton from "../../components/ActionButton/ActionButton";
 
 const FORWARD_LABELS = {
   grading: "Open grading →",

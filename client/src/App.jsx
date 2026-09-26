@@ -10,6 +10,7 @@ import ErrorBoundary from "./components/ErrorBoundary/ErrorBoundary";
 const DashboardPage = lazy(() => import("./pages/DashboardPage/DashboardPage"));
 const FlaggedCandidatesPage = lazy(() => import("./pages/FlaggedCandidatesPage/FlaggedCandidatesPage"));
 const CycleManagementPage = lazy(() => import("./pages/CycleManagementPage/CycleManagementPage"));
+const DemonstratedInterestPage = lazy(() => import("./pages/DemonstratedInterestPage/DemonstratedInterestPage"));
 const UserManagementPage = lazy(() => import("./pages/UserManagementPage/UserManagementPage"));
 const AssignmentsPage = lazy(() => import("./pages/AssignmentsPage/AssignmentsPage"));
 const GraderScoreboardPage = lazy(() => import("./pages/GraderScoreboardPage/GraderScoreboardPage"));
@@ -139,6 +140,14 @@ function AppShell() {
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <CycleManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/demonstrated-interest"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <DemonstratedInterestPage />
                 </ProtectedRoute>
               }
             />

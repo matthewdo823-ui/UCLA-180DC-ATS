@@ -26,9 +26,8 @@ import {
   isOpenPhase,
 } from "../../constants/roundPhases";
 import PhaseBadge from "../../components/PhaseBadge/PhaseBadge";
-import ActionButton from "./ActionButton";
+import ActionButton from "../../components/ActionButton/ActionButton";
 import PhaseStepper from "./PhaseStepper";
-import DemonstratedInterestSection from "./DemonstratedInterestSection";
 
 const CYCLE_STATUS_STYLE = {
   active: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
@@ -798,7 +797,7 @@ function CycleCard({ cycle, busy, authedFetch, interviewPool, phaseIssues, onRel
       {expanded ? (
         <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 12, background: "#FCFDFC" }}>
           <FormConfigPanel cycle={cycle} busy={busy} authedFetch={authedFetch} onSaved={onReload} />
-          <DemonstratedInterestSection cycle={cycle} busy={busy} authedFetch={authedFetch} onCycleSaved={onReload} />
+
           {(cycle.rounds || []).map((round) => (
             <RoundCard
               key={round.id}
