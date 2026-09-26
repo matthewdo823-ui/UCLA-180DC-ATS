@@ -1,5 +1,6 @@
 const { mapApplicationCandidate } = require('../utils/applicationCandidate');
 const { applyScreeningEligibility, screeningAccessError, screeningExclusionReason, ELIGIBLE_YEAR_FILTER } = require('../utils/screeningEligibility');
+const { canGradeFrq } = require('../utils/auth');
 const supabase = require('../config/supabase');
 const { extractDriveFileID, toDownloadURL, isGoogleDriveFileUrl } = require('../utils/drive');
 const { streamDriveFileToResponse, sendDriveProxyError } = require('../utils/driveStream');
@@ -984,7 +985,7 @@ async function fetchFrqReviewRowById(reviewId, gradedBy) {
 
 /** Next candidate for admin FRQ grading (skips already-graded-by-me). */
 exports.getNextFrq = async (req, res) => {
-    if (req.user?.role !== "admin") {
+    if (!canGradeFrq(req.user?.role)) {
         return res.status(403).json({ error: "Admin access required" });
     }
 
@@ -1045,7 +1046,7 @@ exports.getNextFrq = async (req, res) => {
 
 /** FRQ grades submitted by the authenticated admin. */
 exports.listMyFrqReviews = async (req, res) => {
-    if (req.user?.role !== "admin") {
+    if (!canGradeFrq(req.user?.role)) {
         return res.status(403).json({ error: "Admin access required" });
     }
 
@@ -1086,7 +1087,7 @@ exports.listMyFrqReviews = async (req, res) => {
 
 /** Load candidate FRQ content for one of the admin's past FRQ grades. */
 exports.getFrqReviewCandidate = async (req, res) => {
-    if (req.user?.role !== "admin") {
+    if (!canGradeFrq(req.user?.role)) {
         return res.status(403).json({ error: "Admin access required" });
     }
 
@@ -1125,7 +1126,7 @@ exports.getFrqReviewCandidate = async (req, res) => {
 };
 
 exports.saveFrqReview = async (req, res) => {
-    if (req.user?.role !== "admin") {
+    if (!canGradeFrq(req.user?.role)) {
         return res.status(403).json({ error: "Admin access required" });
     }
 
@@ -1207,7 +1208,7 @@ exports.saveFrqReview = async (req, res) => {
 };
 
 exports.patchMyFrqReview = async (req, res) => {
-    if (req.user?.role !== "admin") {
+    if (!canGradeFrq(req.user?.role)) {
         return res.status(403).json({ error: "Admin access required" });
     }
 
@@ -3353,7 +3354,7 @@ exports.getGraderScoreboard = async (req, res) => {
         const { data: users, error: userError } = await supabase
             .from('users')
             .select('user_id, email, role, first_name, last_name, created_at, last_login')
-            .in('role', ['admin', 'member'])
+            .in('role', ['admin', 'member', 'board'])
             .order('first_name', { ascending: true });
 
         if (userError) throw userError;
@@ -3513,7 +3514,7 @@ exports.getGraderScoreboard = async (req, res) => {
     }
 };
 
-// Gets admin-only FRQ grader scoreboard data (FRQ grading is admin-only)
+// Gets FRQ grader scoreboard data (FRQ grading is limited to admin + board)
 exports.getFrqGraderScoreboard = async (req, res) => {
     try {
         const activeCycle = await getActiveCycleRow();
@@ -3522,7 +3523,7 @@ exports.getFrqGraderScoreboard = async (req, res) => {
         const { data: users, error: userError } = await supabase
             .from('users')
             .select('user_id, email, role, first_name, last_name, created_at, last_login')
-            .eq('role', 'admin')
+            .in('role', ['admin', 'board'])
             .order('first_name', { ascending: true });
 
         if (userError) throw userError;

@@ -44,7 +44,7 @@ async function loadAssignmentBoardData(cycleId) {
         supabase
             .from('users')
             .select('user_id, email, role, first_name, last_name')
-            .in('role', ['admin', 'member'])
+            .in('role', ['admin', 'member', 'board'])
             .order('first_name', { ascending: true }),
         supabase
             .from('resume_reviews')
@@ -87,7 +87,7 @@ async function loadCoffeeChatAssignmentBoard(cycle, round) {
         supabase
             .from('users')
             .select('user_id, email, role, first_name, last_name')
-            .in('role', ['admin', 'member'])
+            .in('role', ['admin', 'member', 'board'])
             .order('first_name', { ascending: true }),
         supabase
             .from('interview_group_assignments')
@@ -327,7 +327,7 @@ exports.updateCoffeeChatMemberTable = async (req, res) => {
             .from('users')
             .select('user_id, role')
             .eq('user_id', userId)
-            .in('role', ['admin', 'member'])
+            .in('role', ['admin', 'member', 'board'])
             .maybeSingle();
         if (memberError) throw memberError;
         if (!member) return res.status(404).json({ error: 'Coffee Chat participant not found' });
@@ -412,7 +412,7 @@ exports.createAssignments = async (req, res) => {
         const { data: validGraders, error: graderError } = await supabase
             .from('users')
             .select('user_id')
-            .in('role', ['admin', 'member'])
+            .in('role', ['admin', 'member', 'board'])
             .in('user_id', graderIds);
 
         if (graderError) throw graderError;

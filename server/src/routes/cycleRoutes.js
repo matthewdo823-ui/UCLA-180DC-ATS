@@ -6,7 +6,7 @@ const { authenticateToken, requireRoles } = require("../middleware/authMiddlewar
 
 const adminAuth = [authenticateToken, requireRoles("admin")];
 
-router.get("/cycles/active", authenticateToken, requireRoles("admin", "member"), cycleController.getActiveCycle);
+router.get("/cycles/active", authenticateToken, requireRoles("admin", "member", "board"), cycleController.getActiveCycle);
 
 router.get("/cycles", ...adminAuth, cycleController.listCycles);
 router.post("/cycles", ...adminAuth, cycleController.createCycle);

@@ -491,7 +491,7 @@ export function GraderProgressRows({ graders, expectedReviews, expectedFrqReview
         const frqPct = expectedFrqReviews > 0
           ? Math.min(100, Math.round((frqCount / expectedFrqReviews) * 100))
           : 0;
-        const showFrqProgress = grader.role === "admin" && expectedFrqReviews > 0;
+        const showFrqProgress = (grader.role === "admin" || grader.role === "board") && expectedFrqReviews > 0;
         const coffeeChatMode = mode === "coffee_chat";
         return (
           <div key={grader.id} style={{
