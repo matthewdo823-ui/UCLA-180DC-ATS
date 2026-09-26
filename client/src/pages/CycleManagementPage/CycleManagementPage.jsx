@@ -21,12 +21,11 @@ import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { ROUND_TYPES, formatRoundTypeLabel, isResumeScreenType, normalizeRoundType } from "../../constants/rounds";
 import { formatReviewCountPair } from "../../utils/reviewCounts";
 import {
-  ROUND_PHASE_STYLE,
   canManageTables,
   isClosedPhase,
   isOpenPhase,
-  normalizeRoundPhase,
 } from "../../constants/roundPhases";
+import PhaseBadge from "../../components/PhaseBadge/PhaseBadge";
 import ActionButton from "./ActionButton";
 import PhaseStepper from "./PhaseStepper";
 import DemonstratedInterestSection from "./DemonstratedInterestSection";
@@ -38,7 +37,7 @@ const CYCLE_STATUS_STYLE = {
 };
 
 function StatusBadge({ status, styles }) {
-  const style = styles[status] || styles.draft || styles.setup;
+  const style = styles[status] || styles.draft;
   return (
     <span style={{
       background: style.bg,
@@ -602,7 +601,7 @@ function RoundCard({ round, cycle, busy, interviewPool, phaseIssue, onChangePhas
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>{round.name}</span>
-            <StatusBadge status={normalizeRoundPhase(round.status)} styles={ROUND_PHASE_STYLE} />
+            <PhaseBadge phase={round.status} />
           </div>
           <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
             Type: {formatRoundTypeLabel(round.type)}

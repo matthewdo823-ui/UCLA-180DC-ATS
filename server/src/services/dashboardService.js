@@ -643,6 +643,9 @@ async function getGraderDashboard(userId) {
     context: {
       cycle: activeCycle ? { id: activeCycle.id, name: activeCycle.name } : null,
       activeRound: mapScoreboardRoundContext(activeRound),
+      // Null during a setup window, when no round is open but one is being
+      // configured. The dashboard falls back to this so it still shows a stage.
+      currentRound: mapScoreboardRoundContext(currentRound),
       isInterviewRound,
       isResumeRound: isResumeScreenType(activeRound?.type),
       phaseLabel: buildPhaseLabel(activeCycle, activeRound, currentRound),
@@ -741,6 +744,9 @@ async function getAdminDashboard(_userId) {
         hasFormConfig: Boolean(activeCycle.google_form_id && activeCycle.form_field_map),
       } : null,
       activeRound: mapScoreboardRoundContext(activeRound),
+      // Null during a setup window, when no round is open but one is being
+      // configured. The dashboard falls back to this so it still shows a stage.
+      currentRound: mapScoreboardRoundContext(currentRound),
       deliberationRound: mapScoreboardRoundContext(deliberationRound),
       resumeRound: mapScoreboardRoundContext(resumeRound),
       nextRound: mapScoreboardRoundContext(nextRound),

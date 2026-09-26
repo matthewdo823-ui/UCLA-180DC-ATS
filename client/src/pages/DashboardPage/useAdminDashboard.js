@@ -262,12 +262,14 @@ export default function useAdminDashboard(enabled = true) {
       actionItems,
       context: {
         ...adminData.context,
-        phaseLabel: scoreboardData?.context?.cycle && scoreboardData?.context?.activeRound
-          ? `${scoreboardData.context.cycle.name} · ${scoreboardData.context.activeRound.name}`
-          : scoreboardData?.context?.cycle
-            ? `${scoreboardData.context.cycle.name} · Between rounds`
-            : adminData.context?.phaseLabel || "Admin Dashboard",
+        // The server already builds a phase-aware label and knows about rounds
+        // sitting in setup, so prefer it over rebuilding one here.
+        phaseLabel: adminData.context?.phaseLabel
+          || (scoreboardData?.context?.cycle && scoreboardData?.context?.activeRound
+            ? `${scoreboardData.context.cycle.name} · ${scoreboardData.context.activeRound.name}`
+            : "Admin Dashboard"),
         activeRound: scoreboardData?.context?.activeRound || adminData.context?.activeRound || null,
+        currentRound: adminData.context?.currentRound || scoreboardData?.context?.activeRound || null,
         nextRound: scoreboardData?.context?.nextRound || adminData.context?.nextRound || null,
         allRounds: scoreboardData?.context?.allRounds || adminData.context?.allRounds || [],
         cycle: scoreboardData?.context?.cycle || adminData.context?.cycle || null,

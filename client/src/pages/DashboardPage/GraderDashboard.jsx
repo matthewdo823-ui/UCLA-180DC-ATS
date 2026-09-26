@@ -4,6 +4,11 @@ import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { css } from "../../theme/colors";
 import { formatDate } from "../../utils/format";
 import { formatReviewCount } from "../../utils/reviewCounts";
+import {
+  canRecordGrades,
+  isDeliberationPhase,
+  isSetupPhase,
+} from "../../constants/roundPhases";
 import useGraderDashboard from "./useGraderDashboard";
 import {
   pageStyle,
@@ -35,8 +40,12 @@ export default function GraderDashboard() {
   const context = data?.context;
   const personal = data?.personal;
   const activeRound = context?.activeRound;
+  const currentRound = context?.currentRound || activeRound;
   const isInterview = context?.isInterviewRound;
   const phaseLabel = context?.phaseLabel || "Loading…";
+  // Grading is only open in the grading phase. Without this the page offers a
+  // Start Grading button that every submission behind it would be refused.
+  const gradingOpen = canRecordGrades(activeRound?.status);
 
   const count = personal?.count ?? 0;
   const goal = personal?.expectedReviews ?? 0;
@@ -45,13 +54,26 @@ export default function GraderDashboard() {
   const lastActivity = relativeLastActivity(personal?.lastActivityAt);
   const coffeeChatMode = personal?.ratingMode === "coffee_chat";
 
-  const goalLabel = isInterview
-    ? goal > 0
-      ? `Evaluate ${goal} candidate${goal === 1 ? "" : "s"} in ${activeRound?.name || "this round"}`
-      : "No candidates in your interview queue"
-    : `Complete ${formatReviewCount(goal, "resume")}`;
+  const stageName = currentRound?.name || "this round";
+  const goalLabel = !gradingOpen
+    ? `Scoring is closed for ${stageName}`
+    : isInterview
+      ? goal > 0
+        ? `Evaluate ${goal} candidate${goal === 1 ? "" : "s"} in ${activeRound?.name || "this round"}`
+        : "No candidates in your interview queue"
+      : `Complete ${formatReviewCount(goal, "resume")}`;
 
-  const statusMessage = goalComplete
+  const closedReason = gradingOpen
+    ? null
+    : isDeliberationPhase(currentRound?.status)
+      ? `The committee is deliberating.${count > 0 ? ` You completed ${formatReviewCount(count, "resume")}.` : ""}`
+      : isSetupPhase(currentRound?.status)
+        ? `${stageName} is still being set up. Grading opens soon.`
+        : "Grading is not open right now.";
+
+  const statusMessage = closedReason
+    ? closedReason
+    : goalComplete
     ? "Goal complete — thank you!"
     : goal > count
       ? `${goal - count} more to go`
@@ -108,7 +130,7 @@ export default function GraderDashboard() {
                 {isInterview ? "Your interview progress" : "Your resume-review goal"}
               </span>
               <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>
-                {loading ? "Loading…" : activeRound ? goalLabel : "No active round"}
+                {loading ? "Loading…" : currentRound ? goalLabel : "No round in progress"}
               </div>
               {!loading && statusMessage ? (
                 <div style={{ fontSize: 13, color: goalComplete ? css.green : css.textGray, marginTop: 6, fontWeight: 600 }}>
@@ -130,18 +152,20 @@ export default function GraderDashboard() {
           </div>
 
           <ProgressBar pct={loading ? 0 : progressPct} />
-          <div style={{ marginTop: 24 }}>
-            <PrimaryButton
-              label={buttonLabel}
-              disabled={loading}
-              onClick={() => navigate("/grading")}
-              icon={(
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                </svg>
-              )}
-            />
-          </div>
+          {gradingOpen ? (
+            <div style={{ marginTop: 24 }}>
+              <PrimaryButton
+                label={buttonLabel}
+                disabled={loading}
+                onClick={() => navigate("/grading")}
+                icon={(
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                )}
+              />
+            </div>
+          ) : null}
         </div>
 
         {isInterview && personal?.ratingMode === "coffee_chat" && personal?.breakdown && !loading ? (

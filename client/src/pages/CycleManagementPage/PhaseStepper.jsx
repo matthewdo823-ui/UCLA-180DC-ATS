@@ -4,10 +4,10 @@ import {
   PHASE_ORDER,
   PHASE_LABELS,
   PHASE_DESCRIPTIONS,
-  ROUND_PHASE_STYLE,
   normalizeRoundPhase,
   phaseIndex,
 } from "../../constants/roundPhases";
+import PhaseBadge from "../../components/PhaseBadge/PhaseBadge";
 import ActionButton from "./ActionButton";
 
 const FORWARD_LABELS = {
@@ -15,31 +15,6 @@ const FORWARD_LABELS = {
   deliberation: "Start deliberation →",
   closed: "Close round →",
 };
-
-function Step({ phase, state }) {
-  const tone = ROUND_PHASE_STYLE[phase];
-  const isCurrent = state === "current";
-  return (
-    <span
-      aria-current={isCurrent ? "step" : undefined}
-      style={{
-        background: isCurrent ? tone.bg : "transparent",
-        color: isCurrent ? tone.color : state === "done" ? css.textDark : css.textGray,
-        border: `1px solid ${isCurrent ? tone.bd : css.borderLight}`,
-        borderRadius: 999,
-        fontSize: 10,
-        fontWeight: 700,
-        padding: "4px 10px",
-        letterSpacing: "0.05em",
-        textTransform: "uppercase",
-        whiteSpace: "nowrap",
-        opacity: state === "upcoming" ? 0.6 : 1,
-      }}
-    >
-      {PHASE_LABELS[phase]}
-    </span>
-  );
-}
 
 /**
  * The round lifecycle as four steps. Forward moves are one step at a time so
@@ -65,8 +40,9 @@ export default function PhaseStepper({ round, busy, issue, onChangePhase }) {
             {index > 0 ? (
               <span aria-hidden="true" style={{ color: css.borderLight, fontSize: 11 }}>—</span>
             ) : null}
-            <Step
+            <PhaseBadge
               phase={step}
+              size="stepper"
               state={index === current ? "current" : index < current ? "done" : "upcoming"}
             />
           </Fragment>
