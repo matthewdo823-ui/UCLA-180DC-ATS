@@ -1,6 +1,6 @@
 const supabase = require("../config/supabase");
 const { getActiveCycleId } = require("../utils/cycleContext");
-const { assertDeliberationCompleteForRound } = require("../services/roundDeliberationService");
+const { transitionRoundToPhase } = require("../services/roundTransitionService");
 const { DEFAULT_RUBRIC_CONFIG, validateRubricConfig } = require("../utils/rubric");
 const { syncFormResponsesToDatabase } = require("../services/formsSyncService");
 const {
@@ -18,11 +18,16 @@ const { DEFAULT_MULTIPLIER_STEPS, validateMultiplierSteps } = require("../utils/
 const {
   ROUND_TYPES,
   DEFAULT_CYCLE_ROUNDS,
-  isKnownRoundType,
 } = require("../utils/rounds");
+const {
+  ROUND_PHASES,
+  getRoundPhase,
+  isOpenPhase,
+  formatRoundPhase,
+  getUnclosedPhasesForQuery,
+} = require("../utils/roundPhases");
 
 const CYCLE_STATUSES = new Set(["draft", "active", "archived"]);
-const ROUND_STATUSES = new Set(["draft", "active", "closed"]);
 
 function slugify(name) {
   const base = String(name || "")
@@ -40,12 +45,15 @@ function mapRound(row) {
     cycleId: row.cycle_id,
     name: row.name,
     type: row.type,
-    status: row.status,
+    status: getRoundPhase(row),
+    phaseLabel: formatRoundPhase(getRoundPhase(row)),
     sortOrder: row.sort_order,
     rubricConfig: row.rubric_config || null,
     autoAdvancePercent: Number(row.auto_advance_percent) || 0,
     autoRejectPercent: Number(row.auto_reject_percent) || 0,
     interviewGroupCount: Number(row.interview_group_count) || 1,
+    statusChangedAt: row.status_changed_at || null,
+    statusChangedBy: row.status_changed_by ?? null,
     createdAt: row.created_at,
   };
 }
@@ -177,7 +185,7 @@ async function buildActiveCyclePayload() {
   if (roundsError) throw roundsError;
 
   const mappedRounds = (rounds || []).map(mapRound);
-  const activeRound = mappedRounds.find((r) => r.status === "active") || null;
+  const activeRound = mappedRounds.find((r) => isOpenPhase(r.status)) || null;
 
   return {
     cycle: mapCycle(cycle, { isActive: true }),
@@ -288,7 +296,7 @@ exports.createCycle = async (req, res) => {
           cycle_id: cycle.id,
           name: round.name,
           type: round.type,
-          status: "draft",
+          status: ROUND_PHASES.SETUP,
           sort_order: round.sortOrder,
           ...(round.type === ROUND_TYPES.RESUME_SCREEN
             ? { rubric_config: DEFAULT_RUBRIC_CONFIG }
@@ -398,7 +406,7 @@ exports.patchCycle = async (req, res) => {
         .from("rounds")
         .update({ status: "closed" })
         .eq("cycle_id", cycleId)
-        .in("status", ["active", "draft"]);
+        .in("status", getUnclosedPhasesForQuery());
 
       if (closeRoundsError) return respondWithServerError(res, closeRoundsError, "patchCycle close rounds");
     }
@@ -461,8 +469,10 @@ exports.patchRound = async (req, res) => {
   if (typeof req.body?.name === "string" && req.body.name.trim()) {
     updates.name = req.body.name.trim();
   }
-  if (typeof req.body?.status === "string" && ROUND_STATUSES.has(req.body.status)) {
-    updates.status = req.body.status;
+  if (req.body?.status !== undefined) {
+    return res.status(400).json({
+      error: "Change a round's phase with POST /rounds/:roundId/phase so the entry guards run.",
+    });
   }
   if (req.body?.rubricConfig !== undefined) {
     const validationError = validateRubricConfig(req.body.rubricConfig);
@@ -521,6 +531,44 @@ exports.patchRound = async (req, res) => {
   }
 };
 
+/** Emit a guard failure the UI can render without parsing prose. */
+function respondWithTransitionError(res, result) {
+  return res.status(result.status).json({
+    error: result.error,
+    blockers: result.blockers || [],
+    warnings: result.warnings || [],
+    requiresConfirmation: Boolean(result.requiresConfirmation),
+  });
+}
+
+/** setup -> grading -> deliberation -> closed, plus confirmed rollbacks. */
+exports.patchRoundPhase = async (req, res) => {
+  const roundId = String(req.params.roundId || "").trim();
+  if (!roundId) {
+    return res.status(400).json({ error: "roundId is required" });
+  }
+
+  const targetPhase = String(req.body?.phase || "").trim();
+  if (!targetPhase) {
+    return res.status(400).json({ error: "phase is required" });
+  }
+
+  try {
+    const result = await transitionRoundToPhase({
+      roundId,
+      targetPhase,
+      confirmed: req.body?.confirm === true,
+      userId: req.user?.user_id ?? null,
+    });
+    if (result.error) return respondWithTransitionError(res, result);
+
+    return res.json({ round: mapRound(result.round), from: result.from, to: result.to });
+  } catch (err) {
+    return respondWithServerError(res, err, "patchRoundPhase");
+  }
+};
+
+/** Deprecated alias for the phase endpoint; kept until the client migrates. */
 exports.activateRound = async (req, res) => {
   const roundId = String(req.params.roundId || "").trim();
   if (!roundId) {
@@ -528,37 +576,15 @@ exports.activateRound = async (req, res) => {
   }
 
   try {
-    const { data: target, error: targetError } = await supabase
-      .from("rounds")
-      .select("*")
-      .eq("id", roundId)
-      .maybeSingle();
+    const result = await transitionRoundToPhase({
+      roundId,
+      targetPhase: ROUND_PHASES.GRADING,
+      confirmed: req.body?.confirm === true,
+      userId: req.user?.user_id ?? null,
+    });
+    if (result.error) return respondWithTransitionError(res, result);
 
-    if (targetError) return respondWithServerError(res, targetError, "activateRound target");
-    if (!target) return res.status(404).json({ error: "Round not found" });
-    if (!isKnownRoundType(target.type)) {
-      return res.status(400).json({ error: "Invalid round type" });
-    }
-
-    const { error: closeOthersError } = await supabase
-      .from("rounds")
-      .update({ status: "closed" })
-      .eq("cycle_id", target.cycle_id)
-      .eq("status", "active")
-      .neq("id", roundId);
-
-    if (closeOthersError) return respondWithServerError(res, closeOthersError, "activateRound close others");
-
-    const { data, error } = await supabase
-      .from("rounds")
-      .update({ status: "active" })
-      .eq("id", roundId)
-      .select("*")
-      .single();
-
-    if (error) return respondWithServerError(res, error, "activateRound update");
-
-    return res.json({ round: mapRound(data) });
+    return res.json({ round: mapRound(result.round) });
   } catch (err) {
     return respondWithServerError(res, err, "activateRound");
   }
@@ -665,6 +691,7 @@ exports.syncCycleForm = async (req, res) => {
   }
 };
 
+/** Deprecated alias for the phase endpoint. Unlike before, this runs the guards. */
 exports.closeRound = async (req, res) => {
   const roundId = String(req.params.roundId || "").trim();
   if (!roundId) {
@@ -672,23 +699,21 @@ exports.closeRound = async (req, res) => {
   }
 
   try {
-    const { data, error } = await supabase
-      .from("rounds")
-      .update({ status: "closed" })
-      .eq("id", roundId)
-      .select("*")
-      .maybeSingle();
+    const result = await transitionRoundToPhase({
+      roundId,
+      targetPhase: ROUND_PHASES.CLOSED,
+      confirmed: req.body?.confirm === true,
+      userId: req.user?.user_id ?? null,
+    });
+    if (result.error) return respondWithTransitionError(res, result);
 
-    if (error) return respondWithServerError(res, error, "closeRound");
-    if (!data) return res.status(404).json({ error: "Round not found" });
-
-    return res.json({ round: mapRound(data) });
+    return res.json({ round: mapRound(result.round) });
   } catch (err) {
     return respondWithServerError(res, err, "closeRound");
   }
 };
 
-/** Close the active round and activate the next round in the same cycle (by sort_order). */
+/** Close the current round; the next round waits in setup for its own configuration. */
 exports.advanceToNextRound = async (req, res) => {
   const roundId = String(req.params.roundId || "").trim();
   if (!roundId) {
@@ -696,75 +721,34 @@ exports.advanceToNextRound = async (req, res) => {
   }
 
   try {
-    const { data: current, error: currentError } = await supabase
+    const result = await transitionRoundToPhase({
+      roundId,
+      targetPhase: ROUND_PHASES.CLOSED,
+      confirmed: req.body?.confirm === true,
+      userId: req.user?.user_id ?? null,
+    });
+    if (result.error) return respondWithTransitionError(res, result);
+
+    const { data: nextRounds, error: nextError } = await supabase
       .from("rounds")
       .select("*")
-      .eq("id", roundId)
-      .maybeSingle();
-
-    if (currentError) return respondWithServerError(res, currentError, "advanceToNextRound current");
-    if (!current) return res.status(404).json({ error: "Round not found" });
-    if (current.status !== "active") {
-      return res.status(400).json({ error: "Only the active round can be advanced" });
-    }
-
-    const deliberationError = await assertDeliberationCompleteForRound(current.cycle_id, roundId);
-    if (deliberationError) {
-      return res.status(deliberationError.status).json({
-        error: deliberationError.error,
-        incompleteCount: deliberationError.incompleteCount,
-        pendingCount: deliberationError.pendingCount,
-        holdCount: deliberationError.holdCount,
-      });
-    }
-
-    const { error: closeError } = await supabase
-      .from("rounds")
-      .update({ status: "closed" })
-      .eq("id", roundId);
-
-    if (closeError) return respondWithServerError(res, closeError, "advanceToNextRound close");
-
-    const { data: nextCandidates, error: nextError } = await supabase
-      .from("rounds")
-      .select("*")
-      .eq("cycle_id", current.cycle_id)
-      .gt("sort_order", current.sort_order)
+      .eq("cycle_id", result.round.cycle_id)
+      .gt("sort_order", result.round.sort_order)
       .order("sort_order", { ascending: true })
       .limit(1);
 
     if (nextError) return respondWithServerError(res, nextError, "advanceToNextRound next");
 
-    const nextRound = nextCandidates?.[0] || null;
-    if (!nextRound) {
-      return res.json({
-        closedRound: mapRound({ ...current, status: "closed" }),
-        activatedRound: null,
-        message: "Round closed. There is no next round in this cycle.",
-      });
-    }
-
-    const { error: closeOthersError } = await supabase
-      .from("rounds")
-      .update({ status: "closed" })
-      .eq("cycle_id", current.cycle_id)
-      .eq("status", "active")
-      .neq("id", nextRound.id);
-
-    if (closeOthersError) return respondWithServerError(res, closeOthersError, "advanceToNextRound close others");
-
-    const { data: activated, error: activateError } = await supabase
-      .from("rounds")
-      .update({ status: "active" })
-      .eq("id", nextRound.id)
-      .select("*")
-      .single();
-
-    if (activateError) return respondWithServerError(res, activateError, "advanceToNextRound activate");
-
+    const nextRound = nextRounds?.[0] || null;
     return res.json({
-      closedRound: mapRound({ ...current, status: "closed" }),
-      activatedRound: mapRound(activated),
+      closedRound: mapRound(result.round),
+      // The next round is not opened here: it stays in setup so its rubric,
+      // cutoffs, and tables get configured before grading can start.
+      nextRound: mapRound(nextRound),
+      activatedRound: null,
+      message: nextRound
+        ? `Round closed. ${nextRound.name} is in setup — configure it, then open grading.`
+        : "Round closed. There is no next round in this cycle.",
     });
   } catch (err) {
     return respondWithServerError(res, err, "advanceToNextRound");

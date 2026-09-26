@@ -20,7 +20,15 @@ import { formatDate } from "../../utils/format";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { ROUND_TYPES, formatRoundTypeLabel, isResumeScreenType, normalizeRoundType } from "../../constants/rounds";
 import { formatReviewCountPair } from "../../utils/reviewCounts";
+import {
+  ROUND_PHASE_STYLE,
+  canManageTables,
+  isClosedPhase,
+  isOpenPhase,
+  normalizeRoundPhase,
+} from "../../constants/roundPhases";
 import ActionButton from "./ActionButton";
+import PhaseStepper from "./PhaseStepper";
 import DemonstratedInterestSection from "./DemonstratedInterestSection";
 
 const CYCLE_STATUS_STYLE = {
@@ -29,14 +37,8 @@ const CYCLE_STATUS_STYLE = {
   archived: { bg: "rgba(107,114,128,0.12)", color: "#6B7280", bd: "rgba(107,114,128,0.28)" },
 };
 
-const ROUND_STATUS_STYLE = {
-  active: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
-  draft: { bg: "rgba(239,159,39,0.12)", color: "#C47D12", bd: "rgba(239,159,39,0.28)" },
-  closed: { bg: "rgba(107,114,128,0.12)", color: "#6B7280", bd: "rgba(107,114,128,0.28)" },
-};
-
 function StatusBadge({ status, styles }) {
-  const style = styles[status] || styles.draft;
+  const style = styles[status] || styles.draft || styles.setup;
   return (
     <span style={{
       background: style.bg,
@@ -524,8 +526,8 @@ function RubricEditor({ draft, onChange, error }) {
   );
 }
 
-function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onSaveRubric, onSaveAutoDecisions, onAssignInterviewGroups }) {
-  const [expanded, setExpanded] = useState(round.status !== "closed");
+function RoundCard({ round, cycle, busy, interviewPool, phaseIssue, onChangePhase, onSaveRubric, onSaveAutoDecisions, onAssignInterviewGroups }) {
+  const [expanded, setExpanded] = useState(!isClosedPhase(round.status));
   const [editingRubric, setEditingRubric] = useState(false);
   const [rubricDraft, setRubricDraft] = useState(() => cloneRubricConfig(round.rubricConfig));
   const [rubricError, setRubricError] = useState("");
@@ -552,13 +554,13 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
   }, [round.interviewGroupCount]);
 
   useEffect(() => {
-    setExpanded(round.status !== "closed");
-    if (round.status === "closed") setEditingRubric(false);
+    setExpanded(!isClosedPhase(round.status));
+    if (isClosedPhase(round.status)) setEditingRubric(false);
   }, [round.status]);
 
   const isResumeRound = isResumeScreenType(round.type);
   const isCoffeeChatRound = normalizeRoundType(round.type) === ROUND_TYPES.COFFEE_CHAT;
-  const isClosed = round.status === "closed";
+  const isClosed = isClosedPhase(round.status);
   const sortedRounds = [...(cycle.rounds || [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const roundIndex = sortedRounds.findIndex((candidateRound) => candidateRound.id === round.id);
   const priorRound = roundIndex > 0 ? sortedRounds[roundIndex - 1] : null;
@@ -581,22 +583,13 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
       : largerTableCount === 0
         ? `${smallerTableSize} candidate${smallerTableSize === 1 ? "" : "s"} per table.`
         : `${largerTableCount} table${largerTableCount === 1 ? "" : "s"} of ${smallerTableSize + 1} · ${smallerTableCount} table${smallerTableCount === 1 ? "" : "s"} of ${smallerTableSize}.`;
-  const roundActions = (
-    <>
-      {round.status !== "active" ? (
-        <ActionButton label="Activate round" onClick={() => onActivate(round.id)} disabled={busy || cycle.status !== "active"} variant="primary" />
-      ) : (
-        <ActionButton label="Close round" onClick={() => onClose(round.id)} disabled={busy} variant="danger" />
-      )}
-      {isResumeRound ? (
-        <ActionButton
-          label={editingRubric ? "Cancel edit" : "Edit rubric"}
-          onClick={() => setEditingRubric((v) => !v)}
-          disabled={busy}
-        />
-      ) : null}
-    </>
-  );
+  const roundActions = isResumeRound ? (
+    <ActionButton
+      label={editingRubric ? "Cancel edit" : "Edit rubric"}
+      onClick={() => setEditingRubric((v) => !v)}
+      disabled={busy}
+    />
+  ) : null;
 
   return (
     <div style={{
@@ -609,7 +602,7 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>{round.name}</span>
-            <StatusBadge status={round.status} styles={ROUND_STATUS_STYLE} />
+            <StatusBadge status={normalizeRoundPhase(round.status)} styles={ROUND_PHASE_STYLE} />
           </div>
           <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
             Type: {formatRoundTypeLabel(round.type)}
@@ -626,7 +619,18 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
         </div>
       </div>
 
-      {expanded && isClosed ? (
+      {expanded ? (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${css.borderLight}` }}>
+          <PhaseStepper
+            round={round}
+            busy={busy}
+            issue={phaseIssue}
+            onChangePhase={(phase) => onChangePhase(round, phase)}
+          />
+        </div>
+      ) : null}
+
+      {expanded && isClosed && roundActions ? (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 14, paddingTop: 14, borderTop: `1px solid ${css.borderLight}` }}>
           {roundActions}
         </div>
@@ -654,7 +658,7 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
                 step="1"
                 value={interviewGroupCount}
                 onChange={(event) => setInterviewGroupCount(event.target.value)}
-                disabled={busy || round.status !== "active"}
+                disabled={busy || !canManageTables(round.status)}
                 style={{ width: 110, padding: "7px 8px", border: `1px solid ${css.borderLight}`, borderRadius: 6 }}
               />
             </label>
@@ -663,10 +667,10 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
                 ? `Randomize ${interviewCandidateCount} candidates into ${validGroupCount ? numericGroupCount : "—"} tables`
                 : `Split ${interviewCandidateCount} candidates into ${validGroupCount ? numericGroupCount : "—"} tables`}
               variant="primary"
-              disabled={busy || round.status !== "active" || !interviewCandidateCount || !validGroupCount}
+              disabled={busy || !canManageTables(round.status) || !interviewCandidateCount || !validGroupCount}
               onClick={() => onAssignInterviewGroups(round.id, numericGroupCount, round.interviewGroupCount > 1)}
             />
-            {round.status !== "active" ? <span style={{ fontSize: 12, color: css.textGray }}>Activate Coffee Chats before creating tables.</span> : null}
+            {!canManageTables(round.status) ? <span style={{ fontSize: 12, color: css.textGray }}>Tables can only be built while Coffee Chats are in setup or grading.</span> : null}
           </div>
           <p style={{ margin: "9px 0 0", fontSize: 12, fontWeight: 600, color: validGroupCount ? css.greenDark : css.textGray }}>
             {tableDistribution}
@@ -745,7 +749,7 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
   );
 }
 
-function CycleCard({ cycle, busy, authedFetch, interviewPool, onReload, onActivate, onArchive, onActivateRound, onCloseRound, onSaveRubric, onSaveAutoDecisions, onAssignInterviewGroups }) {
+function CycleCard({ cycle, busy, authedFetch, interviewPool, phaseIssues, onReload, onActivate, onArchive, onChangeRoundPhase, onSaveRubric, onSaveAutoDecisions, onAssignInterviewGroups }) {
   const [expanded, setExpanded] = useState(cycle.isActive);
 
   return (
@@ -803,8 +807,8 @@ function CycleCard({ cycle, busy, authedFetch, interviewPool, onReload, onActiva
               cycle={cycle}
               busy={busy}
               interviewPool={interviewPool}
-              onActivate={onActivateRound}
-              onClose={onCloseRound}
+              phaseIssue={phaseIssues?.[round.id] || null}
+              onChangePhase={onChangeRoundPhase}
               onSaveRubric={onSaveRubric}
               onSaveAutoDecisions={onSaveAutoDecisions}
               onAssignInterviewGroups={onAssignInterviewGroups}
@@ -887,6 +891,9 @@ export default function CycleManagementPage() {
   const [busy, setBusy] = useState(false);
   // Action errors live here; the query owns load errors — merged into `error` below.
   const [actionError, setActionError] = useState(null);
+  // Guard failures are per-round and render inside that round's card, so they
+  // stay next to the thing the admin has to fix.
+  const [phaseIssues, setPhaseIssues] = useState({});
   const [newCycleName, setNewCycleName] = useState("");
   const [cycleView, setCycleView] = useState(() => viewParams.get("view") === "past" ? "past" : "current");
 
@@ -926,7 +933,7 @@ export default function CycleManagementPage() {
     () => cycles.filter((cycle) => cycle.status === "archived"),
     [cycles]
   );
-  const activeRound = activeCycle?.rounds?.find((round) => round.status === "active") || null;
+  const activeRound = activeCycle?.rounds?.find((round) => isOpenPhase(round.status)) || null;
   const activeCoffeeChatRound = normalizeRoundType(activeRound?.type) === ROUND_TYPES.COFFEE_CHAT
     ? activeRound
     : null;
@@ -944,6 +951,52 @@ export default function CycleManagementPage() {
     candidateCount: interviewPoolQuery.data?.candidates?.length
       ?? (Number(activeCycle?.rounds?.find((round) => round.sortOrder < activeCoffeeChatRound.sortOrder)?.decisionCounts?.advance) || 0),
   } : null;
+
+  const changeRoundPhase = useCallback(async (round, phase) => {
+    setBusy(true);
+    setActionError(null);
+
+    const postPhase = (confirm) => authedFetch(`${API}/rounds/${round.id}/phase`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phase, confirm }),
+    });
+
+    try {
+      let res = await postPhase(false);
+      let payload = res.ok ? null : await res.json().catch(() => null);
+
+      // Warnings are overridable, hard blockers are not. Ask once, then retry
+      // with the admin's consent attached.
+      if (!res.ok && payload?.requiresConfirmation && !(payload.blockers || []).length) {
+        const prompt = payload.warnings?.[0]?.message || payload.error;
+        if (!window.confirm(`${prompt}\n\nContinue anyway?`)) {
+          setPhaseIssues((prev) => ({ ...prev, [round.id]: null }));
+          return;
+        }
+        res = await postPhase(true);
+        payload = res.ok ? null : await res.json().catch(() => null);
+      }
+
+      if (!res.ok) {
+        // The body is already consumed, so build the fallback message here
+        // rather than handing the response to formatResponseError.
+        if (!payload?.error) {
+          throw new Error(`Could not change the round phase (HTTP ${res.status}).`);
+        }
+        setPhaseIssues((prev) => ({ ...prev, [round.id]: payload }));
+        return;
+      }
+
+      setPhaseIssues((prev) => ({ ...prev, [round.id]: null }));
+      await reloadCycles();
+      await queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() });
+    } catch (e) {
+      setActionError(e);
+    } finally {
+      setBusy(false);
+    }
+  }, [authedFetch, reloadCycles, queryClient]);
 
   async function runAction(action) {
     setBusy(true);
@@ -1017,8 +1070,8 @@ export default function CycleManagementPage() {
             color: css.textDark,
           }}>
             <strong>Active cycle:</strong> {activeCycle.name}
-            {activeCycle.rounds?.find((r) => r.status === "active") ? (
-              <> · <strong>Active round:</strong> {activeCycle.rounds.find((r) => r.status === "active").name}</>
+            {activeCycle.rounds?.find((r) => isOpenPhase(r.status)) ? (
+              <> · <strong>Open round:</strong> {activeCycle.rounds.find((r) => isOpenPhase(r.status)).name}</>
             ) : (
               <> · <span style={{ color: css.textGray }}>No active round</span></>
             )}
@@ -1128,18 +1181,8 @@ export default function CycleManagementPage() {
                     throw await formatResponseError(res, "archiving cycle");
                   }
                 })}
-                onActivateRound={(roundId) => runAction(async () => {
-                  const res = await authedFetch(`${API}/rounds/${roundId}/activate`, { method: "POST" });
-                  if (!res.ok) {
-                    throw await formatResponseError(res, "activating round");
-                  }
-                })}
-                onCloseRound={(roundId) => runAction(async () => {
-                  const res = await authedFetch(`${API}/rounds/${roundId}/close`, { method: "POST" });
-                  if (!res.ok) {
-                    throw await formatResponseError(res, "closing round");
-                  }
-                })}
+                phaseIssues={phaseIssues}
+                onChangeRoundPhase={changeRoundPhase}
                 onSaveRubric={(roundId, rubricConfig) => runAction(async () => {
                   const res = await authedFetch(`${API}/rounds/${roundId}`, {
                     method: "PATCH",

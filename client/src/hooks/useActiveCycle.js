@@ -3,6 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuthedFetch } from "../auth/AuthContext";
 import { API } from "../constants/config";
 import { isInterviewRoundType, isResumeScreenType } from "../constants/rounds";
+import {
+  canRecordDecisions,
+  canRecordGrades,
+  formatRoundPhase,
+  isClosedPhase,
+} from "../constants/roundPhases";
 import { readJsonOrThrow, STALE } from "../lib/queryClient";
 import { qk } from "../lib/queryKeys";
 import { getRubricForYear } from "../utils/rubric";
@@ -37,11 +43,15 @@ export function useActiveCycle() {
     return getRubricForYear(rubricConfig, yearRaw);
   }, [activeRound]);
 
-  const phaseLabel = cycle && activeRound
-    ? `${cycle.name} · ${activeRound.name}`
-    : cycle
-      ? `${cycle.name} · No active round`
-      : "No active cycle";
+  // A round in setup is not open, so activeRound is null during a setup window.
+  // currentRound keeps the label and the page copy meaningful there.
+  const currentRound = activeRound || rounds.find((round) => !isClosedPhase(round.status)) || null;
+
+  const phaseLabel = !cycle
+    ? "No active cycle"
+    : currentRound
+      ? `${cycle.name} · ${currentRound.name} · ${formatRoundPhase(currentRound.status)}`
+      : `${cycle.name} · No round in progress`;
 
   const isInterviewRound = isInterviewRoundType(activeRound?.type);
   const isResumeRound = isResumeScreenType(activeRound?.type);
@@ -50,6 +60,9 @@ export function useActiveCycle() {
     cycle,
     rounds,
     activeRound,
+    currentRound,
+    canGrade: canRecordGrades(activeRound?.status),
+    canDeliberate: canRecordDecisions(activeRound?.status),
     loading,
     error: error ? error.message || "Could not load active cycle" : "",
     reload: refetch,

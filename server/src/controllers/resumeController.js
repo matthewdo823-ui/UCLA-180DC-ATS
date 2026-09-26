@@ -7,8 +7,9 @@ const {
     getActiveCycleRow,
     getResumeScreenRoundForCycle,
     getRoundsForCycle,
-    getActiveRoundForCycle,
-    requireActiveResumeScreening,
+    getOpenRoundForCycle,
+    requireOpenResumeRound,
+    requireResumeGradingPhase,
 } = require('../utils/cycleContext');
 const {
     getRubricForYear,
@@ -22,6 +23,11 @@ const {
     getReviewScoring,
     resolveCandidateResumeMax,
 } = require('../utils/rubric');
+const {
+    getRoundPhase,
+    isOpenPhase,
+    canRecordDecisions,
+} = require('../utils/roundPhases');
 const { firstRel } = require('../utils/supabaseHelpers');
 const { getUserName } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
@@ -372,7 +378,7 @@ async function fetchAssignedResumesForGrader({ gradedBy, cycleId, reviewedResume
 exports.getNextResume = async (req, res) => {
     const gradedBy = req.user?.user_id;
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireOpenResumeRound();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -516,7 +522,7 @@ async function assertResumeAccessibleForScreening(resumeRow, { gradedBy, cycleId
 
 exports.getResumeById = async (req, res) => {
     const gradedBy = req.user?.user_id;
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireOpenResumeRound();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -559,7 +565,7 @@ exports.getReviewResume = async (req, res) => {
         return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireOpenResumeRound();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -616,7 +622,7 @@ exports.saveReview = async (req, res) => {
         return res.status(400).json({ error: "resume_id is required" });
     }
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireResumeGradingPhase();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -806,7 +812,7 @@ exports.patchMyReview = async (req, res) => {
         return res.status(404).json({ error: "Review not found" });
     }
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireResumeGradingPhase();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -979,7 +985,7 @@ exports.getNextFrq = async (req, res) => {
     }
 
     const gradedBy = req.user?.user_id;
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireOpenResumeRound();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -1089,7 +1095,7 @@ exports.getFrqReviewCandidate = async (req, res) => {
         return res.status(400).json({ error: "reviewId is required" });
     }
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireOpenResumeRound();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -1133,7 +1139,7 @@ exports.saveFrqReview = async (req, res) => {
         return res.status(400).json({ error: `score must be a number between 0 and ${FRQ_MAX_SCORE}` });
     }
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireResumeGradingPhase();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -1856,7 +1862,7 @@ exports.getScoreboard = async (req, res) => {
 
         const decisionsFinalized = deliberationRound.status === "closed" || viewingHistorical;
         const decisionOptions = { provisional: !decisionsFinalized };
-        const canDeliberate = !viewingHistorical && deliberationRound.status === "active";
+        const canDeliberate = !viewingHistorical && canRecordDecisions(getRoundPhase(deliberationRound));
 
         // These reads all share the same resolved cycle/round context but do not
         // depend on one another. Fetch them together so the scoreboard does not
@@ -2318,10 +2324,10 @@ exports.upsertRoundDecision = async (req, res) => {
             return res.status(503).json({ error: "No resume screening round for this cycle" });
         }
 
-        const activeRound = await getActiveRoundForCycle(activeCycle.id);
+        const activeRound = await getOpenRoundForCycle(activeCycle.id);
         if (!activeRound) {
             return res.status(503).json({
-                error: "No active round — activate a round in Cycle Management before saving deliberation decisions.",
+                error: "No round is open — open a round in Cycle Management before saving deliberation decisions.",
             });
         }
 
@@ -2382,7 +2388,7 @@ exports.upsertRoundDecision = async (req, res) => {
         if (error) return respondWithServerError(res, error, "upsertRoundDecision upsert");
 
         return res.json({
-            decision: mapRoundDecision(data, { provisional: activeRound.status === "active" }),
+            decision: mapRoundDecision(data, { provisional: isOpenPhase(getRoundPhase(activeRound)) }),
         });
     } catch (err) {
         return respondWithServerError(res, err, "upsertRoundDecision");
@@ -2414,7 +2420,7 @@ exports.bulkUpsertRoundDecisions = async (req, res) => {
 
         const cycleRounds = await getRoundsForCycle(activeCycle.id);
         const resumeRound = cycleRounds.find((round) => isResumeScreenType(round.type)) || null;
-        const activeRound = cycleRounds.find((round) => round.status === "active") || null;
+        const activeRound = cycleRounds.find((round) => isOpenPhase(getRoundPhase(round))) || null;
         if (!resumeRound || !activeRound) {
             return res.status(503).json({ error: "An active round and resume screening round are required" });
         }

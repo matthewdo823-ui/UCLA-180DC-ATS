@@ -32,10 +32,11 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 | 26 | `add_coffee_chat_scoring_and_groups.sql` | Coffee Chat random groups and per-evaluator Strong Yes / Yes / No / Strong No scoring |
 | 27 | `add_interview_group_member_assignments.sql` | Assign each member a persistent starting Coffee Chat table |
 | 28 | `add_demonstrated_interest.sql` | Demonstrated Interest events, attendance, per-cycle multiplier steps, and `candidates.university_id` |
+| 29 | `add_round_phases.sql` | Per-round phases (`setup` / `grading` / `deliberation` / `closed`), one-open-round-per-cycle index, phase-change audit columns |
 
 ## Notes
 
-- **Fresh database:** run 1–4, then 6–13, 15–22, and 26–28 in order. Skip 5, 14, and 23–25 unless noted below. Fresh installs of the current `add_frq_reviews.sql` already allow 0–4 FRQ scores, so #24 is only needed on existing databases.
+- **Fresh database:** run 1–4, then 6–13, 15–22, and 26–29 in order. Skip 5, 14, and 23–25 unless noted below. Fresh installs of the current `add_frq_reviews.sql` already allow 0–4 FRQ scores, so #24 is only needed on existing databases.
 - **Existing database:** skip scripts you have already applied. Each file uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` where possible, but re-running `init.sql` or seed blocks in `add_cycles_and_rounds.sql` may fail or duplicate data.
 - **`add_coffee_chat_scoring_and_groups.sql` (#26):** preserves legacy interview rows, changes new Coffee Chat evaluations to one row per evaluator, and adds persistent candidate-to-table assignments.
 - **`add_interview_group_member_assignments.sql` (#27):** run after #26 to let admins place members at starting tables. Candidate table movement continues to use the assignment table created by #26.
@@ -45,6 +46,14 @@ Run these scripts **once** in the Supabase SQL Editor (or `psql` against your Po
 - **`add_round_auto_decision_percentages.sql` (#22):** Fresh schemas already have the percentage columns from #2, but this script also adds the combined `advance + reject <= 100` constraint, so run it once.
 - **`backfill_resume_candidate_ids.sql` (#23):** Run only when you have `resumes` rows with `candidate_id IS NULL` that should be linked to existing candidates.
 - **`allow_frq_score_zero.sql` (#24):** Run on existing databases that already applied `add_frq_reviews.sql`. It updates both the table constraint and `save_frq_review()` RPC so a score of 0 is accepted.
+- **`add_round_phases.sql` (#29):** Rewrites `rounds.status` from
+  `draft`/`active`/`closed` to `setup`/`grading`/`deliberation`/`closed`.
+  **Apply it in the same step as the server release that understands the new
+  values** — the old CHECK rejects `setup` and `deliberation`, and the new one
+  rejects `draft` and `active`, so the database and API cannot straddle the
+  change. The script aborts with a named list if any cycle currently has more
+  than one open round; close all but one in each, then re-run.
+
 - **`add_candidate_referral_resolution.sql` (#25):** Run on existing databases that already applied `add_candidate_referrals.sql` before referral resolution was added.
 
 ## Current project migration checklist
