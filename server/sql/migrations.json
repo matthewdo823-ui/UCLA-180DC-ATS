@@ -146,13 +146,33 @@
     },
     {
       "order": 28,
-      "file": "add_document_sync_queue.sql",
+      "file": "add_demonstrated_interest.sql",
       "mode": "auto"
     },
     {
       "order": 29,
+      "file": "add_document_sync_queue.sql",
+      "mode": "auto"
+    },
+    {
+      "order": 30,
       "file": "add_resume_document_sync.sql",
       "mode": "auto"
+    },
+    {
+      "order": 31,
+      "file": "add_round_phases.sql",
+      "mode": "manual"
+    },
+    {
+      "order": 32,
+      "file": "add_cycle_application_question_mapping.sql",
+      "mode": "auto"
+    },
+    {
+      "order": 33,
+      "file": "repair_fall_26_application_mapping.sql",
+      "mode": "manual"
     }
   ]
 }

@@ -145,7 +145,7 @@ Candidate headshots are copied out of Google Drive into a private Supabase Stora
 bucket by a background worker, so the avatar grid is served from Supabase's CDN
 instead of proxying a Drive stream per image on every view.
 
-Run `add_document_sync_queue.sql` (migration #28) first — it creates the `documents`
+Run `add_document_sync_queue.sql` (migration #29) first — it creates the `documents`
 queue table, the `claim_pending_documents` RPC, and the `candidate-documents` bucket.
 
 ```bash

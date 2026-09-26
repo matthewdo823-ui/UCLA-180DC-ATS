@@ -12,7 +12,8 @@
  * Usage:
  *   node scripts/apply-migrations.js --plan       # show pending, change nothing
  *   node scripts/apply-migrations.js              # apply pending 'auto' migrations
- *   node scripts/apply-migrations.js --baseline   # record as applied WITHOUT running
+ *   node scripts/apply-migrations.js --baseline [--through file.sql]
+ *                                                # record existing migrations WITHOUT running
  *
  * Requires SUPABASE_DB_URL (or DATABASE_URL) — a direct Postgres connection
  * string. The Supabase service key will not work: it speaks PostgREST, which
@@ -34,9 +35,21 @@ const APP_TABLES = ['candidates', 'resumes', 'users'];
 // Session-scoped, so it releases when the connection closes even on a crash.
 const LOCK_KEY = 8_150_423;
 
-const args = new Set(process.argv.slice(2));
+const rawArgs = process.argv.slice(2);
+const args = new Set(rawArgs);
 const PLAN_ONLY = args.has('--plan');
 const BASELINE = args.has('--baseline');
+const throughIndex = rawArgs.indexOf('--through');
+const BASELINE_THROUGH = throughIndex >= 0 ? rawArgs[throughIndex + 1] : null;
+
+function validateArgs() {
+  if (throughIndex >= 0 && !BASELINE) {
+    throw new Error('--through may only be used with --baseline');
+  }
+  if (throughIndex >= 0 && (!BASELINE_THROUGH || BASELINE_THROUGH.startsWith('--'))) {
+    throw new Error('--through requires a migration filename');
+  }
+}
 
 function checksum(contents) {
   return crypto.createHash('sha256').update(contents).digest('hex');
@@ -121,6 +134,7 @@ async function record(client, migration) {
 }
 
 async function main() {
+  validateArgs();
   const connectionString = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error('SUPABASE_DB_URL (or DATABASE_URL) is required');
@@ -141,9 +155,16 @@ async function main() {
     assertUnchanged(migrations, applied);
 
     if (BASELINE) {
-      const toRecord = migrations.filter((m) => !applied.has(m.file));
+      let baselineMigrations = migrations;
+      if (BASELINE_THROUGH) {
+        const lastIndex = migrations.findIndex((migration) => migration.file === BASELINE_THROUGH);
+        if (lastIndex === -1) throw new Error(`--through names an unknown migration: ${BASELINE_THROUGH}`);
+        baselineMigrations = migrations.slice(0, lastIndex + 1);
+      }
+      const toRecord = baselineMigrations.filter((m) => !applied.has(m.file));
       for (const migration of toRecord) await record(client, migration);
-      console.log(`Baselined ${toRecord.length} migration(s) as already applied. Nothing was executed.`);
+      const suffix = BASELINE_THROUGH ? ` through ${BASELINE_THROUGH}` : '';
+      console.log(`Baselined ${toRecord.length} migration(s)${suffix} as already applied. Nothing was executed.`);
       return;
     }
 

@@ -1,4 +1,4 @@
--- Resume intake and copy jobs commit together. Apply after migration #28.
+-- Resume intake and copy jobs commit together. Apply after migration #29.
 -- No existing files are queued by this migration; use documents:backfill.
 ALTER TABLE public.documents
   ADD COLUMN IF NOT EXISTS source_version UUID NOT NULL DEFAULT gen_random_uuid(),

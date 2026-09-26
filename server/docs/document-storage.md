@@ -7,7 +7,7 @@ thumbnails. Postgres stores references and job state, not file bytes.
 
 ## Intake and reads
 
-Migration #29 adds a trigger to `resumes`: saving/changing a linked Drive source
+Migration #30 adds a trigger to `resumes`: saving/changing a linked Drive source
 and enqueueing its copy are one transaction. This covers batched Forms upserts,
 per-row fallback, and other resume imports. Repeating the same source preserves a
 ready copy. A changed Drive file ID gets a new `source_version` and storage path.
@@ -36,8 +36,8 @@ use the same reader.
 
 ## Deployment
 
-1. Apply migration #29 after #28 using the ordered migration runner. Existing
-   baseline entries must not be edited. Migration #29 queues no historical files.
+1. Apply migration #30 after #29 using the ordered migration runner. Existing
+   baseline entries must not be edited. Migration #30 queues no historical files.
 2. Deploy the API and updated background worker (`npm run worker` from `server/`).
    They need the usual Supabase service key and Google Drive credentials. The new
    worker uses `claim_candidate_documents`; the old RPC now claims only headshots,

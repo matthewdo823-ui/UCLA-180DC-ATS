@@ -40,7 +40,7 @@ The table below documents the order and intent; it is kept in sync with
 | 18 | `add_candidate_summaries.sql` | Cached AI candidate summaries for the full application view |
 | 19 | `add_password_reset_tokens.sql` | One-time password-reset tokens + atomic reset RPC |
 | 20 | `add_resume_assignments.sql` | Admin-directed resume assignments for grader queues |
-| 21 | `add_resume_storage.sql` | **Superseded by #28** — its `resumes.storage_path` / `storage_synced_at` columns are unused; still run it for `idx_resumes_candidate_id` |
+| 21 | `add_resume_storage.sql` | **Superseded by #29** — its `resumes.storage_path` / `storage_synced_at` columns are unused; still run it for `idx_resumes_candidate_id` |
 | 22 | `add_round_auto_decision_percentages.sql` | Auto-advance/reject percentages + combined percentage constraint |
 | 23 | `backfill_resume_candidate_ids.sql` | **Optional data repair** — link orphan `resumes` to `candidates` by name / Drive file id |
 | 24 | `allow_frq_score_zero.sql` | **Existing databases only** — allows FRQ grades of 0 in the table constraint and save RPC |
@@ -50,8 +50,9 @@ The table below documents the order and intent; it is kept in sync with
 | 28 | `add_demonstrated_interest.sql` | Demonstrated Interest events, attendance, per-cycle multiplier steps, and `candidates.university_id` |
 | 29 | `add_document_sync_queue.sql` | Candidate document sync queue — Drive → Supabase Storage, plus the private bucket |
 | 30 | `add_resume_document_sync.sql` | Atomic resume enqueueing, versioned claims, private queue access, and backfill RPC |
-| 31 | `add_round_phases.sql` | Per-round phases (`setup` / `grading` / `deliberation` / `closed`), one-open-round-per-cycle index, phase-change audit columns |
-| 32 | `add_cycle_application_question_mapping.sql` | Cycle-specific question catalogs, gradable response snapshots, structured application fields, and the Fall '26 mapping repair |
+| 31 | `add_round_phases.sql` | **Manual coordinated release** — per-round phases (`setup` / `grading` / `deliberation` / `closed`) |
+| 32 | `add_cycle_application_question_mapping.sql` | Additive cycle question catalogs, response snapshots, names, and structured application fields |
+| 33 | `repair_fall_26_application_mapping.sql` | **Manual post-deploy repair** — correct Fall '26 mappings before its one-time re-sync |
 
 ## First-time setup on a new database
 
@@ -65,28 +66,28 @@ For an existing database that already has the schema (i.e. production), record t
 current state once so the runner knows what has already happened:
 
 ```bash
-cd server && npm run migrate:baseline
+cd server
+npm run migrate:baseline -- --through add_demonstrated_interest.sql
 ```
 
-That writes every manifest entry into `schema_migrations` **without executing
-anything**. Until it is run, the runner refuses to touch a database that has
-application tables but no migration history.
-
-| 29 | `add_resume_document_sync.sql` | Atomic resume enqueueing, versioned claims, private queue access, and backfill RPC |
+That records migrations #1–#28 in `schema_migrations` **without executing
+anything**. Do not baseline newer entries unless they are already present in the
+database. Until the existing state is recorded, the runner refuses to touch a
+database that has application tables but no migration history.
 
 ## Notes
 
-- **Fresh database:** run 1–4, then 6–13, 15–22, and 26–30 in order. Skip 5, 14, and 23–25 unless noted below. Fresh installs of the current `add_frq_reviews.sql` already allow 0–4 FRQ scores, so #24 is only needed on existing databases.
-- **Existing database:** skip scripts you have already applied. Each file uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` where possible, but re-running `init.sql` or seed blocks in `add_cycles_and_rounds.sql` may fail or duplicate data. Run #32 before deploying the cycle-specific application response UI, then re-sync the Fall '26 form once.
+- **Fresh database:** the runner applies auto migrations in manifest order. It skips manual entries #5, #14, #23–25, #31, and #33 until an operator explicitly coordinates them.
+- **Existing database:** baseline only the migrations already present in that database. Production currently needs to be baselined through #28 with `npm run migrate:baseline -- --through add_demonstrated_interest.sql` before the runner applies additive migrations #29, #30, and #32.
 - **`add_coffee_chat_scoring_and_groups.sql` (#26):** preserves legacy interview rows, changes new Coffee Chat evaluations to one row per evaluator, and adds persistent candidate-to-table assignments.
 - **`add_interview_group_member_assignments.sql` (#27):** run after #26 to let admins place members at starting tables. Candidate table movement continues to use the assignment table created by #26.
-- **`init.sql`** begins with a large commented block (legacy candidate/resume DDL); the active statements start at the `user_role` enum.
+- **`init.sql`** now creates the candidate/resume core schema for a fresh database; existing production tables are protected by the baseline requirement.
 - **`fix_candidates_form_sync_upsert.sql` (#5):** Run only if you applied an older `add_cycle_form_config.sql` that created a **partial** unique index (`WHERE google_form_response_id IS NOT NULL`). Fresh installs get the full index from #4 and can skip this. The server also handles form sync without relying on PostgREST upsert.
 - **`alter_resume_review_overrides_scores.sql` (#14):** Run only if `resume_review_overrides` was created with a single `override_score` column and no `override_scores`. **Do not run** if you applied the current `add_resume_review_overrides.sql`, which creates both columns.
 - **`add_round_auto_decision_percentages.sql` (#22):** Fresh schemas already have the percentage columns from #2, but this script also adds the combined `advance + reject <= 100` constraint, so run it once.
 - **`backfill_resume_candidate_ids.sql` (#23):** Run only when you have `resumes` rows with `candidate_id IS NULL` that should be linked to existing candidates.
 - **`allow_frq_score_zero.sql` (#24):** Run on existing databases that already applied `add_frq_reviews.sql`. It updates both the table constraint and `save_frq_review()` RPC so a score of 0 is accepted.
-- **`add_round_phases.sql` (#29):** Rewrites `rounds.status` from
+- **`add_round_phases.sql` (#31):** Rewrites `rounds.status` from
   `draft`/`active`/`closed` to `setup`/`grading`/`deliberation`/`closed`.
   **Apply it in the same step as the server release that understands the new
   values** — the old CHECK rejects `setup` and `deliberation`, and the new one
@@ -120,4 +121,4 @@ application tables but no migration history.
 
 ## Resume Storage rollout
 
-Migration #29 follows #28. See [document storage](../docs/document-storage.md) for worker deployment and the explicit historical backfill.
+Migrations #29 and #30 create the private document queue and resume-sync pipeline. See [document storage](../docs/document-storage.md) for worker deployment and the explicit historical backfill.
