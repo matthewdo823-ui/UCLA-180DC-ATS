@@ -173,6 +173,11 @@
       "order": 33,
       "file": "repair_fall_26_application_mapping.sql",
       "mode": "manual"
+    },
+    {
+      "order": 34,
+      "file": "add_board_role.sql",
+      "mode": "auto"
     }
   ]
 }

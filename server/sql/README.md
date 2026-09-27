@@ -53,6 +53,7 @@ The table below documents the order and intent; it is kept in sync with
 | 31 | `add_round_phases.sql` | **Manual coordinated release** — per-round phases (`setup` / `grading` / `deliberation` / `closed`) |
 | 32 | `add_cycle_application_question_mapping.sql` | Additive cycle question catalogs, response snapshots, names, and structured application fields |
 | 33 | `repair_fall_26_application_mapping.sql` | **Manual post-deploy repair** — correct Fall '26 mappings before its one-time re-sync |
+| 34 | `add_board_role.sql` | Add the `board` database role (member access plus FRQ grading in the application) |
 
 ## First-time setup on a new database
 
