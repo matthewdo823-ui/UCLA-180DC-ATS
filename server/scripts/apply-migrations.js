@@ -23,7 +23,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const dns = require('node:dns');
 const { Client } = require('pg');
+
+// GitHub-hosted runners do not consistently have an IPv6 route. Supabase's
+// database hostname can resolve to both families, so prefer IPv4 instead of
+// intermittently failing before the migration preflight can connect.
+dns.setDefaultResultOrder('ipv4first');
 
 const SQL_DIR = path.join(__dirname, '..', 'sql');
 const MANIFEST = path.join(SQL_DIR, 'migrations.json');
