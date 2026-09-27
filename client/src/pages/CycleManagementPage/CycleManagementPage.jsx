@@ -20,19 +20,19 @@ import { formatDate } from "../../utils/format";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { ROUND_TYPES, formatRoundTypeLabel, isResumeScreenType, normalizeRoundType } from "../../constants/rounds";
 import { formatReviewCountPair } from "../../utils/reviewCounts";
-import ActionButton from "./ActionButton";
-import DemonstratedInterestSection from "./DemonstratedInterestSection";
+import {
+  canManageTables,
+  isClosedPhase,
+  isOpenPhase,
+} from "../../constants/roundPhases";
+import PhaseBadge from "../../components/PhaseBadge/PhaseBadge";
+import ActionButton from "../../components/ActionButton/ActionButton";
+import PhaseStepper from "./PhaseStepper";
 
 const CYCLE_STATUS_STYLE = {
   active: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
   draft: { bg: "rgba(239,159,39,0.12)", color: "#C47D12", bd: "rgba(239,159,39,0.28)" },
   archived: { bg: "rgba(107,114,128,0.12)", color: "#6B7280", bd: "rgba(107,114,128,0.28)" },
-};
-
-const ROUND_STATUS_STYLE = {
-  active: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
-  draft: { bg: "rgba(239,159,39,0.12)", color: "#C47D12", bd: "rgba(239,159,39,0.28)" },
-  closed: { bg: "rgba(107,114,128,0.12)", color: "#6B7280", bd: "rgba(107,114,128,0.28)" },
 };
 
 function StatusBadge({ status, styles }) {
@@ -58,6 +58,8 @@ function StatusBadge({ status, styles }) {
 const COLUMN_OPTIONS = [
   { value: "", label: "— Skip —" },
   { value: "name", label: "Name" },
+  { value: "first_name", label: "First name" },
+  { value: "last_name", label: "Last name" },
   { value: "email", label: "Email" },
   { value: "phone_number", label: "Phone" },
   { value: "major", label: "Major" },
@@ -68,20 +70,25 @@ const COLUMN_OPTIONS = [
   { value: "linkedin", label: "LinkedIn" },
   { value: "gm", label: "GM interest" },
   { value: "newbie_training", label: "Newbie training" },
-  { value: "why_consulting", label: "Why consulting" },
-  { value: "why_180dc", label: "Why 180DC" },
-  { value: "why_social_impact", label: "Why social impact" },
+  { value: "why_consulting", label: "Legacy: Why consulting", disabled: true },
+  { value: "why_180dc", label: "Legacy: Why 180DC", disabled: true },
+  { value: "why_social_impact", label: "Legacy: Why social impact", disabled: true },
   { value: "resume_file_url", label: "Resume upload" },
   { value: "extenuating_circumstances", label: "Extenuating circumstances" },
   { value: "headshot", label: "Headshot" },
   { value: "university_id", label: "University ID" },
+  { value: "referral_source", label: "Referral source" },
+  { value: "previously_applied", label: "Previously applied" },
+  { value: "professional_development", label: "Professional development" },
+  { value: "consulting_connect_interest", label: "Consulting Connect interest" },
 ];
 
 function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
   const [expanded, setExpanded] = useState(!cycle.hasFormConfig);
   const [formUrl, setFormUrl] = useState(cycle.googleFormId ? `https://docs.google.com/forms/d/${cycle.googleFormId}/edit` : "");
-  const [questions, setQuestions] = useState([]);
+  const [questions, setQuestions] = useState(cycle.formQuestionCatalog || []);
   const [fieldMap, setFieldMap] = useState(cycle.formFieldMap || {});
+  const [gradableQuestionIds, setGradableQuestionIds] = useState(cycle.formGradableQuestionIds || []);
   const [resumeQuestionId, setResumeQuestionId] = useState(cycle.formResumeQuestionId || "");
   const [headshotQuestionId, setHeadshotQuestionId] = useState(cycle.formHeadshotQuestionId || "");
   const [formTitle, setFormTitle] = useState("");
@@ -94,11 +101,13 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
   useEffect(() => {
     setFormUrl(cycle.googleFormId ? `https://docs.google.com/forms/d/${cycle.googleFormId}/edit` : "");
     setFieldMap(cycle.formFieldMap || {});
+    setQuestions(cycle.formQuestionCatalog || []);
+    setGradableQuestionIds(cycle.formGradableQuestionIds || []);
     setResumeQuestionId(cycle.formResumeQuestionId || "");
     setHeadshotQuestionId(cycle.formHeadshotQuestionId || "");
     setPanelError("");
     setPanelMessage("");
-  }, [cycle.id, cycle.googleFormId, cycle.formFieldMap, cycle.formResumeQuestionId, cycle.formHeadshotQuestionId]);
+  }, [cycle.id, cycle.googleFormId, cycle.formFieldMap, cycle.formQuestionCatalog, cycle.formGradableQuestionIds, cycle.formResumeQuestionId, cycle.formHeadshotQuestionId]);
 
   async function handleDiscover() {
     setDiscovering(true);
@@ -113,10 +122,11 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
       if (!res.ok) throw await formatResponseError(res, "discovering form fields");
       const body = await res.json().catch(() => ({}));
 
-      setQuestions(body.questions || []);
-      setFieldMap(body.suggestedFieldMap || {});
-      setResumeQuestionId(body.resumeQuestionId || "");
-      setHeadshotQuestionId(body.headshotQuestionId || "");
+      const discoveredQuestions = body.questions || [];
+      setQuestions(discoveredQuestions);
+      setFieldMap((current) => ({ ...(body.suggestedFieldMap || {}), ...current }));
+      setResumeQuestionId((current) => current || body.resumeQuestionId || "");
+      setHeadshotQuestionId((current) => current || body.headshotQuestionId || "");
       setFormTitle(body.formTitle || "");
       setPanelMessage(`Found ${body.questions?.length || 0} questions. Review mappings, then save.`);
     } catch (e) {
@@ -136,12 +146,24 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
         if (col) cleanedMap[qid] = col;
       });
 
+      const duplicateTargets = Object.values(cleanedMap).filter((target, index, targets) => targets.indexOf(target) !== index);
+      if (duplicateTargets.length) {
+        throw new Error(`Each candidate field can only be mapped once. Duplicate: ${[...new Set(duplicateTargets)].join(", ")}`);
+      }
+
+      const unresolved = questions.filter((question) => !cleanedMap[question.questionId] && !gradableQuestionIds.includes(question.questionId));
+      if (unresolved.length && !window.confirm(`${unresolved.length} question${unresolved.length === 1 ? " is" : "s are"} neither mapped nor marked for grading. Save anyway?`)) {
+        return;
+      }
+
       const res = await authedFetch(`${API}/cycles/${cycle.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           formUrl: formUrl.trim(),
           fieldMap: cleanedMap,
+          questionCatalog: questions,
+          gradableQuestionIds,
           resumeQuestionId: resumeQuestionId || null,
           headshotQuestionId: headshotQuestionId || null,
         }),
@@ -179,6 +201,8 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
     : Object.keys(fieldMap).map((questionId) => ({ questionId, title: questionId }));
 
   const panelBusy = busy || discovering || saving || syncing;
+  const duplicateTargets = Object.values(fieldMap).filter((target, index, targets) => target && targets.indexOf(target) !== index);
+  const unresolvedQuestions = questions.filter((question) => !fieldMap[question.questionId] && !gradableQuestionIds.includes(question.questionId));
   const fieldCount = Object.keys(cycle.formFieldMap || fieldMap).filter((k) => (cycle.formFieldMap || fieldMap)[k]).length;
 
   return (
@@ -269,7 +293,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         <ActionButton label={discovering ? "Discovering…" : "Discover fields"} onClick={handleDiscover} disabled={panelBusy || !formUrl.trim()} variant="primary" />
-        <ActionButton label={saving ? "Saving…" : "Save config"} onClick={handleSave} disabled={panelBusy || !formUrl.trim()} />
+        <ActionButton label={saving ? "Saving…" : "Save config"} onClick={handleSave} disabled={panelBusy || !formUrl.trim() || duplicateTargets.length > 0} />
         <ActionButton label={syncing ? "Syncing…" : "Sync now"} onClick={handleSync} disabled={panelBusy || !cycle.hasFormConfig} variant="primary" />
         {cycle.hasFormConfig ? (
           <ActionButton label="Collapse" onClick={() => setExpanded(false)} disabled={panelBusy} />
@@ -289,6 +313,16 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
         <p style={{ margin: "0 0 10px", fontSize: 12, color: "#1D9E75" }}>{panelMessage}</p>
       ) : null}
 
+      {duplicateTargets.length ? (
+        <p style={{ margin: "0 0 10px", padding: "8px 10px", borderRadius: 7, background: "rgba(226,75,74,0.08)", fontSize: 12, color: css.red }}>
+          Duplicate destinations must be fixed before saving: {[...new Set(duplicateTargets)].join(", ")}.
+        </p>
+      ) : unresolvedQuestions.length ? (
+        <p style={{ margin: "0 0 10px", padding: "8px 10px", borderRadius: 7, background: "rgba(239,159,39,0.10)", fontSize: 12, color: "#9A6110" }}>
+          {unresolvedQuestions.length} question{unresolvedQuestions.length === 1 ? " is" : "s are"} neither mapped to a profile field nor marked as a gradable response.
+        </p>
+      ) : null}
+
       {mappedQuestions.length ? (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -296,6 +330,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
               <tr style={{ textAlign: "left", color: css.textGray }}>
                 <th style={{ padding: "6px 8px", borderBottom: `1px solid ${css.borderLight}` }}>Question</th>
                 <th style={{ padding: "6px 8px", borderBottom: `1px solid ${css.borderLight}` }}>Maps to</th>
+                <th style={{ padding: "6px 8px", borderBottom: `1px solid ${css.borderLight}`, textAlign: "center" }}>Grade response</th>
               </tr>
             </thead>
             <tbody>
@@ -322,9 +357,21 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
                       style={{ width: "100%", padding: "6px 8px", borderRadius: 6, border: `1px solid ${css.borderLight}` }}
                     >
                       {COLUMN_OPTIONS.map((opt) => (
-                        <option key={opt.value || "skip"} value={opt.value}>{opt.label}</option>
+                        <option key={opt.value || "skip"} value={opt.value} disabled={opt.disabled}>{opt.label}</option>
                       ))}
                     </select>
+                  </td>
+                  <td style={{ padding: "8px", borderBottom: `1px solid ${css.borderLight}`, textAlign: "center", verticalAlign: "top" }}>
+                    <input
+                      type="checkbox"
+                      checked={gradableQuestionIds.includes(q.questionId)}
+                      onChange={(event) => {
+                        setGradableQuestionIds((current) => event.target.checked
+                          ? [...new Set([...current, q.questionId])]
+                          : current.filter((questionId) => questionId !== q.questionId));
+                      }}
+                      aria-label={`Grade response for ${q.title}`}
+                    />
                   </td>
                 </tr>
               ))}
@@ -524,8 +571,8 @@ function RubricEditor({ draft, onChange, error }) {
   );
 }
 
-function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onSaveRubric, onSaveAutoDecisions, onAssignInterviewGroups }) {
-  const [expanded, setExpanded] = useState(round.status !== "closed");
+function RoundCard({ round, cycle, busy, interviewPool, phaseIssue, onChangePhase, onSaveRubric, onSaveAutoDecisions, onAssignInterviewGroups }) {
+  const [expanded, setExpanded] = useState(!isClosedPhase(round.status));
   const [editingRubric, setEditingRubric] = useState(false);
   const [rubricDraft, setRubricDraft] = useState(() => cloneRubricConfig(round.rubricConfig));
   const [rubricError, setRubricError] = useState("");
@@ -552,13 +599,13 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
   }, [round.interviewGroupCount]);
 
   useEffect(() => {
-    setExpanded(round.status !== "closed");
-    if (round.status === "closed") setEditingRubric(false);
+    setExpanded(!isClosedPhase(round.status));
+    if (isClosedPhase(round.status)) setEditingRubric(false);
   }, [round.status]);
 
   const isResumeRound = isResumeScreenType(round.type);
   const isCoffeeChatRound = normalizeRoundType(round.type) === ROUND_TYPES.COFFEE_CHAT;
-  const isClosed = round.status === "closed";
+  const isClosed = isClosedPhase(round.status);
   const sortedRounds = [...(cycle.rounds || [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const roundIndex = sortedRounds.findIndex((candidateRound) => candidateRound.id === round.id);
   const priorRound = roundIndex > 0 ? sortedRounds[roundIndex - 1] : null;
@@ -581,22 +628,13 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
       : largerTableCount === 0
         ? `${smallerTableSize} candidate${smallerTableSize === 1 ? "" : "s"} per table.`
         : `${largerTableCount} table${largerTableCount === 1 ? "" : "s"} of ${smallerTableSize + 1} · ${smallerTableCount} table${smallerTableCount === 1 ? "" : "s"} of ${smallerTableSize}.`;
-  const roundActions = (
-    <>
-      {round.status !== "active" ? (
-        <ActionButton label="Activate round" onClick={() => onActivate(round.id)} disabled={busy || cycle.status !== "active"} variant="primary" />
-      ) : (
-        <ActionButton label="Close round" onClick={() => onClose(round.id)} disabled={busy} variant="danger" />
-      )}
-      {isResumeRound ? (
-        <ActionButton
-          label={editingRubric ? "Cancel edit" : "Edit rubric"}
-          onClick={() => setEditingRubric((v) => !v)}
-          disabled={busy}
-        />
-      ) : null}
-    </>
-  );
+  const roundActions = isResumeRound ? (
+    <ActionButton
+      label={editingRubric ? "Cancel edit" : "Edit rubric"}
+      onClick={() => setEditingRubric((v) => !v)}
+      disabled={busy}
+    />
+  ) : null;
 
   return (
     <div style={{
@@ -609,7 +647,7 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>{round.name}</span>
-            <StatusBadge status={round.status} styles={ROUND_STATUS_STYLE} />
+            <PhaseBadge phase={round.status} />
           </div>
           <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
             Type: {formatRoundTypeLabel(round.type)}
@@ -626,7 +664,18 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
         </div>
       </div>
 
-      {expanded && isClosed ? (
+      {expanded ? (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${css.borderLight}` }}>
+          <PhaseStepper
+            round={round}
+            busy={busy}
+            issue={phaseIssue}
+            onChangePhase={(phase) => onChangePhase(round, phase)}
+          />
+        </div>
+      ) : null}
+
+      {expanded && isClosed && roundActions ? (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 14, paddingTop: 14, borderTop: `1px solid ${css.borderLight}` }}>
           {roundActions}
         </div>
@@ -654,7 +703,7 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
                 step="1"
                 value={interviewGroupCount}
                 onChange={(event) => setInterviewGroupCount(event.target.value)}
-                disabled={busy || round.status !== "active"}
+                disabled={busy || !canManageTables(round.status)}
                 style={{ width: 110, padding: "7px 8px", border: `1px solid ${css.borderLight}`, borderRadius: 6 }}
               />
             </label>
@@ -663,10 +712,10 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
                 ? `Randomize ${interviewCandidateCount} candidates into ${validGroupCount ? numericGroupCount : "—"} tables`
                 : `Split ${interviewCandidateCount} candidates into ${validGroupCount ? numericGroupCount : "—"} tables`}
               variant="primary"
-              disabled={busy || round.status !== "active" || !interviewCandidateCount || !validGroupCount}
+              disabled={busy || !canManageTables(round.status) || !interviewCandidateCount || !validGroupCount}
               onClick={() => onAssignInterviewGroups(round.id, numericGroupCount, round.interviewGroupCount > 1)}
             />
-            {round.status !== "active" ? <span style={{ fontSize: 12, color: css.textGray }}>Activate Coffee Chats before creating tables.</span> : null}
+            {!canManageTables(round.status) ? <span style={{ fontSize: 12, color: css.textGray }}>Tables can only be built while Coffee Chats are in setup or grading.</span> : null}
           </div>
           <p style={{ margin: "9px 0 0", fontSize: 12, fontWeight: 600, color: validGroupCount ? css.greenDark : css.textGray }}>
             {tableDistribution}
@@ -745,7 +794,7 @@ function RoundCard({ round, cycle, busy, interviewPool, onActivate, onClose, onS
   );
 }
 
-function CycleCard({ cycle, busy, authedFetch, interviewPool, onReload, onActivate, onArchive, onActivateRound, onCloseRound, onSaveRubric, onSaveAutoDecisions, onAssignInterviewGroups }) {
+function CycleCard({ cycle, busy, authedFetch, interviewPool, phaseIssues, onReload, onActivate, onArchive, onChangeRoundPhase, onSaveRubric, onSaveAutoDecisions, onAssignInterviewGroups }) {
   const [expanded, setExpanded] = useState(cycle.isActive);
 
   return (
@@ -795,7 +844,7 @@ function CycleCard({ cycle, busy, authedFetch, interviewPool, onReload, onActiva
       {expanded ? (
         <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 12, background: "#FCFDFC" }}>
           <FormConfigPanel cycle={cycle} busy={busy} authedFetch={authedFetch} onSaved={onReload} />
-          <DemonstratedInterestSection cycle={cycle} busy={busy} authedFetch={authedFetch} onCycleSaved={onReload} />
+
           {(cycle.rounds || []).map((round) => (
             <RoundCard
               key={round.id}
@@ -803,8 +852,8 @@ function CycleCard({ cycle, busy, authedFetch, interviewPool, onReload, onActiva
               cycle={cycle}
               busy={busy}
               interviewPool={interviewPool}
-              onActivate={onActivateRound}
-              onClose={onCloseRound}
+              phaseIssue={phaseIssues?.[round.id] || null}
+              onChangePhase={onChangeRoundPhase}
               onSaveRubric={onSaveRubric}
               onSaveAutoDecisions={onSaveAutoDecisions}
               onAssignInterviewGroups={onAssignInterviewGroups}
@@ -887,6 +936,9 @@ export default function CycleManagementPage() {
   const [busy, setBusy] = useState(false);
   // Action errors live here; the query owns load errors — merged into `error` below.
   const [actionError, setActionError] = useState(null);
+  // Guard failures are per-round and render inside that round's card, so they
+  // stay next to the thing the admin has to fix.
+  const [phaseIssues, setPhaseIssues] = useState({});
   const [newCycleName, setNewCycleName] = useState("");
   const [cycleView, setCycleView] = useState(() => viewParams.get("view") === "past" ? "past" : "current");
 
@@ -926,7 +978,7 @@ export default function CycleManagementPage() {
     () => cycles.filter((cycle) => cycle.status === "archived"),
     [cycles]
   );
-  const activeRound = activeCycle?.rounds?.find((round) => round.status === "active") || null;
+  const activeRound = activeCycle?.rounds?.find((round) => isOpenPhase(round.status)) || null;
   const activeCoffeeChatRound = normalizeRoundType(activeRound?.type) === ROUND_TYPES.COFFEE_CHAT
     ? activeRound
     : null;
@@ -944,6 +996,52 @@ export default function CycleManagementPage() {
     candidateCount: interviewPoolQuery.data?.candidates?.length
       ?? (Number(activeCycle?.rounds?.find((round) => round.sortOrder < activeCoffeeChatRound.sortOrder)?.decisionCounts?.advance) || 0),
   } : null;
+
+  const changeRoundPhase = useCallback(async (round, phase) => {
+    setBusy(true);
+    setActionError(null);
+
+    const postPhase = (confirm) => authedFetch(`${API}/rounds/${round.id}/phase`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phase, confirm }),
+    });
+
+    try {
+      let res = await postPhase(false);
+      let payload = res.ok ? null : await res.json().catch(() => null);
+
+      // Warnings are overridable, hard blockers are not. Ask once, then retry
+      // with the admin's consent attached.
+      if (!res.ok && payload?.requiresConfirmation && !(payload.blockers || []).length) {
+        const prompt = payload.warnings?.[0]?.message || payload.error;
+        if (!window.confirm(`${prompt}\n\nContinue anyway?`)) {
+          setPhaseIssues((prev) => ({ ...prev, [round.id]: null }));
+          return;
+        }
+        res = await postPhase(true);
+        payload = res.ok ? null : await res.json().catch(() => null);
+      }
+
+      if (!res.ok) {
+        // The body is already consumed, so build the fallback message here
+        // rather than handing the response to formatResponseError.
+        if (!payload?.error) {
+          throw new Error(`Could not change the round phase (HTTP ${res.status}).`);
+        }
+        setPhaseIssues((prev) => ({ ...prev, [round.id]: payload }));
+        return;
+      }
+
+      setPhaseIssues((prev) => ({ ...prev, [round.id]: null }));
+      await reloadCycles();
+      await queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() });
+    } catch (e) {
+      setActionError(e);
+    } finally {
+      setBusy(false);
+    }
+  }, [authedFetch, reloadCycles, queryClient]);
 
   async function runAction(action) {
     setBusy(true);
@@ -1017,8 +1115,8 @@ export default function CycleManagementPage() {
             color: css.textDark,
           }}>
             <strong>Active cycle:</strong> {activeCycle.name}
-            {activeCycle.rounds?.find((r) => r.status === "active") ? (
-              <> · <strong>Active round:</strong> {activeCycle.rounds.find((r) => r.status === "active").name}</>
+            {activeCycle.rounds?.find((r) => isOpenPhase(r.status)) ? (
+              <> · <strong>Open round:</strong> {activeCycle.rounds.find((r) => isOpenPhase(r.status)).name}</>
             ) : (
               <> · <span style={{ color: css.textGray }}>No active round</span></>
             )}
@@ -1128,18 +1226,8 @@ export default function CycleManagementPage() {
                     throw await formatResponseError(res, "archiving cycle");
                   }
                 })}
-                onActivateRound={(roundId) => runAction(async () => {
-                  const res = await authedFetch(`${API}/rounds/${roundId}/activate`, { method: "POST" });
-                  if (!res.ok) {
-                    throw await formatResponseError(res, "activating round");
-                  }
-                })}
-                onCloseRound={(roundId) => runAction(async () => {
-                  const res = await authedFetch(`${API}/rounds/${roundId}/close`, { method: "POST" });
-                  if (!res.ok) {
-                    throw await formatResponseError(res, "closing round");
-                  }
-                })}
+                phaseIssues={phaseIssues}
+                onChangeRoundPhase={changeRoundPhase}
                 onSaveRubric={(roundId, rubricConfig) => runAction(async () => {
                   const res = await authedFetch(`${API}/rounds/${roundId}`, {
                     method: "PATCH",

@@ -183,6 +183,7 @@ export default function AdminDashboard() {
             <RoundTimeline
               rounds={context?.allRounds}
               activeRound={context?.activeRound}
+              currentRound={context?.currentRound}
               onManage={() => navigate("/cycle-management")}
             />
 

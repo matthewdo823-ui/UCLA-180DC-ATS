@@ -33,21 +33,32 @@ const FRQ_FIELDS = [
   ["Why social impact?", "whySocialImpact"],
 ];
 
+function getApplicationResponses(candidate = {}) {
+  if (Array.isArray(candidate.applicationResponses) && candidate.applicationResponses.length) {
+    return candidate.applicationResponses
+      .filter((response) => response.gradable !== false)
+      .map((response) => ({
+        questionId: response.questionId,
+        title: String(response.title || "Application response"),
+        answer: String(response.answer || ""),
+      }));
+  }
+  return FRQ_FIELDS.map(([title, key]) => ({ questionId: key, title, answer: candidate[key] || "" }));
+}
+
 function formatFrqBlocks(candidate = {}) {
-  return FRQ_FIELDS
-    .filter(([, key]) => String(candidate[key] || "").trim())
-    .map(([label, key]) => `${label}:\n${trimText(candidate[key], 1200)}`)
+  return getApplicationResponses(candidate)
+    .filter(({ answer }) => String(answer || "").trim())
+    .map(({ title, answer }) => `${title}:\n${trimText(answer, 1200)}`)
     .join("\n\n");
 }
 
 function buildSummarySourceHash({ candidate }) {
   const payload = {
     model: getModel(),
-    promptVersion: "two-sentence-frq-v2",
+    promptVersion: "cycle-question-responses-v1",
     source: "frqs",
-    frqs: Object.fromEntries(
-      FRQ_FIELDS.map(([, key]) => [key, candidate?.[key] || ""])
-    ),
+    frqs: getApplicationResponses(candidate),
   };
 
   return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
@@ -70,7 +81,7 @@ function buildSummaryPrompt({ candidate, context }) {
 
 Write exactly two concise sentences based ONLY on the candidate's free-response application answers below. Use plain prose with no heading or bullet list.
 
-In the first sentence, summarize the candidate's motivation for consulting and 180 Degrees Consulting. In the second sentence, summarize their social-impact perspective and the most distinctive theme from their answers. If an answer does not provide one of these details, summarize the strongest available themes instead without mentioning that information is missing.
+Use the exact question labels to interpret each answer. In the first sentence, summarize the candidate's motivation and fit. In the second sentence, summarize the strongest additional theme from the remaining responses. If the supplied questions do not cover one of those topics, summarize the strongest available themes instead without mentioning that information is missing.
 
 Be factual, neutral, specific, and concise. Do not use reviewer notes, scores, profile details, or any information not present in these answers. Do not invent details.
 

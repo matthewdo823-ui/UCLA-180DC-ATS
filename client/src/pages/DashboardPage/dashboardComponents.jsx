@@ -1,5 +1,7 @@
 import { coffeeRatingColors, css } from "../../theme/colors";
 import { formatRoundKind } from "../../constants/rounds";
+import { ROUND_PHASES, normalizeRoundPhase } from "../../constants/roundPhases";
+import PhaseBadge from "../../components/PhaseBadge/PhaseBadge";
 import { formatReviewCountPair } from "../../utils/reviewCounts";
 
 export const pageStyle = {
@@ -316,20 +318,38 @@ function getRoundStageName(round) {
   return labels[round?.type] || round?.name || formatRoundKind(round?.type);
 }
 
-function getCurrentStageMessage(round) {
-  const messages = {
-    resume_screen: "Applications are being reviewed for the Coffee Chat pool.",
-    coffee_chat: "Coffee Chat conversations and evaluations are underway.",
-    interview: "Coffee Chat conversations and evaluations are underway.",
-    final_round: "Finalists are being evaluated for the incoming cohort.",
-  };
+// Only describes grading; the other phases are keyed off the phase itself below.
+const GRADING_MESSAGES = {
+  resume_screen: "Applications are being reviewed for the Coffee Chat pool.",
+  coffee_chat: "Coffee Chat conversations and evaluations are underway.",
+  interview: "Coffee Chat conversations and evaluations are underway.",
+  final_round: "Finalists are being evaluated for the incoming cohort.",
+};
 
-  return messages[round?.type] || "Choose an active stage in Cycle Management.";
+function getCurrentStageMessage(round) {
+  if (!round) return "Choose a stage to open in Cycle Management.";
+
+  const stage = getRoundStageName(round);
+  switch (normalizeRoundPhase(round.status)) {
+    case ROUND_PHASES.SETUP:
+      return `${stage} is being configured. Grading opens once setup is complete.`;
+    case ROUND_PHASES.GRADING:
+      return GRADING_MESSAGES[round.type] || "Grading is underway.";
+    case ROUND_PHASES.DELIBERATION:
+      return "Scores are frozen while the committee advances or rejects each candidate.";
+    case ROUND_PHASES.CLOSED:
+      return `${stage} is closed and its decisions are final.`;
+    default:
+      return "Choose a stage to open in Cycle Management.";
+  }
 }
 
-export function RoundTimeline({ rounds, activeRound, onManage }) {
+export function RoundTimeline({ rounds, activeRound, currentRound, onManage }) {
   const sorted = [...(rounds || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  const currentRoundName = activeRound ? getRoundStageName(activeRound) : "No active round";
+  // activeRound is null while a round sits in setup, so fall back to the round
+  // the cycle is on rather than reporting no stage at all.
+  const stageRound = activeRound || currentRound || null;
+  const currentRoundName = stageRound ? getRoundStageName(stageRound) : "No stage in progress";
 
   return (
     <div style={{
@@ -346,11 +366,14 @@ export function RoundTimeline({ rounds, activeRound, onManage }) {
           <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 800, color: css.greenDark, textTransform: "uppercase", letterSpacing: "0.1em" }}>
             Recruiting stages
           </div>
-          <h2 style={{ margin: 0, fontSize: 27, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em", color: css.textDark }}>
-            Current stage: <span style={{ color: css.greenDark }}>{currentRoundName}</span>
-          </h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <h2 style={{ margin: 0, fontSize: 27, lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.025em", color: css.textDark }}>
+              Current stage: <span style={{ color: css.greenDark }}>{currentRoundName}</span>
+            </h2>
+            {stageRound ? <PhaseBadge phase={stageRound.status} size="md" /> : null}
+          </div>
           <p style={{ margin: "8px 0 0", fontSize: 14, lineHeight: 1.45, color: css.textGray }}>
-            {getCurrentStageMessage(activeRound)}
+            {getCurrentStageMessage(stageRound)}
           </p>
         </div>
         <button
@@ -364,7 +387,7 @@ export function RoundTimeline({ rounds, activeRound, onManage }) {
       {sorted.length ? (
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${sorted.length}, minmax(0, 1fr))`, gap: 14, overflowX: "auto" }}>
         {sorted.map((round) => {
-          const isCurrent = activeRound?.id === round.id;
+          const isCurrent = stageRound?.id === round.id;
           const StageElement = isCurrent ? "button" : "div";
 
           return (
@@ -468,7 +491,7 @@ export function GraderProgressRows({ graders, expectedReviews, expectedFrqReview
         const frqPct = expectedFrqReviews > 0
           ? Math.min(100, Math.round((frqCount / expectedFrqReviews) * 100))
           : 0;
-        const showFrqProgress = grader.role === "admin" && expectedFrqReviews > 0;
+        const showFrqProgress = (grader.role === "admin" || grader.role === "board") && expectedFrqReviews > 0;
         const coffeeChatMode = mode === "coffee_chat";
         return (
           <div key={grader.id} style={{

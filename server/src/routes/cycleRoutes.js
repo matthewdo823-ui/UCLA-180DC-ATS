@@ -6,7 +6,7 @@ const { authenticateToken, requireRoles } = require("../middleware/authMiddlewar
 
 const adminAuth = [authenticateToken, requireRoles("admin")];
 
-router.get("/cycles/active", authenticateToken, requireRoles("admin", "member"), cycleController.getActiveCycle);
+router.get("/cycles/active", authenticateToken, requireRoles("admin", "member", "board"), cycleController.getActiveCycle);
 
 router.get("/cycles", ...adminAuth, cycleController.listCycles);
 router.post("/cycles", ...adminAuth, cycleController.createCycle);
@@ -15,6 +15,7 @@ router.post("/cycles/:cycleId/discover-form-fields", ...adminAuth, cycleControll
 router.post("/cycles/:cycleId/sync-form", ...adminAuth, cycleController.syncCycleForm);
 router.post("/cycles/:cycleId/activate", ...adminAuth, cycleController.activateCycle);
 router.patch("/rounds/:roundId", ...adminAuth, cycleController.patchRound);
+router.post("/rounds/:roundId/phase", ...adminAuth, cycleController.patchRoundPhase);
 router.post("/rounds/:roundId/activate", ...adminAuth, cycleController.activateRound);
 router.post("/rounds/:roundId/close", ...adminAuth, cycleController.closeRound);
 router.post("/rounds/:roundId/advance-to-next", ...adminAuth, cycleController.advanceToNextRound);

@@ -1,14 +1,18 @@
+const { mapApplicationCandidate } = require('../utils/applicationCandidate');
 const { applyScreeningEligibility, screeningAccessError, screeningExclusionReason, ELIGIBLE_YEAR_FILTER } = require('../utils/screeningEligibility');
+const { canGradeFrq } = require('../utils/auth');
 const supabase = require('../config/supabase');
 const { extractDriveFileID, toDownloadURL, isGoogleDriveFileUrl } = require('../utils/drive');
 const { streamDriveFileToResponse, sendDriveProxyError } = require('../utils/driveStream');
+const { getSignedUrl, SIGNED_URL_TTL_SECONDS } = require('../utils/documentStorage');
 const {
     getActiveCycleId,
     getActiveCycleRow,
     getResumeScreenRoundForCycle,
     getRoundsForCycle,
-    getActiveRoundForCycle,
-    requireActiveResumeScreening,
+    getOpenRoundForCycle,
+    requireOpenResumeRound,
+    requireResumeGradingPhase,
 } = require('../utils/cycleContext');
 const {
     getRubricForYear,
@@ -22,6 +26,11 @@ const {
     getReviewScoring,
     resolveCandidateResumeMax,
 } = require('../utils/rubric');
+const {
+    getRoundPhase,
+    isOpenPhase,
+    canRecordDecisions,
+} = require('../utils/roundPhases');
 const { firstRel } = require('../utils/supabaseHelpers');
 const { getUserName } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
@@ -372,7 +381,7 @@ async function fetchAssignedResumesForGrader({ gradedBy, cycleId, reviewedResume
 exports.getNextResume = async (req, res) => {
     const gradedBy = req.user?.user_id;
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireOpenResumeRound();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -516,7 +525,7 @@ async function assertResumeAccessibleForScreening(resumeRow, { gradedBy, cycleId
 
 exports.getResumeById = async (req, res) => {
     const gradedBy = req.user?.user_id;
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireOpenResumeRound();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -559,7 +568,7 @@ exports.getReviewResume = async (req, res) => {
         return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireOpenResumeRound();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -616,7 +625,7 @@ exports.saveReview = async (req, res) => {
         return res.status(400).json({ error: "resume_id is required" });
     }
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireResumeGradingPhase();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -806,7 +815,7 @@ exports.patchMyReview = async (req, res) => {
         return res.status(404).json({ error: "Review not found" });
     }
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireResumeGradingPhase();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -940,14 +949,14 @@ function formatFrqCandidateRow(row) {
             why_consulting: candidate.why_consulting,
             why_180dc: candidate.why_180dc,
             why_social_impact: candidate.why_social_impact,
+            applicationResponses: Array.isArray(candidate.application_responses) ? candidate.application_responses : [],
         } : null,
     };
 }
 
 async function fetchFrqReviewRowById(reviewId, gradedBy) {
-    return supabase
-        .from("frq_reviews")
-        .select(`
+    const selectRow = candidateFields => supabase
+        .from("frq_reviews").select(`
             id,
             resume_id,
             score,
@@ -957,29 +966,27 @@ async function fetchFrqReviewRowById(reviewId, gradedBy) {
                 id,
                 name,
                 candidates (
-                    year,
-                    major,
-                    gpa,
-                    name,
-                    why_consulting,
-                    why_180dc,
-                    why_social_impact
+                    ${candidateFields}
                 )
             )
         `)
         .eq("id", reviewId)
         .eq("graded_by", gradedBy)
         .maybeSingle();
+    const legacyFields = 'year, major, gpa, name, why_consulting, why_180dc, why_social_impact';
+    let result = await selectRow(`${legacyFields}, application_responses`);
+    if (result.error && isMissingSchemaError(result.error)) result = await selectRow(legacyFields);
+    return result;
 }
 
 /** Next candidate for admin FRQ grading (skips already-graded-by-me). */
 exports.getNextFrq = async (req, res) => {
-    if (req.user?.role !== "admin") {
+    if (!canGradeFrq(req.user?.role)) {
         return res.status(403).json({ error: "Admin access required" });
     }
 
     const gradedBy = req.user?.user_id;
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireOpenResumeRound();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -997,19 +1004,13 @@ exports.getNextFrq = async (req, res) => {
     }
     const reviewedResumeIdSet = new Set(reviewedResumeIds);
 
-    let query = supabase
-        .from("resumes")
-        .select(`
+    const selectCandidates = candidateFields => {
+        let query = supabase.from("resumes").select(`
             id,
             name,
             frq_review_count,
             candidates!inner (
-                year,
-                name,
-                major,
-                why_consulting,
-                why_180dc,
-                why_social_impact
+                ${candidateFields}
             )
         `)
         .eq("cycle_id", screening.cycle.id)
@@ -1017,11 +1018,17 @@ exports.getNextFrq = async (req, res) => {
         .order("frq_review_count", { ascending: true })
         .order("created_at", { ascending: true });
 
-    if (reviewedResumeIds.length) {
-        query = query.not("id", "in", `(${reviewedResumeIds.join(",")})`);
-    }
+        if (reviewedResumeIds.length) {
+            query = query.not("id", "in", `(${reviewedResumeIds.join(",")})`);
+        }
+        return query.limit(100);
+    };
 
-    const { data: resumeCandidates, error } = await query.limit(100);
+    const legacyFields = 'year, name, major, why_consulting, why_180dc, why_social_impact';
+    let { data: resumeCandidates, error } = await selectCandidates(`${legacyFields}, application_responses`);
+    if (error && isMissingSchemaError(error)) {
+        ({ data: resumeCandidates, error } = await selectCandidates(legacyFields));
+    }
     if (error) return respondWithServerError(res, error, "getNextFrq");
 
     for (const row of resumeCandidates || []) {
@@ -1034,7 +1041,7 @@ exports.getNextFrq = async (req, res) => {
 
 /** FRQ grades submitted by the authenticated admin. */
 exports.listMyFrqReviews = async (req, res) => {
-    if (req.user?.role !== "admin") {
+    if (!canGradeFrq(req.user?.role)) {
         return res.status(403).json({ error: "Admin access required" });
     }
 
@@ -1075,7 +1082,7 @@ exports.listMyFrqReviews = async (req, res) => {
 
 /** Load candidate FRQ content for one of the admin's past FRQ grades. */
 exports.getFrqReviewCandidate = async (req, res) => {
-    if (req.user?.role !== "admin") {
+    if (!canGradeFrq(req.user?.role)) {
         return res.status(403).json({ error: "Admin access required" });
     }
 
@@ -1089,7 +1096,7 @@ exports.getFrqReviewCandidate = async (req, res) => {
         return res.status(400).json({ error: "reviewId is required" });
     }
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireOpenResumeRound();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -1114,7 +1121,7 @@ exports.getFrqReviewCandidate = async (req, res) => {
 };
 
 exports.saveFrqReview = async (req, res) => {
-    if (req.user?.role !== "admin") {
+    if (!canGradeFrq(req.user?.role)) {
         return res.status(403).json({ error: "Admin access required" });
     }
 
@@ -1133,7 +1140,7 @@ exports.saveFrqReview = async (req, res) => {
         return res.status(400).json({ error: `score must be a number between 0 and ${FRQ_MAX_SCORE}` });
     }
 
-    const screening = await requireActiveResumeScreening();
+    const screening = await requireResumeGradingPhase();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
     }
@@ -1196,7 +1203,7 @@ exports.saveFrqReview = async (req, res) => {
 };
 
 exports.patchMyFrqReview = async (req, res) => {
-    if (req.user?.role !== "admin") {
+    if (!canGradeFrq(req.user?.role)) {
         return res.status(403).json({ error: "Admin access required" });
     }
 
@@ -1856,7 +1863,7 @@ exports.getScoreboard = async (req, res) => {
 
         const decisionsFinalized = deliberationRound.status === "closed" || viewingHistorical;
         const decisionOptions = { provisional: !decisionsFinalized };
-        const canDeliberate = !viewingHistorical && deliberationRound.status === "active";
+        const canDeliberate = !viewingHistorical && canRecordDecisions(getRoundPhase(deliberationRound));
 
         // These reads all share the same resolved cycle/round context but do not
         // depend on one another. Fetch them together so the scoreboard does not
@@ -2318,10 +2325,10 @@ exports.upsertRoundDecision = async (req, res) => {
             return res.status(503).json({ error: "No resume screening round for this cycle" });
         }
 
-        const activeRound = await getActiveRoundForCycle(activeCycle.id);
+        const activeRound = await getOpenRoundForCycle(activeCycle.id);
         if (!activeRound) {
             return res.status(503).json({
-                error: "No active round — activate a round in Cycle Management before saving deliberation decisions.",
+                error: "No round is open — open a round in Cycle Management before saving deliberation decisions.",
             });
         }
 
@@ -2382,7 +2389,7 @@ exports.upsertRoundDecision = async (req, res) => {
         if (error) return respondWithServerError(res, error, "upsertRoundDecision upsert");
 
         return res.json({
-            decision: mapRoundDecision(data, { provisional: activeRound.status === "active" }),
+            decision: mapRoundDecision(data, { provisional: isOpenPhase(getRoundPhase(activeRound)) }),
         });
     } catch (err) {
         return respondWithServerError(res, err, "upsertRoundDecision");
@@ -2414,7 +2421,7 @@ exports.bulkUpsertRoundDecisions = async (req, res) => {
 
         const cycleRounds = await getRoundsForCycle(activeCycle.id);
         const resumeRound = cycleRounds.find((round) => isResumeScreenType(round.type)) || null;
-        const activeRound = cycleRounds.find((round) => round.status === "active") || null;
+        const activeRound = cycleRounds.find((round) => isOpenPhase(getRoundPhase(round))) || null;
         if (!resumeRound || !activeRound) {
             return res.status(503).json({ error: "An active round and resume screening round are required" });
         }
@@ -2506,31 +2513,6 @@ exports.bulkUpsertRoundDecisions = async (req, res) => {
     }
 };
 
-function mapApplicationCandidate(candidate) {
-    if (!candidate) return null;
-    return {
-        id: candidate.id,
-        name: candidate.name || '',
-        email: candidate.email || '',
-        phoneNumber: candidate.phone_number || '',
-        major: candidate.major || '',
-        gpa: candidate.gpa || '',
-        year: candidate.year || '',
-        pronouns: candidate.pronouns || '',
-        urm: candidate.urm || '',
-        linkedin: candidate.linkedin || '',
-        gm: candidate.gm || '',
-        newbieTraining: candidate.newbie_training || '',
-        whyConsulting: candidate.why_consulting || '',
-        why180dc: candidate.why_180dc || '',
-        whySocialImpact: candidate.why_social_impact || '',
-        extenuatingCircumstances: candidate.extenuating_circumstances || '',
-        headshot: candidate.headshot || '',
-        resumeFileUrl: candidate.resume_file_url || '',
-        appliedAt: candidate.created_at || null,
-    };
-}
-
 async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = null) {
     let activeCycle = await getActiveCycleRow();
     const applyStandingRule = !requestedCycleId || requestedCycleId === activeCycle?.id;
@@ -2558,12 +2540,15 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
         throw err;
     }
 
-    // The resume and round metadata share the resolved cycle context but do not
-    // depend on one another, so load them together before fetching reviews.
-    const [resumeResult, cycleRounds] = await Promise.all([
-        supabase
-            .from('resumes')
-            .select(`
+    const legacyCandidateFields = `
+        id, name, email, phone_number, major, gpa, year, pronouns, urm,
+        linkedin, gm, newbie_training, why_consulting, why_180dc,
+        why_social_impact, extenuating_circumstances, headshot,
+        resume_file_url, created_at, cycle_id`;
+    const mappedCandidateFields = `${legacyCandidateFields}, referral_source,
+        previously_applied, professional_development,
+        consulting_connect_interest, application_responses`;
+    const selectResume = candidateFields => supabase.from('resumes').select(`
                 id,
                 name,
                 file_url,
@@ -2571,32 +2556,21 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
                 created_at,
                 cycle_id,
                 candidates (
-                    id,
-                    name,
-                    email,
-                    phone_number,
-                    major,
-                    gpa,
-                    year,
-                    pronouns,
-                    urm,
-                    linkedin,
-                    gm,
-                    newbie_training,
-                    why_consulting,
-                    why_180dc,
-                    why_social_impact,
-                    extenuating_circumstances,
-                    headshot,
-                    resume_file_url,
-                    created_at,
-                    cycle_id
+                    ${candidateFields}
                 )
             `)
             .eq('id', resumeId)
-            .maybeSingle(),
+            .maybeSingle();
+
+    // The resume and round metadata share the resolved cycle context but do not
+    // depend on one another, so load them together before fetching reviews.
+    let [resumeResult, cycleRounds] = await Promise.all([
+        selectResume(mappedCandidateFields),
         getRoundsForCycle(activeCycleId),
     ]);
+    if (resumeResult.error && isMissingSchemaError(resumeResult.error)) {
+        resumeResult = await selectResume(legacyCandidateFields);
+    }
 
     const coffeeChatRound = getRoundByType(cycleRounds, ROUND_TYPES.COFFEE_CHAT);
     const interviewRounds = (cycleRounds || []).filter((round) => isInterviewRoundType(round.type));
@@ -2902,30 +2876,35 @@ async function fetchScoreboardApplicationSummarySource(resumeId, requestedCycleI
     // The AI prompt only needs the candidate's free responses and cycle labels.
     // Avoid rebuilding every review, grader, signal, and override merely to read
     // or generate a cached two-sentence summary.
-    const [activeCycleResult, resumeRound, resumeResult] = await Promise.all([
+    const selectResume = includeSnapshots => supabase
+        .from('resumes')
+        .select(`
+            id,
+            cycle_id,
+            candidates (
+                id,
+                name,
+                why_consulting,
+                why_180dc,
+                why_social_impact,
+                ${includeSnapshots ? 'application_responses,' : ''}
+                cycle_id
+            )
+        `)
+        .eq('id', resumeId)
+        .maybeSingle();
+    let [activeCycleResult, resumeRound, resumeResult] = await Promise.all([
         supabase
             .from('cycles')
             .select('id, name')
             .eq('id', activeCycleId)
             .maybeSingle(),
         getResumeScreenRoundForCycle(activeCycleId),
-        supabase
-            .from('resumes')
-            .select(`
-                id,
-                cycle_id,
-                candidates (
-                    id,
-                    name,
-                    why_consulting,
-                    why_180dc,
-                    why_social_impact,
-                    cycle_id
-                )
-            `)
-            .eq('id', resumeId)
-            .maybeSingle(),
+        selectResume(true),
     ]);
+    if (resumeResult.error && isMissingSchemaError(resumeResult.error)) {
+        resumeResult = await selectResume(false);
+    }
 
     const { data: activeCycle, error: activeCycleError } = activeCycleResult;
     if (activeCycleError) {
@@ -3361,7 +3340,7 @@ exports.getGraderScoreboard = async (req, res) => {
         const { data: users, error: userError } = await supabase
             .from('users')
             .select('user_id, email, role, first_name, last_name, created_at, last_login')
-            .in('role', ['admin', 'member'])
+            .in('role', ['admin', 'member', 'board'])
             .order('first_name', { ascending: true });
 
         if (userError) throw userError;
@@ -3521,7 +3500,7 @@ exports.getGraderScoreboard = async (req, res) => {
     }
 };
 
-// Gets admin-only FRQ grader scoreboard data (FRQ grading is admin-only)
+// Gets FRQ grader scoreboard data (FRQ grading is limited to admin + board)
 exports.getFrqGraderScoreboard = async (req, res) => {
     try {
         const activeCycle = await getActiveCycleRow();
@@ -3530,7 +3509,7 @@ exports.getFrqGraderScoreboard = async (req, res) => {
         const { data: users, error: userError } = await supabase
             .from('users')
             .select('user_id, email, role, first_name, last_name, created_at, last_login')
-            .eq('role', 'admin')
+            .in('role', ['admin', 'board'])
             .order('first_name', { ascending: true });
 
         if (userError) throw userError;
@@ -3662,5 +3641,36 @@ exports.getFrqGraderScoreboard = async (req, res) => {
         });
     } catch (err) {
         return respondWithServerError(res, err, 'getFrqGraderScoreboard');
+    }
+};
+
+// Signed-URL lookup for a candidate's synced headshot.
+//
+// This is the read path the whole storage migration exists for: it hands the
+// browser a URL it fetches from Supabase's CDN directly, so the bytes never
+// traverse this service. Proxying the object through here instead would rebuild
+// the original problem against a new origin and save nothing.
+exports.getCandidateHeadshotUrl = async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('documents')
+            .select('storage_path')
+            .eq('candidate_id', req.params.candidateId)
+            .eq('kind', 'headshot')
+            .eq('sync_status', 'ready')
+            .maybeSingle();
+
+        if (error) return respondWithServerError(res, error, 'getCandidateHeadshotUrl');
+
+        // Not synced yet (or failed): 404 tells the client to fall back to the
+        // Drive proxy, so this ships safely before the queue has drained.
+        if (!data?.storage_path) return res.status(404).json({ error: 'Headshot not synced' });
+
+        const url = await getSignedUrl(data.storage_path);
+        if (!url) return res.status(502).json({ error: 'Could not sign headshot URL' });
+
+        return res.json({ url, expires_in: SIGNED_URL_TTL_SECONDS });
+    } catch (err) {
+        return respondWithServerError(res, err, 'getCandidateHeadshotUrl');
     }
 };

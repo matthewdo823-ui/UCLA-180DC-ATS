@@ -1,3 +1,4 @@
+import { formatRoundPhase } from "../../constants/roundPhases";
 import { css } from "../../theme/colors";
 import { getInitials, hasNumericScore } from "../../utils/format";
 import { formatRoundKind } from "../../constants/rounds";
@@ -15,7 +16,7 @@ export const SORT_TABS = [
 ];
 
 export function formatRoundBanner(round) { if (!round?.name) return "CANDIDATE SCORECARD"; const name = round.name.toUpperCase(); const kind = formatRoundKind(round.type).toUpperCase(); return name === kind ? name : `${name} · ${kind}`; }
-export function formatRoundStatus(round) { return round?.status ? String(round.status).toUpperCase() : "VIEW"; }
+export function formatRoundStatus(round) { return round?.status ? formatRoundPhase(round.status).toUpperCase() : "VIEW"; }
 export function scoreColor(score) { if (!hasNumericScore(score)) return css.textGray; return Number(score) >= 90 ? css.greenDark : Number(score) >= 80 ? "#4CAF50" : Number(score) >= 70 ? css.amber : css.textGray; }
 export function getReviewerLabel(review, index) { return review?.reviewerName || review?.reviewerEmail || `Reviewer ${index + 1} not recorded`; }
 export function getReviewerInitials(review, index) { return review?.reviewerName ? getInitials(review.reviewerName) : review?.reviewerEmail ? review.reviewerEmail.substring(0, 2).toUpperCase() : `R${index + 1}`; }

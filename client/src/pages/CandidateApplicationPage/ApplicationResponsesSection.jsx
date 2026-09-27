@@ -1,15 +1,11 @@
+import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import { useEffect } from "react";
 import { css } from "../../theme/colors";
 import { hasText } from "./applicationUtils";
 import EssayBlock from "./components/EssayBlock";
+import { getGradableApplicationResponses } from "../../utils/applicationResponses";
 
-const ESSAY_FIELDS = [
-  { key: "whyConsulting", label: "Why consulting?" },
-  { key: "why180dc", label: "Why 180 Degrees Consulting?" },
-  { key: "whySocialImpact", label: "Why social impact?" },
-];
-
-export default function ApplicationResponsesModal({ open, onClose, candidate }) {
+export default function ApplicationResponsesModal({ open, onClose, candidate, responses, loading = false, error, onRetry }) {
   useEffect(() => {
     if (!open) return undefined;
 
@@ -22,6 +18,8 @@ export default function ApplicationResponsesModal({ open, onClose, candidate }) 
   }, [open, onClose]);
 
   if (!open) return null;
+  const answers = responses || candidate;
+  const gradableResponses = getGradableApplicationResponses(answers);
 
   return (
     <div
@@ -69,15 +67,17 @@ export default function ApplicationResponsesModal({ open, onClose, candidate }) 
           </button>
         </div>
         <div style={{ overflowY: "auto", padding: "20px 22px" }}>
-          {ESSAY_FIELDS.map(({ key, label }) => (
-            <EssayBlock key={key} label={label} text={candidate[key]} />
+          {error ? <ErrorBanner error={error} onRetry={onRetry} /> : loading ? <p role="status">Loading free responses…</p> : <>
+          {gradableResponses.map(({ questionId, title, answer }) => (
+            <EssayBlock key={questionId} label={title} text={answer} />
           ))}
           <div>
             <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: css.textGray }}>Extenuating circumstances</p>
-            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: hasText(candidate.extenuatingCircumstances) ? css.textDark : css.textGray, whiteSpace: "pre-wrap" }}>
-              {hasText(candidate.extenuatingCircumstances) ? candidate.extenuatingCircumstances.trim() : "Not provided"}
+            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: hasText(answers.extenuatingCircumstances) ? css.textDark : css.textGray, whiteSpace: "pre-wrap" }}>
+              {hasText(answers.extenuatingCircumstances) ? answers.extenuatingCircumstances.trim() : "Not provided"}
             </p>
           </div>
+          </>}
         </div>
       </div>
     </div>

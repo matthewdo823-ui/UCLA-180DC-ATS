@@ -144,7 +144,26 @@ const CANDIDATE_TEXT_COLUMNS = [
   "resume_file_url",
   "extenuating_circumstances",
   "headshot",
+  "first_name",
+  "last_name",
+  "referral_source",
+  "previously_applied",
+  "professional_development",
+  "consulting_connect_interest",
 ];
+
+function buildApplicationResponses(answers, config) {
+  const gradableIds = new Set(config.gradableQuestionIds || []);
+  const catalog = Array.isArray(config.questionCatalog) ? config.questionCatalog : [];
+  return catalog
+    .filter((question) => question.type === "paragraph" || gradableIds.has(question.questionId))
+    .map((question) => ({
+      questionId: question.questionId,
+      title: String(question.title || "Untitled question").trim(),
+      answer: extractTextFromAnswer(answers[question.questionId]),
+      gradable: gradableIds.has(question.questionId),
+    }));
+}
 
 /**
  * @typedef {Object} FormSyncConfig
@@ -152,6 +171,8 @@ const CANDIDATE_TEXT_COLUMNS = [
  * @property {Record<string, string>} fieldMap questionItemId -> candidates column name
  * @property {string} [resumeQuestionId]
  * @property {string} [headshotQuestionId]
+ * @property {Array<{questionId: string, title: string, type?: string}>} [questionCatalog]
+ * @property {string[]} [gradableQuestionIds]
  */
 
 /**
@@ -198,9 +219,15 @@ function mapFormResponseToCandidate(response, config) {
     columnValues.headshot = extractFileUrlFromAnswer(answers[headQ]) || columnValues.headshot || "";
   }
 
+  const combinedName = [columnValues.first_name, columnValues.last_name]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(" ");
   const candidateRow = {
     google_form_response_id,
-    name: columnValues.name ?? DEFAULT_TEXT,
+    name: combinedName || columnValues.name || DEFAULT_TEXT,
+    first_name: columnValues.first_name ?? DEFAULT_TEXT,
+    last_name: columnValues.last_name ?? DEFAULT_TEXT,
     email: columnValues.email ?? DEFAULT_TEXT,
     phone_number: columnValues.phone_number ?? DEFAULT_TEXT,
     major: columnValues.major ?? DEFAULT_TEXT,
@@ -217,6 +244,11 @@ function mapFormResponseToCandidate(response, config) {
     resume_file_url: columnValues.resume_file_url ?? DEFAULT_TEXT,
     extenuating_circumstances: columnValues.extenuating_circumstances ?? DEFAULT_TEXT,
     headshot: columnValues.headshot ?? DEFAULT_TEXT,
+    referral_source: columnValues.referral_source ?? DEFAULT_TEXT,
+    previously_applied: columnValues.previously_applied ?? DEFAULT_TEXT,
+    professional_development: columnValues.professional_development ?? DEFAULT_TEXT,
+    consulting_connect_interest: columnValues.consulting_connect_interest ?? DEFAULT_TEXT,
+    application_responses: buildApplicationResponses(answers, config),
   };
   // Only written when mapped, so cycles that don't map a UID question never touch the column.
   if ("university_id" in columnValues) candidateRow.university_id = columnValues.university_id;

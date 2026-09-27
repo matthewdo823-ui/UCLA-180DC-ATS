@@ -17,6 +17,12 @@ const {
   loadDeliberationPoolForRound,
 } = require("./roundDeliberationService");
 const { ROUND_TYPES, isInterviewRoundType, isResumeScreenType, getPriorRound, normalizeRoundType } = require("../utils/rounds");
+const {
+  getRoundPhase,
+  formatRoundPhase,
+  isSetupPhase,
+  canRecordDecisions,
+} = require("../utils/roundPhases");
 const { hasReviewScoreValues } = require("../utils/rubric");
 const { isMissingSchemaError } = require("../utils/schemaCompatibility");
 
@@ -25,10 +31,13 @@ const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && config
   ? configuredGraderReviewGoal
   : 30;
 
-function buildPhaseLabel(cycle, activeRound) {
-  if (cycle && activeRound) return `${cycle.name} · ${activeRound.name}`;
-  if (cycle) return `${cycle.name} · No active round`;
-  return "No active cycle";
+function buildPhaseLabel(cycle, activeRound, currentRound) {
+  if (!cycle) return "No active cycle";
+  // Falls back to currentRound so a round in setup reads as a phase rather
+  // than as a missing round.
+  const round = activeRound || currentRound;
+  if (!round) return `${cycle.name} · No round in progress`;
+  return `${cycle.name} · ${round.name} · ${formatRoundPhase(getRoundPhase(round))}`;
 }
 
 async function loadPersonalResumeProgress(userId, cycleId, resumeRoundId) {
@@ -241,7 +250,7 @@ async function loadGraderSummary(cycleId, resumeRound) {
   const { data: users, error: userError } = await supabase
     .from("users")
     .select("user_id, email, first_name, last_name, role")
-    .in("role", ["admin", "member"])
+    .in("role", ["admin", "member", "board"])
     .order("first_name", { ascending: true });
 
   if (userError) throw userError;
@@ -412,6 +421,7 @@ async function loadInterviewPipelineStats(cycleId, activeRound) {
 async function loadActionItems({
   activeCycle,
   activeRound,
+  currentRound,
   resumeRound,
   deliberationRound,
   cycleRounds,
@@ -436,11 +446,22 @@ async function loadActionItems({
     return items;
   }
 
-  if (!activeRound) {
+  if (!activeRound && currentRound && isSetupPhase(getRoundPhase(currentRound))) {
+    items.push({
+      id: "round-in-setup",
+      label: `${currentRound.name} is in setup`,
+      detail: "Finish configuring the round, then open grading.",
+      count: null,
+      severity: "warning",
+      path: "/cycle-management",
+    });
+  } else if (!activeRound) {
     items.push({
       id: "no-active-round",
-      label: "No active round",
-      detail: "Activate a round in Cycle Management.",
+      label: "No round in progress",
+      detail: currentRound
+        ? `${currentRound.name} is in ${formatRoundPhase(getRoundPhase(currentRound))}.`
+        : "Every round in this cycle is closed.",
       count: null,
       severity: "critical",
       path: "/cycle-management",
@@ -458,7 +479,7 @@ async function loadActionItems({
     });
   }
 
-  if (pipeline?.undecidedCount > 0 && deliberationRound?.status === "active") {
+  if (pipeline?.undecidedCount > 0 && canRecordDecisions(getRoundPhase(deliberationRound))) {
     items.push({
       id: "undecided",
       label: "Candidates awaiting deliberation",
@@ -469,7 +490,7 @@ async function loadActionItems({
     });
   }
 
-  if (pipeline?.incompleteCount > 0 && deliberationRound?.status === "active") {
+  if (pipeline?.incompleteCount > 0 && canRecordDecisions(getRoundPhase(deliberationRound))) {
     items.push({
       id: "incomplete-deliberation",
       label: "Incomplete deliberation",
@@ -604,7 +625,7 @@ async function getGraderDashboard(userId) {
   const activeCycle = await getActiveCycleRow();
   const activeCycleId = activeCycle?.id || null;
   const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
-  const { resumeRound, activeRound } = resolveDeliberationRounds(cycleRounds);
+  const { resumeRound, activeRound, currentRound } = resolveDeliberationRounds(cycleRounds);
   const isInterviewRound = isInterviewRoundType(activeRound?.type);
 
   let personal;
@@ -622,9 +643,12 @@ async function getGraderDashboard(userId) {
     context: {
       cycle: activeCycle ? { id: activeCycle.id, name: activeCycle.name } : null,
       activeRound: mapScoreboardRoundContext(activeRound),
+      // Null during a setup window, when no round is open but one is being
+      // configured. The dashboard falls back to this so it still shows a stage.
+      currentRound: mapScoreboardRoundContext(currentRound),
       isInterviewRound,
       isResumeRound: isResumeScreenType(activeRound?.type),
-      phaseLabel: buildPhaseLabel(activeCycle, activeRound),
+      phaseLabel: buildPhaseLabel(activeCycle, activeRound, currentRound),
     },
     personal,
   };
@@ -638,6 +662,7 @@ async function getAdminDashboard(_userId) {
     resumeRound,
     deliberationRound,
     activeRound,
+    currentRound,
     nextRound,
     sortedRounds,
   } = resolveDeliberationRounds(cycleRounds);
@@ -699,6 +724,7 @@ async function getAdminDashboard(_userId) {
   const actionItems = await loadActionItems({
     activeCycle,
     activeRound,
+    currentRound,
     resumeRound,
     deliberationRound,
     cycleRounds,
@@ -718,13 +744,16 @@ async function getAdminDashboard(_userId) {
         hasFormConfig: Boolean(activeCycle.google_form_id && activeCycle.form_field_map),
       } : null,
       activeRound: mapScoreboardRoundContext(activeRound),
+      // Null during a setup window, when no round is open but one is being
+      // configured. The dashboard falls back to this so it still shows a stage.
+      currentRound: mapScoreboardRoundContext(currentRound),
       deliberationRound: mapScoreboardRoundContext(deliberationRound),
       resumeRound: mapScoreboardRoundContext(resumeRound),
       nextRound: mapScoreboardRoundContext(nextRound),
       allRounds: (sortedRounds || cycleRounds).map(mapScoreboardRoundContext),
       isInterviewRound,
       isResumeRound: isResumeScreenType(activeRound?.type),
-      phaseLabel: buildPhaseLabel(activeCycle, activeRound),
+      phaseLabel: buildPhaseLabel(activeCycle, activeRound, currentRound),
     },
     pipeline,
     graderSummary,

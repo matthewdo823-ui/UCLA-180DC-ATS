@@ -2,15 +2,16 @@ const { ELIGIBLE_YEAR_FILTER } = require('../utils/screeningEligibility');
 const supabase = require('../config/supabase');
 const {
     getActiveCycleRow,
-    getActiveRoundForCycle,
+    getCurrentRoundForCycle,
     getResumeScreenRoundForCycle,
-    requireActiveInterviewRound,
+    requireRoundByType,
 } = require('../utils/cycleContext');
 const { firstRel } = require('../utils/supabaseHelpers');
 const { getUserName } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
 const { isMissingSchemaError } = require('../utils/schemaCompatibility');
 const { ROUND_TYPES, normalizeRoundType } = require('../utils/rounds');
+const { TABLE_PHASES } = require('../utils/roundPhases');
 const { NO_SHOW_GROUP_NUMBER } = require('../utils/interviewGroups');
 const {
     normalizeGraderIds,
@@ -43,7 +44,7 @@ async function loadAssignmentBoardData(cycleId) {
         supabase
             .from('users')
             .select('user_id, email, role, first_name, last_name')
-            .in('role', ['admin', 'member'])
+            .in('role', ['admin', 'member', 'board'])
             .order('first_name', { ascending: true }),
         supabase
             .from('resume_reviews')
@@ -86,7 +87,7 @@ async function loadCoffeeChatAssignmentBoard(cycle, round) {
         supabase
             .from('users')
             .select('user_id, email, role, first_name, last_name')
-            .in('role', ['admin', 'member'])
+            .in('role', ['admin', 'member', 'board'])
             .order('first_name', { ascending: true }),
         supabase
             .from('interview_group_assignments')
@@ -170,9 +171,9 @@ exports.getAssignmentBoard = async (req, res) => {
             return res.status(503).json({ error: 'No active recruiting cycle' });
         }
 
-        const activeRound = await getActiveRoundForCycle(cycle.id);
-        if (normalizeRoundType(activeRound?.type) === ROUND_TYPES.COFFEE_CHAT) {
-            return res.json(await loadCoffeeChatAssignmentBoard(cycle, activeRound));
+        const currentRound = await getCurrentRoundForCycle(cycle.id);
+        if (normalizeRoundType(currentRound?.type) === ROUND_TYPES.COFFEE_CHAT) {
+            return res.json(await loadCoffeeChatAssignmentBoard(cycle, currentRound));
         }
 
         const round = await getResumeScreenRoundForCycle(cycle.id);
@@ -275,7 +276,7 @@ exports.getAssignmentBoard = async (req, res) => {
     }
 };
 
-/** Move one candidate between tables in the active Coffee Chat round. */
+/** Move one candidate between tables while the Coffee Chat round is in setup or grading. */
 exports.updateCoffeeChatCandidateTable = async (req, res) => {
     const candidateId = String(req.params.candidateId || '').trim();
     const groupNumber = Number(req.body?.groupNumber);
@@ -283,11 +284,8 @@ exports.updateCoffeeChatCandidateTable = async (req, res) => {
     if (!candidateId) return res.status(400).json({ error: 'candidateId is required' });
 
     try {
-        const ctx = await requireActiveInterviewRound();
+        const ctx = await requireRoundByType(ROUND_TYPES.COFFEE_CHAT, TABLE_PHASES);
         if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
-        if (normalizeRoundType(ctx.round.type) !== ROUND_TYPES.COFFEE_CHAT) {
-            return res.status(400).json({ error: 'Candidate tables can only be changed during Coffee Chats' });
-        }
 
         const groupCount = Number(ctx.round.interview_group_count) || 1;
         if (!Number.isInteger(groupNumber) || (groupNumber !== NO_SHOW_GROUP_NUMBER && (groupNumber < 1 || groupNumber > groupCount))) {
@@ -310,7 +308,7 @@ exports.updateCoffeeChatCandidateTable = async (req, res) => {
     }
 };
 
-/** Assign or unassign a participant's starting table for the active Coffee Chat round. */
+/** Assign or unassign a participant's starting table while Coffee Chats are in setup or grading. */
 exports.updateCoffeeChatMemberTable = async (req, res) => {
     const userId = Number(req.params.userId);
     const rawGroupNumber = req.body?.groupNumber;
@@ -322,17 +320,14 @@ exports.updateCoffeeChatMemberTable = async (req, res) => {
     }
 
     try {
-        const ctx = await requireActiveInterviewRound();
+        const ctx = await requireRoundByType(ROUND_TYPES.COFFEE_CHAT, TABLE_PHASES);
         if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
-        if (normalizeRoundType(ctx.round.type) !== ROUND_TYPES.COFFEE_CHAT) {
-            return res.status(400).json({ error: 'Participant tables can only be changed during Coffee Chats' });
-        }
 
         const { data: member, error: memberError } = await supabase
             .from('users')
             .select('user_id, role')
             .eq('user_id', userId)
-            .in('role', ['admin', 'member'])
+            .in('role', ['admin', 'member', 'board'])
             .maybeSingle();
         if (memberError) throw memberError;
         if (!member) return res.status(404).json({ error: 'Coffee Chat participant not found' });
@@ -417,7 +412,7 @@ exports.createAssignments = async (req, res) => {
         const { data: validGraders, error: graderError } = await supabase
             .from('users')
             .select('user_id')
-            .in('role', ['admin', 'member'])
+            .in('role', ['admin', 'member', 'board'])
             .in('user_id', graderIds);
 
         if (graderError) throw graderError;

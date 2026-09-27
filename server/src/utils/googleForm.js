@@ -13,6 +13,8 @@ const SCOPES_BODY = ["https://www.googleapis.com/auth/forms.body.readonly"];
 
 const CANDIDATE_COLUMNS = [
   "name",
+  "first_name",
+  "last_name",
   "email",
   "phone_number",
   "major",
@@ -30,11 +32,17 @@ const CANDIDATE_COLUMNS = [
   "extenuating_circumstances",
   "headshot",
   "university_id",
+  "referral_source",
+  "previously_applied",
+  "professional_development",
+  "consulting_connect_interest",
 ];
 
 // Bare "uid" is omitted on purpose: titles match by substring, so it would hit "guide" or "fluid".
 const TITLE_COLUMN_HINTS = [
   { column: "university_id", patterns: ["university id", "student id", "ucla id", "bruin id"] },
+  { column: "first_name", patterns: ["first name", "given name"] },
+  { column: "last_name", patterns: ["last name", "family name", "surname"] },
   { column: "name", patterns: ["full name", "your name", "name"] },
   { column: "email", patterns: ["email address", "email", "e-mail"] },
   { column: "phone_number", patterns: ["phone number", "phone", "mobile"] },
@@ -42,13 +50,17 @@ const TITLE_COLUMN_HINTS = [
   { column: "gpa", patterns: ["gpa", "grade point"] },
   { column: "year", patterns: ["class year", "academic year", "year in school", "year"] },
   { column: "pronouns", patterns: ["pronoun"] },
-  { column: "urm", patterns: ["urm", "underrepresented", "minority"] },
+  { column: "urm", patterns: ["urm", "underrepresented", "minority", "identify as a part of any of these communities"] },
   { column: "linkedin", patterns: ["linkedin"] },
-  { column: "gm", patterns: ["general member", "gm interest", " gm "] },
-  { column: "newbie_training", patterns: ["newbie", "training program"] },
-  { column: "why_consulting", patterns: ["why consulting", "consulting interest"] },
-  { column: "why_180dc", patterns: ["why 180", "180dc", "why join 180"] },
-  { column: "why_social_impact", patterns: ["social impact", "why social"] },
+  { column: "gm", patterns: ["general member", "general meeting", "gm interest", " gm "] },
+  { column: "newbie_training", patterns: ["newbie", "new member training", "training program"] },
+  { column: "referral_source", patterns: ["how did you hear", "how you heard", "heard about"] },
+  { column: "previously_applied", patterns: ["applied to 180dc in the past", "applied in the past", "previously applied"] },
+  { column: "professional_development", patterns: ["upcoming internships", "professional development programs"] },
+  { column: "consulting_connect_interest", patterns: ["interested in being considered", "consulting connect interest"] },
+  // Written responses are selected explicitly as gradable questions. Do not guess
+  // legacy why_* columns from title fragments; that caused "How did you hear about
+  // 180DC?" to appear under the Why 180DC grading label.
   { column: "resume_file_url", patterns: ["resume", "cv", "curriculum vitae"] },
   { column: "extenuating_circumstances", patterns: ["extenuating", "circumstance", "additional context"] },
   { column: "headshot", patterns: ["headshot", "photo", "profile picture", "picture of yourself"] },
@@ -64,11 +76,10 @@ function getKeyFilePath() {
 
 /** Workspace user who owns the form / upload folder (domain-wide delegation). */
 function getDriveImpersonateUser() {
-  return (
-    process.env.GOOGLE_DRIVE_IMPERSONATE_USER
-    || process.env.GMAIL_IMPERSONATE_USER
-    || ""
-  ).trim();
+  // Gmail and Drive delegation are separate grants. Reusing the Gmail sender
+  // here made every resume request fail with unauthorized_client when that
+  // account had Gmail delegation but not Drive delegation.
+  return String(process.env.GOOGLE_DRIVE_IMPERSONATE_USER || "").trim();
 }
 
 // Share links (/forms/d/e/<publishId>/viewform) carry a publish id, not the form id the API needs.
@@ -109,7 +120,9 @@ function suggestColumnForTitle(title, hints = TITLE_COLUMN_HINTS) {
   for (const hint of hints) {
     for (const pattern of hint.patterns) {
       const p = pattern.trim();
-      if (normalized === p || normalized.includes(p)) {
+      const namePrompt = p === "name"
+        && (normalized === "name" || normalized.startsWith("name ") || normalized.endsWith(" name"));
+      if (namePrompt || (p !== "name" && normalized.includes(p))) {
         return hint.column;
       }
     }
@@ -123,6 +136,7 @@ function buildSuggestedFieldMap(questions, hints = TITLE_COLUMN_HINTS) {
 
   for (const q of questions) {
     const column = suggestColumnForTitle(q.title, hints);
+    if (["resume_file_url", "headshot"].includes(column) && q.type && q.type !== "file_upload") continue;
     if (!column || usedColumns.has(column)) continue;
     fieldMap[q.questionId] = column;
     usedColumns.add(column);
@@ -140,11 +154,11 @@ function inferFileQuestionIds(questions, fieldMap) {
   }
 
   if (!resumeQuestionId) {
-    const resumeQ = questions.find((q) => suggestColumnForTitle(q.title) === "resume_file_url");
+    const resumeQ = questions.find((q) => (!q.type || q.type === "file_upload") && suggestColumnForTitle(q.title) === "resume_file_url");
     if (resumeQ) resumeQuestionId = resumeQ.questionId;
   }
   if (!headshotQuestionId) {
-    const headQ = questions.find((q) => suggestColumnForTitle(q.title) === "headshot");
+    const headQ = questions.find((q) => (!q.type || q.type === "file_upload") && suggestColumnForTitle(q.title) === "headshot");
     if (headQ) headshotQuestionId = headQ.questionId;
   }
 
@@ -171,11 +185,46 @@ function validateFieldMap(fieldMap) {
   }
 
   const hasName = entries.some(([, col]) => col === "name");
+  const hasSplitName = entries.some(([, col]) => col === "first_name")
+    && entries.some(([, col]) => col === "last_name");
   const hasEmail = entries.some(([, col]) => col === "email");
-  if (!hasName || !hasEmail) {
-    return "fieldMap must map at least name and email";
+  if ((!hasName && !hasSplitName) || !hasEmail) {
+    return "fieldMap must map email and either name or both first and last name";
   }
 
+  const targets = entries.map(([, column]) => column);
+  const duplicate = targets.find((column, index) => targets.indexOf(column) !== index);
+  if (duplicate) return `Only one question can map to ${duplicate}`;
+
+  return null;
+}
+
+function validateQuestionCatalog(questionCatalog) {
+  if (!Array.isArray(questionCatalog)) return "questionCatalog must be an array";
+  const ids = new Set();
+  for (const question of questionCatalog) {
+    if (!question || typeof question.questionId !== "string" || !question.questionId.trim()) {
+      return "Every question catalog entry must include a questionId";
+    }
+    if (ids.has(question.questionId)) return `Duplicate question id ${question.questionId}`;
+    if (typeof question.title !== "string" || !question.title.trim()) {
+      return `Question ${question.questionId} must include a title`;
+    }
+    ids.add(question.questionId);
+  }
+  return null;
+}
+
+function validateGradableQuestionIds(questionIds, questionCatalog = []) {
+  if (!Array.isArray(questionIds)) return "gradableQuestionIds must be an array";
+  const catalogIds = new Set(questionCatalog.map((question) => question.questionId));
+  const seen = new Set();
+  for (const rawId of questionIds) {
+    if (typeof rawId !== "string" || !rawId.trim()) return "Gradable question ids must be strings";
+    if (seen.has(rawId)) return `Duplicate gradable question id ${rawId}`;
+    if (catalogIds.size && !catalogIds.has(rawId)) return `Gradable question ${rawId} is not in the question catalog`;
+    seen.add(rawId);
+  }
   return null;
 }
 
@@ -213,6 +262,8 @@ function cycleRowToFormConfig(row) {
     fieldMap,
     resumeQuestionId: row.form_resume_question_id || undefined,
     headshotQuestionId: row.form_headshot_question_id || undefined,
+    questionCatalog: Array.isArray(row.form_question_catalog) ? row.form_question_catalog : [],
+    gradableQuestionIds: Array.isArray(row.form_gradable_question_ids) ? row.form_gradable_question_ids : [],
   };
 }
 
@@ -286,9 +337,19 @@ async function discoverFormQuestions(formId) {
   (res.data.items || []).forEach((item) => {
     const questionId = item.questionItem?.question?.questionId;
     if (!questionId) return;
+    const question = item.questionItem.question;
+    let type = "unknown";
+    if (question.textQuestion) type = question.textQuestion.paragraph ? "paragraph" : "text";
+    else if (question.choiceQuestion) type = "choice";
+    else if (question.fileUploadQuestion) type = "file_upload";
+    else if (question.scaleQuestion) type = "scale";
+    else if (question.dateQuestion) type = "date";
+    else if (question.timeQuestion) type = "time";
+
     questions.push({
       questionId,
       title: (item.title || "").replace(/\s+/g, " ").trim() || "Untitled",
+      type,
     });
   });
 
@@ -316,6 +377,8 @@ module.exports = {
   buildSuggestedFieldMap,
   inferFileQuestionIds,
   validateFieldMap,
+  validateQuestionCatalog,
+  validateGradableQuestionIds,
   validateInterestFieldMap,
   cycleRowToFormConfig,
   loadLegacyFormConfig,

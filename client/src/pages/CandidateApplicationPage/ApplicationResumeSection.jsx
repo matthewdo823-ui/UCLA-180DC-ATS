@@ -1,15 +1,14 @@
 import { useState } from "react";
-import { isDriveUrl } from "../../components/AuthedDriveImage/AuthedDriveImage";
 import ResumeModal from "../../components/ResumeModal/ResumeModal";
 import { css } from "../../theme/colors";
 import ApplicationResponsesModal from "./ApplicationResponsesSection";
 import SectionCard from "./components/SectionCard";
 
-export default function ApplicationResumeSection({ candidate, resume, authToken, compact = false }) {
+export default function ApplicationResumeSection({ candidate, resume, authToken, compact = false, responsesState }) {
   const [resumeOpen, setResumeOpen] = useState(false);
   const [responsesOpen, setResponsesOpen] = useState(false);
 
-  const hasResume = isDriveUrl(resume?.fileUrl);
+  const hasResume = Boolean(resume?.id && resume?.fileUrl);
   const actionButtonStyle = {
     display: "inline-flex",
     alignItems: "center",
@@ -48,10 +47,11 @@ export default function ApplicationResumeSection({ candidate, resume, authToken,
         open={resumeOpen}
         onClose={() => setResumeOpen(false)}
         title={resume?.name || candidate.name}
+        resumeId={resume?.id}
         fileUrl={resume?.fileUrl}
         authToken={authToken}
       />
-      <ApplicationResponsesModal open={responsesOpen} onClose={() => setResponsesOpen(false)} candidate={candidate} />
+      <ApplicationResponsesModal open={responsesOpen} onClose={() => setResponsesOpen(false)} candidate={candidate} {...responsesState} />
     </>
   );
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
-import { isAdminRole } from "../../utils/auth";
+import { canGradeFrq as canGradeFrqRole } from "../../utils/auth";
 import { css } from "../../theme/colors";
 import { API } from "../../constants/config";
 import { invalidateAfterReview } from "../../lib/queryKeys";
@@ -82,7 +82,7 @@ export default function ScreenerPage() {
   const { token, user } = useAuth();
   const authedFetch = useAuthedFetch();
   const queryClient = useQueryClient();
-  const isAdmin = isAdminRole(user?.role);
+  const canGradeFrq = canGradeFrqRole(user?.role);
   const { activeRound, loading: cycleLoading, error: cycleError, getYearRubric, phaseLabel, isResumeRound } = useActiveCycle();
 
   const [gradingMode, setGradingMode] = useState(GRADING_MODES.RESUME);
@@ -321,8 +321,8 @@ export default function ScreenerPage() {
 
   useEffect(() => {
     fetchMyReviews({ showLoading: false });
-    if (isAdmin) fetchMyFrqReviews({ showLoading: false });
-  }, [fetchMyReviews, fetchMyFrqReviews, isAdmin]);
+    if (canGradeFrq) fetchMyFrqReviews({ showLoading: false });
+  }, [fetchMyReviews, fetchMyFrqReviews, canGradeFrq]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -331,10 +331,10 @@ export default function ScreenerPage() {
   }, [drawerOpen, isFrqMode, fetchMyFrqReviews, fetchMyReviews]);
 
   useEffect(() => {
-    if (!isAdmin && gradingMode === GRADING_MODES.FRQ) {
+    if (!canGradeFrq && gradingMode === GRADING_MODES.FRQ) {
       setGradingMode(GRADING_MODES.RESUME);
     }
-  }, [isAdmin, gradingMode]);
+  }, [canGradeFrq, gradingMode]);
 
   useEffect(() => {
     if (!celebrationKey) return undefined;
@@ -487,13 +487,13 @@ export default function ScreenerPage() {
 
   const topbarRightSlot = (
     <>
-      {isAdmin && isResumeRound && !screeningBlocked ? (
+      {canGradeFrq && isResumeRound && !screeningBlocked ? (
         <GradingModeToggle mode={gradingMode} onChange={handleGradingModeChange} />
       ) : null}
       <button type="button" onClick={() => { setGradingMode(GRADING_MODES.RESUME); setDrawerOpen(true); }} style={topbarGhostButtonStyle}>
         📋 {formatReviewCount(myReviews.length, "resume")}
       </button>
-      {isAdmin ? (
+      {canGradeFrq ? (
         <button type="button" onClick={() => { setGradingMode(GRADING_MODES.FRQ); setDrawerOpen(true); }} style={topbarGhostButtonStyle}>
           📝 {formatReviewCount(myFrqReviews.length, "free response")}
         </button>
@@ -512,7 +512,7 @@ export default function ScreenerPage() {
 
       <div style={{ flex: 1, overflow: "hidden", padding: "14px 22px 0", display: "flex", flexDirection: "column", gap: 12 }}>
         <CandidateRow resume={resume} />
-        {isAdmin && isResumeRound && !screeningBlocked ? (
+        {canGradeFrq && isResumeRound && !screeningBlocked ? (
           <GradingModeToggle
             mode={gradingMode}
             onChange={handleGradingModeChange}
@@ -558,7 +558,7 @@ export default function ScreenerPage() {
                   </div>
                 )
               ) : resume?.file_url ? (
-                <PdfViewer url={`${API}/view/pdf?url=${encodeURIComponent(resume.file_url)}`} authToken={token} />
+                <PdfViewer resumeId={resume.id} fileUrl={resume.file_url} authToken={token} />
               ) : (
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.textGray, fontSize: 13, padding: 24, textAlign: "center" }}>
                   {fetchError || "No resume available"}

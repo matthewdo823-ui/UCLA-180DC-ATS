@@ -2,10 +2,12 @@ const { screeningAccessError, ELIGIBLE_YEAR_FILTER } = require('../utils/screeni
 const supabase = require("../config/supabase");
 const {
   getActiveCycleRow,
-  getActiveInterviewRound,
+  getOpenInterviewRound,
   getResumeScreenRoundForCycle,
   getRoundsForCycle,
-  requireActiveInterviewRound,
+  requireOpenInterviewRound,
+  requireInterviewGradingPhase,
+  requireRoundByType,
 } = require("../utils/cycleContext");
 const { hasReviewScoreValues, resolveReviewNormalizedValue } = require("../utils/rubric");
 const { respondWithServerError } = require("../utils/httpErrors");
@@ -22,6 +24,7 @@ const {
   isResumeScreenType,
   normalizeRoundType,
 } = require("../utils/rounds");
+const { TABLE_PHASES } = require("../utils/roundPhases");
 const { isNoShowGroup } = require("../utils/interviewGroups");
 
 const VALID_DECISIONS = new Set(["pending", "pass", "fail", "hold"]);
@@ -105,7 +108,7 @@ function candidatePassesPriorRoundGate(candidateId, { gateStarted, eligibleCandi
 
 exports.listInterviewCandidates = async (req, res) => {
   try {
-    const ctx = await requireActiveInterviewRound();
+    const ctx = await requireOpenInterviewRound();
     if (ctx.error) {
       return res.status(ctx.status).json({ error: ctx.error });
     }
@@ -340,7 +343,7 @@ exports.upsertInterviewEvaluation = async (req, res) => {
   }
 
   try {
-    const ctx = await requireActiveInterviewRound();
+    const ctx = await requireInterviewGradingPhase();
     if (ctx.error) {
       return res.status(ctx.status).json({ error: ctx.error });
     }
@@ -423,14 +426,13 @@ exports.assignInterviewGroups = async (req, res) => {
   }
 
   try {
-    const ctx = await requireActiveInterviewRound();
+    // Resolved by type, not by "whichever round is open": tables have to be
+    // assigned while the round is still in setup, before grading can open.
+    const ctx = await requireRoundByType(ROUND_TYPES.COFFEE_CHAT, TABLE_PHASES);
     if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
     const requestedRoundId = String(req.body?.round_id || "").trim();
     if (requestedRoundId && requestedRoundId !== ctx.round.id) {
-      return res.status(400).json({ error: "Tables can only be assigned for the active Coffee Chat round" });
-    }
-    if (normalizeRoundType(ctx.round.type) !== ROUND_TYPES.COFFEE_CHAT) {
-      return res.status(400).json({ error: "Random table assignments are only available during Coffee Chats" });
+      return res.status(400).json({ error: "Tables can only be assigned for this cycle's Coffee Chat round" });
     }
 
     const priorGate = await loadPriorRoundGate(ctx.cycle.id, ctx.round);
@@ -541,7 +543,7 @@ exports.assignInterviewGroups = async (req, res) => {
 
 exports.getInterviewStats = async (req, res) => {
   try {
-    const activeRound = await getActiveInterviewRound();
+    const activeRound = await getOpenInterviewRound();
     if (!activeRound) {
       return res.json({ evaluated: 0, total: 0, pending: 0 });
     }
@@ -573,11 +575,8 @@ exports.getInterviewStats = async (req, res) => {
 exports.setMyCoffeeChatStartingTable = async (req, res) => {
   const groupNumber = Number(req.body?.groupNumber);
   try {
-    const ctx = await requireActiveInterviewRound();
+    const ctx = await requireRoundByType(ROUND_TYPES.COFFEE_CHAT, TABLE_PHASES);
     if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
-    if (normalizeRoundType(ctx.round.type) !== ROUND_TYPES.COFFEE_CHAT) {
-      return res.status(400).json({ error: "Starting tables can only be selected during Coffee Chats" });
-    }
 
     const groupCount = Number(ctx.round.interview_group_count) || 1;
     if (!Number.isInteger(groupNumber) || groupNumber < 1 || groupNumber > groupCount) {
@@ -611,7 +610,7 @@ exports.setMyCoffeeChatStartingTable = async (req, res) => {
 
 exports.getCoffeeChatGraderScoreboard = async (req, res) => {
   try {
-    const ctx = await requireActiveInterviewRound();
+    const ctx = await requireOpenInterviewRound();
     if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
     if (normalizeRoundType(ctx.round.type) !== ROUND_TYPES.COFFEE_CHAT) {
       return res.status(400).json({ error: "Coffee Chat grader progress is only available during Coffee Chats" });
@@ -648,7 +647,7 @@ exports.getCoffeeChatGraderScoreboard = async (req, res) => {
         ? supabase
           .from("users")
           .select("user_id, email, role, first_name, last_name, created_at, last_login")
-          .in("role", ["admin", "member"])
+          .in("role", ["admin", "member", "board"])
           .in("user_id", memberIds)
         : { data: [], error: null },
       candidateIds.length

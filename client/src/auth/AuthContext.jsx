@@ -3,6 +3,8 @@ import { API } from "../constants/config";
 import { isStaffRole } from "../utils/auth";
 import { queryClient } from "../lib/queryClient";
 import { clearDriveFileCache } from "../utils/driveFileCache";
+import { clearHeadshotUrlCache } from "../utils/headshotUrl";
+import { clearResumeFileCache } from "../utils/resumeFiles";
 import { formatNetworkError, formatResponseError } from "../utils/errors";
 
 const TOKEN_STORAGE_KEY = "resume_screener_jwt";
@@ -58,6 +60,8 @@ export function AuthProvider({ children }) {
     // them so the next sign-in on this browser starts from the server.
     queryClient.clear();
     clearDriveFileCache();
+    clearHeadshotUrlCache();
+    clearResumeFileCache();
   }, []);
 
   useEffect(() => {
@@ -118,6 +122,11 @@ export function AuthProvider({ children }) {
     }
 
     if (!res.ok) {
+      if (res.status === 401) {
+        const error = new Error("Invalid email or password");
+        error.status = 401;
+        throw error;
+      }
       throw await formatResponseError(res, "signing in", "Check /auth/login credentials or server logs.");
     }
 

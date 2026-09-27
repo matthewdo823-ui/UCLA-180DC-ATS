@@ -20,6 +20,13 @@ const {
   isResumeScreenType,
   sortRounds,
 } = require("../utils/rounds");
+const {
+  getRoundPhase,
+  formatRoundPhase,
+  isOpenPhase,
+  isClosedPhase,
+  canRecordDecisions,
+} = require("../utils/roundPhases");
 const { hasReviewScoreValues } = require("../utils/rubric");
 
 function mapScoreboardRoundContext(row) {
@@ -40,7 +47,13 @@ function resolveDeliberationRounds(rounds) {
   const resumeRound = getRoundByType(sortedRounds, ROUND_TYPES.RESUME_SCREEN);
   const coffeeChatRound = getRoundByType(sortedRounds, ROUND_TYPES.COFFEE_CHAT);
   const finalRound = getRoundByType(sortedRounds, ROUND_TYPES.FINAL_ROUND);
-  const activeRound = sortedRounds.find((round) => round.status === "active") || null;
+  const activeRound = sortedRounds.find((round) => isOpenPhase(getRoundPhase(round))) || null;
+  // A round in setup is not open, so nothing is open anywhere in the cycle
+  // during a setup window. Callers that only need "what is the cycle on right
+  // now" use currentRound instead of treating that as a missing round.
+  const currentRound = activeRound
+    || sortedRounds.find((round) => !isClosedPhase(getRoundPhase(round)))
+    || null;
   const deliberationRound = activeRound || resumeRound;
   const nextRound = activeRound
     ? sortedRounds.find((round) => round.sort_order > activeRound.sort_order) || null
@@ -53,6 +66,7 @@ function resolveDeliberationRounds(rounds) {
     interviewRound: coffeeChatRound,
     deliberationRound,
     activeRound,
+    currentRound,
     nextRound,
     sortedRounds,
   };
@@ -199,8 +213,14 @@ async function assertCandidateEligibleForRoundDecision({
   candidateId,
   cycleRounds = null,
 }) {
-  if (!activeRound || activeRound.status !== "active") {
-    return { error: "This round is closed — activate a round in Cycle Management to record decisions.", status: 400 };
+  if (!activeRound) {
+    return { error: "No round is open — open a round in Cycle Management to record decisions.", status: 400 };
+  }
+  if (!canRecordDecisions(getRoundPhase(activeRound))) {
+    return {
+      error: `${activeRound.name} is in ${formatRoundPhase(getRoundPhase(activeRound))}. Move it to Deliberation in Cycle Management to record decisions.`,
+      status: 400,
+    };
   }
 
   const { data: candidate, error } = await supabase.from("candidates").select("year").eq("id", candidateId).eq("cycle_id", cycleId).maybeSingle();

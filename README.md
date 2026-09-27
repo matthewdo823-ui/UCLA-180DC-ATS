@@ -70,6 +70,11 @@ cp server/.env.example server/.env
 | `FORMS_SYNC_CRON` | No | In-process sync schedule (default every 10 minutes) |
 | `DISABLE_FORMS_SYNC_CRON` | No | Set to `1` when using Vercel cron instead |
 | `CRON_SECRET` | For cron | Shared secret for `POST /cron/forms-sync` |
+| `DOC_SYNC_BATCH_SIZE` | No | Documents claimed per worker pass (default `10`) |
+| `DOC_SYNC_CONCURRENCY` | No | Parallel Drive downloads in the worker (default `3`) |
+| `DOC_SYNC_IDLE_POLL_MS` | No | Worker sleep when the queue is empty (default `30000`) |
+| `DOC_SYNC_LEASE_SECONDS` | No | Claim lease before a stalled row is reclaimed (default `300`) |
+| `DOC_SYNC_MAX_ATTEMPTS` | No | Attempts before a document is marked `failed` (default `5`) |
 | `GRADER_REVIEW_GOAL` | No | Resume-review target per grader (default `30`) |
 | `FRQ_REVIEW_GOAL` | No | FRQ-review target (defaults to `GRADER_REVIEW_GOAL`) |
 | `PASSWORD_RESET_URL` | No | Frontend reset route (default `http://localhost:5173/reset-password`) |
@@ -134,6 +139,32 @@ Used to pull new applications from a Google Form into the active or draft recrui
 
 `server/form-config.json` and `FORM_CONFIG_PATH` remain available only as a legacy fallback. `npm run discover-form-fields` also uses that legacy file unless `GOOGLE_FORM_ID` is supplied.
 
+## Document sync worker
+
+Candidate headshots are copied out of Google Drive into a private Supabase Storage
+bucket by a background worker, so the avatar grid is served from Supabase's CDN
+instead of proxying a Drive stream per image on every view.
+
+Run `add_document_sync_queue.sql` (migration #29) first — it creates the `documents`
+queue table, the `claim_pending_documents` RPC, and the `candidate-documents` bucket.
+
+```bash
+cd server && npm run worker
+```
+
+On Render, deploy this as a **Background Worker** alongside the web service: same
+repo, root directory `server`, build `npm install`, start `npm run worker`, and the
+same environment variables as the API (it needs `SUPABASE_URL`,
+`SUPABASE_SERVICE_KEY`, and Google Drive credentials).
+
+The queue is the `documents` table itself — the Forms sync enqueues a row as it
+records each candidate, and the worker claims batches with `FOR UPDATE SKIP LOCKED`.
+Rows that fail back off exponentially and go terminal (`sync_status = 'failed'`)
+after `DOC_SYNC_MAX_ATTEMPTS`, so a permanently broken Drive file can't retry forever.
+
+Until a document is synced, the read path falls back to the existing Drive proxy, so
+the worker can be deployed before or after the API without breaking images.
+
 ## Roles
 
 | Role | Access |
@@ -168,6 +199,7 @@ cd client && npm run build
 |---------|-------|-------------|
 | `npm start` | `server/` | Start API |
 | `npm run dev` | `server/` | Start API with Node's built-in watch mode |
+| `npm run worker` | `server/` | Run the document sync worker (Drive → Supabase Storage) |
 | `npm run discover-form-fields` | `server/` | Print Google Form question → field map |
 | `npm run gmail-oauth-setup` | `server/` | Create a Gmail OAuth refresh token |
 | `npm run gmail-test-send` | `server/` | Send a Gmail configuration test |

@@ -1,17 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const resumeController = require('../controllers/resumeController');
+const applicationProfileController = require('../controllers/applicationProfileController');
+const resumeFileController = require('../controllers/resumeFileController');
 const demographicsController = require('../controllers/demographicsController');
 const assignmentController = require('../controllers/assignmentController');
 const { authenticateToken, requireRoles } = require('../middleware/authMiddleware');
 
-router.use(authenticateToken, requireRoles('admin', 'member'));
+router.use(authenticateToken, requireRoles('admin', 'member', 'board'));
 
-router.get('/next-frq', requireRoles('admin'), resumeController.getNextFrq);
-router.get('/frq-reviews', requireRoles('admin'), resumeController.listMyFrqReviews);
-router.get('/frq-reviews/:reviewId/candidate', requireRoles('admin'), resumeController.getFrqReviewCandidate);
-router.post('/frq-reviews', requireRoles('admin'), resumeController.saveFrqReview);
-router.patch('/frq-reviews/:reviewId', requireRoles('admin'), resumeController.patchMyFrqReview);
+router.get('/next-frq', requireRoles('admin', 'board'), resumeController.getNextFrq);
+router.get('/frq-reviews', requireRoles('admin', 'board'), resumeController.listMyFrqReviews);
+router.get('/frq-reviews/:reviewId/candidate', requireRoles('admin', 'board'), resumeController.getFrqReviewCandidate);
+router.post('/frq-reviews', requireRoles('admin', 'board'), resumeController.saveFrqReview);
+router.patch('/frq-reviews/:reviewId', requireRoles('admin', 'board'), resumeController.patchMyFrqReview);
 router.get('/assignments', requireRoles('admin'), assignmentController.getAssignmentBoard);
 router.post('/assignments', requireRoles('admin'), assignmentController.createAssignments);
 router.delete('/assignments', requireRoles('admin'), assignmentController.deleteAssignments);
@@ -31,8 +33,13 @@ router.patch('/candidate-flags/:id/resolve', requireRoles('admin'), resumeContro
 router.get('/candidate-referrals', requireRoles('admin'), resumeController.getCandidateReferrals);
 router.patch('/candidate-referrals/:id/resolve', requireRoles('admin'), resumeController.resolveCandidateReferral);
 router.get('/resume/:id/file', resumeController.getResumeFile);
+router.get('/resume/:id/file-access', resumeFileController.fileAccess);
+router.get('/resume/:id/file-content', resumeFileController.fileContent);
 router.get('/view/pdf', resumeController.viewPdf);
 router.get('/view/image', resumeController.viewImage);
+router.get('/candidates/:candidateId/headshot-url', resumeController.getCandidateHeadshotUrl);
+router.get('/scoreboard/:resumeId/application/profile', applicationProfileController.profile);
+router.get('/scoreboard/:resumeId/application/responses', applicationProfileController.responses);
 router.get('/scoreboard/:resumeId/application/summary', resumeController.getScoreboardApplicationSummary);
 router.get('/scoreboard/:resumeId/application', resumeController.getScoreboardApplication);
 router.get('/scoreboard/:resumeId/application/admin-override', requireRoles('admin'), resumeController.getAdminOverride);

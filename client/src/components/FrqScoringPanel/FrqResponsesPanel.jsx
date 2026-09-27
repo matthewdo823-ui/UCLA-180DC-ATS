@@ -1,9 +1,10 @@
 import { css } from "../../theme/colors";
-import { FRQ_ESSAY_FIELDS } from "../../constants/frq";
 import { hasText } from "../../pages/CandidateApplicationPage/applicationUtils";
+import { getGradableApplicationResponses } from "../../utils/applicationResponses";
 
 export default function FrqResponsesPanel({ candidate }) {
   const essays = candidate?.candidates || candidate || {};
+  const responses = getGradableApplicationResponses(essays);
 
   return (
     <div
@@ -36,21 +37,20 @@ export default function FrqResponsesPanel({ candidate }) {
         Application responses
       </div>
 
-      {FRQ_ESSAY_FIELDS.map(({ key, label }) => {
-        const value = essays[key] ?? "";
+      {responses.map(({ questionId, title, answer }) => {
         return (
-          <div key={key} style={{ marginBottom: 20 }}>
-            <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: css.greenDark }}>{label}</p>
+          <div key={questionId} style={{ marginBottom: 20 }}>
+            <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: css.greenDark }}>{title}</p>
             <p
               style={{
                 margin: 0,
                 fontSize: 14,
                 lineHeight: 1.6,
-                color: hasText(value) ? css.textDark : css.textGray,
+                color: hasText(answer) ? css.textDark : css.textGray,
                 whiteSpace: "pre-wrap",
               }}
             >
-              {hasText(value) ? value.trim() : "Not provided"}
+              {hasText(answer) ? answer.trim() : "Not provided"}
             </p>
           </div>
         );

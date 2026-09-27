@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { API } from "../../constants/config";
 import { readJsonOrThrow } from "../../lib/queryClient";
 import { qk } from "../../lib/queryKeys";
@@ -7,7 +7,7 @@ import { css } from "../../theme/colors";
 import { formatResponseError } from "../../utils/errors";
 import { formatDate } from "../../utils/format";
 import { formatPacific, isoToPacificInputs, pacificToIso } from "../../utils/pacificTime";
-import ActionButton from "./ActionButton";
+import ActionButton from "../../components/ActionButton/ActionButton";
 
 const DEFAULT_STEPS = [1, 1.025, 1.05, 1.075, 1.1];
 const EXAMPLE_SCORE = 12;
@@ -521,77 +521,9 @@ function InterestReviewQueue({ cycleId, authedFetch, onChanged }) {
   );
 }
 
-export default function DemonstratedInterestSection({ cycle, busy, authedFetch, onCycleSaved }) {
-  const queryClient = useQueryClient();
-  const [expanded, setExpanded] = useState(false);
-
-  const eventsQuery = useQuery({
-    queryKey: qk.interestEvents(cycle.id),
-    queryFn: async () => {
-      const res = await authedFetch(`${API}/cycles/${cycle.id}/interest-events`);
-      return readJsonOrThrow(res, "loading Demonstrated Interest events", "Run server/sql/add_demonstrated_interest.sql and check server/src/routes/interestRoutes.js");
-    },
-  });
-  const events = eventsQuery.data?.events || [];
-  const needsReview = events.reduce((sum, e) => sum + (e.counts?.unmatched || 0) + (e.counts?.late || 0), 0);
-  const staleCount = events.filter((e) => e.mappingStatus === "stale").length;
-
-  // Attendance changes move scores, so expire the scoreboard and profile caches too.
-  async function refreshAll() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: qk.interestEvents(cycle.id) }),
-      queryClient.invalidateQueries({ queryKey: qk.interestAttendance(cycle.id) }),
-      queryClient.invalidateQueries({ queryKey: qk.scoreboardRoot() }),
-      queryClient.invalidateQueries({ queryKey: qk.candidateApplicationsRoot() }),
-    ]);
-  }
-
-  async function handleStepsSaved() {
-    await Promise.all([onCycleSaved(), queryClient.invalidateQueries({ queryKey: qk.scoreboardRoot() })]);
-  }
-
-  const summary = eventsQuery.isPending
-    ? "Loading…"
-    : eventsQuery.error
-      ? "Not available. Has the Demonstrated Interest migration been run?"
-      : `${events.length} event${events.length === 1 ? "" : "s"}${needsReview ? ` · ${needsReview} need review` : ""}${staleCount ? ` · ${staleCount} form${staleCount === 1 ? "" : "s"} changed` : ""}`;
-
-  return (
-    <div style={{ border: `1px solid ${staleCount ? "rgba(226,75,74,0.4)" : css.borderLight}`, borderRadius: 12, padding: expanded ? 16 : "12px 14px", background: "#FFF" }}>
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", padding: 0, cursor: "pointer", textAlign: "left" }}
-      >
-        <span style={{ fontSize: 12, color: css.textGray, lineHeight: 1 }}>{expanded ? "▾" : "▸"}</span>
-        <div style={{ minWidth: 0 }}>
-          <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: css.textDark }}>Demonstrated Interest</h4>
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray }}>
-            {expanded ? "Event attendance, logged through one Google Form per event, multiplies each candidate's Resume + FRQ score." : summary}
-          </p>
-        </div>
-      </button>
-
-      {expanded ? (
-        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-          <InterestMultiplierEditor cycle={cycle} busy={busy} authedFetch={authedFetch} onSaved={handleStepsSaved} />
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <h5 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: css.textDark }}>Events</h5>
-            {eventsQuery.error ? (
-              <p style={{ margin: 0, fontSize: 12, color: css.red }}>{eventsQuery.error.message}</p>
-            ) : null}
-            {events.map((event) => (
-              <InterestEventPanel key={event.id} event={event} authedFetch={authedFetch} onChanged={refreshAll} />
-            ))}
-            {!eventsQuery.error ? <AddEventForm cycleId={cycle.id} authedFetch={authedFetch} onAdded={refreshAll} /> : null}
-          </div>
-
-          {!eventsQuery.error && events.length ? (
-            <InterestReviewQueue cycleId={cycle.id} authedFetch={authedFetch} onChanged={refreshAll} />
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
+export {
+  InterestMultiplierEditor,
+  InterestEventPanel,
+  AddEventForm,
+  InterestReviewQueue,
+};

@@ -10,6 +10,7 @@ import ErrorBoundary from "./components/ErrorBoundary/ErrorBoundary";
 const DashboardPage = lazy(() => import("./pages/DashboardPage/DashboardPage"));
 const FlaggedCandidatesPage = lazy(() => import("./pages/FlaggedCandidatesPage/FlaggedCandidatesPage"));
 const CycleManagementPage = lazy(() => import("./pages/CycleManagementPage/CycleManagementPage"));
+const DemonstratedInterestPage = lazy(() => import("./pages/DemonstratedInterestPage/DemonstratedInterestPage"));
 const UserManagementPage = lazy(() => import("./pages/UserManagementPage/UserManagementPage"));
 const AssignmentsPage = lazy(() => import("./pages/AssignmentsPage/AssignmentsPage"));
 const GraderScoreboardPage = lazy(() => import("./pages/GraderScoreboardPage/GraderScoreboardPage"));
@@ -49,7 +50,7 @@ function AppShell() {
             <Route
               path="/no-access"
               element={
-                <ProtectedRoute allowedRoles={["admin", "member", "applicant"]}>
+                <ProtectedRoute allowedRoles={["admin", "member", "board", "applicant"]}>
                   <NoAccessPage />
                 </ProtectedRoute>
               }
@@ -105,7 +106,7 @@ function AppShell() {
             <Route
               path="/candidates/:candidateId"
               element={
-                <ProtectedRoute allowedRoles={["admin", "member"]}>
+                <ProtectedRoute allowedRoles={["admin", "member", "board"]}>
                   <CandidateApplicationPage />
                 </ProtectedRoute>
               }
@@ -113,7 +114,7 @@ function AppShell() {
             <Route
               path="/scoreboard/:candidateId/application"
               element={
-                <ProtectedRoute allowedRoles={["admin", "member"]}>
+                <ProtectedRoute allowedRoles={["admin", "member", "board"]}>
                   <CandidateApplicationPage />
                 </ProtectedRoute>
               }
@@ -139,6 +140,14 @@ function AppShell() {
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <CycleManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/demonstrated-interest"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <DemonstratedInterestPage />
                 </ProtectedRoute>
               }
             />

@@ -27,6 +27,7 @@ export default function LoginPage() {
   const isCreateMode = mode === "create";
   const isForgotMode = mode === "forgot";
   const isResetMode = mode === "reset";
+  const isInvalidCredentials = mode === "login" && error?.status === 401;
   const resetToken = new URLSearchParams(location.search).get("token") || "";
 
   useEffect(() => {
@@ -167,7 +168,13 @@ export default function LoginPage() {
           </>
         )}
 
-        <ErrorBanner error={error} style={{ marginTop: 16 }} onDismiss={() => setError(null)} />
+        {isInvalidCredentials ? (
+          <div role="alert" style={{ marginTop: 16, color: css.red, fontSize: 13 }}>
+            Invalid email or password
+          </div>
+        ) : (
+          <ErrorBanner error={error} style={{ marginTop: 16 }} onDismiss={() => setError(null)} />
+        )}
         {notice && <div style={{ marginTop: 16, color: css.greenDark, background: "rgba(29,158,117,0.08)", border: "1px solid rgba(29,158,117,0.18)", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>{notice}</div>}
 
         <button
