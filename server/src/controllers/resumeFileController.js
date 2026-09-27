@@ -3,6 +3,7 @@ const { extractDriveFileID, isGoogleDriveFileUrl } = require('../utils/drive');
 const { getSignedUrl } = require('../utils/documentStorage');
 const { streamDriveFileToResponse, sendDriveProxyError } = require('../utils/driveStream');
 const { firstRel } = require('../utils/supabaseHelpers');
+const { isStaffRole } = require('../utils/auth');
 
 const RESUME_LINK_TTL_SECONDS = 15 * 60;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -12,7 +13,7 @@ function createResumeFileHandlers({ client = supabase, sign = getSignedUrl, stre
     // Same staff audience as the candidate profile, including historical cycles.
     // Resolve the source from a real resume row, never a caller-supplied URL.
     if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return null; }
-    if (!['admin', 'member'].includes(req.user.role)) { res.status(403).json({ error: 'Insufficient permissions' }); return null; }
+    if (!isStaffRole(req.user.role)) { res.status(403).json({ error: 'Insufficient permissions' }); return null; }
     if (!UUID.test(req.params.id || '')) { res.status(400).json({ error: 'Invalid resume ID' }); return null; }
     const { data, error } = await client.from('resumes')
       .select('id, candidate_id, cycle_id, file_url, candidates ( cycle_id )')

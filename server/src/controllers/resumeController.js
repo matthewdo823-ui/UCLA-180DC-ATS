@@ -955,9 +955,8 @@ function formatFrqCandidateRow(row) {
 }
 
 async function fetchFrqReviewRowById(reviewId, gradedBy) {
-    return supabase
-        .from("frq_reviews")
-        .select(`
+    const selectRow = candidateFields => supabase
+        .from("frq_reviews").select(`
             id,
             resume_id,
             score,
@@ -967,20 +966,17 @@ async function fetchFrqReviewRowById(reviewId, gradedBy) {
                 id,
                 name,
                 candidates (
-                    year,
-                    major,
-                    gpa,
-                    name,
-                    why_consulting,
-                    why_180dc,
-                    why_social_impact,
-                    application_responses
+                    ${candidateFields}
                 )
             )
         `)
         .eq("id", reviewId)
         .eq("graded_by", gradedBy)
         .maybeSingle();
+    const legacyFields = 'year, major, gpa, name, why_consulting, why_180dc, why_social_impact';
+    let result = await selectRow(`${legacyFields}, application_responses`);
+    if (result.error && isMissingSchemaError(result.error)) result = await selectRow(legacyFields);
+    return result;
 }
 
 /** Next candidate for admin FRQ grading (skips already-graded-by-me). */
@@ -1008,20 +1004,13 @@ exports.getNextFrq = async (req, res) => {
     }
     const reviewedResumeIdSet = new Set(reviewedResumeIds);
 
-    let query = supabase
-        .from("resumes")
-        .select(`
+    const selectCandidates = candidateFields => {
+        let query = supabase.from("resumes").select(`
             id,
             name,
             frq_review_count,
             candidates!inner (
-                year,
-                name,
-                major,
-                why_consulting,
-                why_180dc,
-                why_social_impact,
-                application_responses
+                ${candidateFields}
             )
         `)
         .eq("cycle_id", screening.cycle.id)
@@ -1029,11 +1018,17 @@ exports.getNextFrq = async (req, res) => {
         .order("frq_review_count", { ascending: true })
         .order("created_at", { ascending: true });
 
-    if (reviewedResumeIds.length) {
-        query = query.not("id", "in", `(${reviewedResumeIds.join(",")})`);
-    }
+        if (reviewedResumeIds.length) {
+            query = query.not("id", "in", `(${reviewedResumeIds.join(",")})`);
+        }
+        return query.limit(100);
+    };
 
-    const { data: resumeCandidates, error } = await query.limit(100);
+    const legacyFields = 'year, name, major, why_consulting, why_180dc, why_social_impact';
+    let { data: resumeCandidates, error } = await selectCandidates(`${legacyFields}, application_responses`);
+    if (error && isMissingSchemaError(error)) {
+        ({ data: resumeCandidates, error } = await selectCandidates(legacyFields));
+    }
     if (error) return respondWithServerError(res, error, "getNextFrq");
 
     for (const row of resumeCandidates || []) {
@@ -2545,12 +2540,15 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
         throw err;
     }
 
-    // The resume and round metadata share the resolved cycle context but do not
-    // depend on one another, so load them together before fetching reviews.
-    const [resumeResult, cycleRounds] = await Promise.all([
-        supabase
-            .from('resumes')
-            .select(`
+    const legacyCandidateFields = `
+        id, name, email, phone_number, major, gpa, year, pronouns, urm,
+        linkedin, gm, newbie_training, why_consulting, why_180dc,
+        why_social_impact, extenuating_circumstances, headshot,
+        resume_file_url, created_at, cycle_id`;
+    const mappedCandidateFields = `${legacyCandidateFields}, referral_source,
+        previously_applied, professional_development,
+        consulting_connect_interest, application_responses`;
+    const selectResume = candidateFields => supabase.from('resumes').select(`
                 id,
                 name,
                 file_url,
@@ -2558,37 +2556,21 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
                 created_at,
                 cycle_id,
                 candidates (
-                    id,
-                    name,
-                    email,
-                    phone_number,
-                    major,
-                    gpa,
-                    year,
-                    pronouns,
-                    urm,
-                    linkedin,
-                    gm,
-                    newbie_training,
-                    referral_source,
-                    previously_applied,
-                    professional_development,
-                    consulting_connect_interest,
-                    why_consulting,
-                    why_180dc,
-                    why_social_impact,
-                    application_responses,
-                    extenuating_circumstances,
-                    headshot,
-                    resume_file_url,
-                    created_at,
-                    cycle_id
+                    ${candidateFields}
                 )
             `)
             .eq('id', resumeId)
-            .maybeSingle(),
+            .maybeSingle();
+
+    // The resume and round metadata share the resolved cycle context but do not
+    // depend on one another, so load them together before fetching reviews.
+    let [resumeResult, cycleRounds] = await Promise.all([
+        selectResume(mappedCandidateFields),
         getRoundsForCycle(activeCycleId),
     ]);
+    if (resumeResult.error && isMissingSchemaError(resumeResult.error)) {
+        resumeResult = await selectResume(legacyCandidateFields);
+    }
 
     const coffeeChatRound = getRoundByType(cycleRounds, ROUND_TYPES.COFFEE_CHAT);
     const interviewRounds = (cycleRounds || []).filter((round) => isInterviewRoundType(round.type));
@@ -2894,31 +2876,35 @@ async function fetchScoreboardApplicationSummarySource(resumeId, requestedCycleI
     // The AI prompt only needs the candidate's free responses and cycle labels.
     // Avoid rebuilding every review, grader, signal, and override merely to read
     // or generate a cached two-sentence summary.
-    const [activeCycleResult, resumeRound, resumeResult] = await Promise.all([
+    const selectResume = includeSnapshots => supabase
+        .from('resumes')
+        .select(`
+            id,
+            cycle_id,
+            candidates (
+                id,
+                name,
+                why_consulting,
+                why_180dc,
+                why_social_impact,
+                ${includeSnapshots ? 'application_responses,' : ''}
+                cycle_id
+            )
+        `)
+        .eq('id', resumeId)
+        .maybeSingle();
+    let [activeCycleResult, resumeRound, resumeResult] = await Promise.all([
         supabase
             .from('cycles')
             .select('id, name')
             .eq('id', activeCycleId)
             .maybeSingle(),
         getResumeScreenRoundForCycle(activeCycleId),
-        supabase
-            .from('resumes')
-            .select(`
-                id,
-                cycle_id,
-                candidates (
-                    id,
-                    name,
-                    why_consulting,
-                    why_180dc,
-                    why_social_impact,
-                    application_responses,
-                    cycle_id
-                )
-            `)
-            .eq('id', resumeId)
-            .maybeSingle(),
+        selectResume(true),
     ]);
+    if (resumeResult.error && isMissingSchemaError(resumeResult.error)) {
+        resumeResult = await selectResume(false);
+    }
 
     const { data: activeCycle, error: activeCycleError } = activeCycleResult;
     if (activeCycleError) {

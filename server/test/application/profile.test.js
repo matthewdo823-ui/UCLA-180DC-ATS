@@ -6,11 +6,15 @@ const { createApplicationProfileHandlers } = require('../../src/controllers/appl
 const id = '00000000-0000-4000-8000-000000000001';
 const cycle = '00000000-0000-4000-8000-000000000002';
 const row = { id, cycle_id: cycle, file_url: 'resume-source', candidates: { id, cycle_id: cycle, name: 'Candidate', why_consulting: 'Essay' }, cycles: { id: cycle, name: 'Cycle' } };
-function fixture(data = row) {
+function fixture(data = row, { firstResumeError = null } = {}) {
   const calls = [];
+  let resumeReads = 0;
   const client = { from(table) {
     calls.push(table);
     const query = { select() { return query; }, eq() { return query; }, async maybeSingle() {
+      if (table === 'resumes' && resumeReads++ === 0 && firstResumeError) {
+        return { data: null, error: firstResumeError };
+      }
       return { data: table === 'app_settings' ? { active_cycle_id: cycle } : data };
     } };
     return query;
@@ -34,6 +38,15 @@ test('responses do not wait for grade history or include contact information', a
   assert.deepEqual(f.calls, ['resumes']);
   assert.equal(f.res.body.responses.whyConsulting, 'Essay');
   assert.equal(f.res.body.candidate, undefined);
+});
+test('pre-migration schemas fall back to legacy profile and essay columns', async () => {
+  const missingColumn = { code: '42703', message: 'column candidates_1.application_responses does not exist' };
+  for (const kind of ['profile', 'responses']) {
+    const f = fixture(row, { firstResumeError: missingColumn });
+    await f[kind](req(cycle), f.res);
+    assert.equal(f.res.statusCode, 200);
+    assert.deepEqual(f.calls, ['resumes', 'resumes']);
+  }
 });
 test('default cycle resolves active context; historical explicit cycles do not depend on it', async () => {
   const f = fixture(); await f.profile(req(), f.res);

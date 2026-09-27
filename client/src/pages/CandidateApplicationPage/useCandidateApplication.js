@@ -1,14 +1,11 @@
-import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAuthedFetch, useAuth } from "../../auth/AuthContext";
+import { useAuthedFetch } from "../../auth/AuthContext";
 import { candidateApplicationQueryOptions, candidateProfileQueryOptions } from "../../lib/candidateApplicationQuery";
 import { qk } from "../../lib/queryKeys";
-import { loadResumeBlob } from "../../utils/resumeFiles";
 import { normalizeError } from "../../utils/errors";
 
 export default function useCandidateApplication(resumeId, cycleId = null) {
   const authedFetch = useAuthedFetch();
-  const { token } = useAuth();
   const queryClient = useQueryClient();
   const id = String(resumeId || "").trim();
   const profile = useQuery({
@@ -25,15 +22,6 @@ export default function useCandidateApplication(resumeId, cycleId = null) {
   const details = useQuery({ ...candidateApplicationQueryOptions(authedFetch, id, cycleId), enabled: verified });
   const responses = useQuery({ ...candidateApplicationQueryOptions(authedFetch, id, cycleId, "responses"), enabled: verified });
   const resume = profile.data?.resume;
-  useEffect(() => {
-    if (!verified || !resume?.fileUrl || !token) return undefined;
-    // Let the shell paint before fetching this candidate's document. The viewer
-    // shares this cache/inflight request, so opening it never duplicates bytes.
-    const timer = setTimeout(() => {
-      loadResumeBlob({ resumeId: id, sourceUrl: resume.fileUrl, authToken: token }).catch(() => {});
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [verified, id, resume?.fileUrl, token]);
   const context = details.data?.context || profile.data?.context;
   return {
     candidate: profile.data?.candidate, resume,

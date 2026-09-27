@@ -76,11 +76,10 @@ function getKeyFilePath() {
 
 /** Workspace user who owns the form / upload folder (domain-wide delegation). */
 function getDriveImpersonateUser() {
-  return (
-    process.env.GOOGLE_DRIVE_IMPERSONATE_USER
-    || process.env.GMAIL_IMPERSONATE_USER
-    || ""
-  ).trim();
+  // Gmail and Drive delegation are separate grants. Reusing the Gmail sender
+  // here made every resume request fail with unauthorized_client when that
+  // account had Gmail delegation but not Drive delegation.
+  return String(process.env.GOOGLE_DRIVE_IMPERSONATE_USER || "").trim();
 }
 
 // Share links (/forms/d/e/<publishId>/viewform) carry a publish id, not the form id the API needs.

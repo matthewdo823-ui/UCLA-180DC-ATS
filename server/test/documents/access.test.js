@@ -59,6 +59,8 @@ test('fallback resolves the stored URL and rejects an obsolete source version', 
   req.query.version='source_A';await fileContent(req,response());assert.equal(streamed,resume.file_url);
 });
 test('historical profiles retain staff resume access independent of the active cycle', async () => {
-  const res=response();await createResumeFileHandlers({client:clientFor()}).fileAccess(request({role:'member'}),res);
-  assert.equal(res.statusCode,200);
+  for (const role of ['member', 'board', 'admin']) {
+    const res=response();await createResumeFileHandlers({client:clientFor()}).fileAccess(request({role}),res);
+    assert.equal(res.statusCode,200);
+  }
 });
