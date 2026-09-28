@@ -82,6 +82,24 @@ function getDriveImpersonateUser() {
   return String(process.env.GOOGLE_DRIVE_IMPERSONATE_USER || "").trim();
 }
 
+// Latched, not time-windowed: the condition is a missing environment variable,
+// which cannot change without a restart, so one line per process is the whole
+// signal. Reset only for tests.
+let warnedMissingDriveDelegation = false;
+
+function warnMissingDriveDelegation() {
+  if (warnedMissingDriveDelegation) return;
+  warnedMissingDriveDelegation = true;
+  console.error(
+    "[googleForm] GOOGLE_DRIVE_IMPERSONATE_USER is not set, so Drive reads run as"
+    + " the service account itself. Link-shared files still work; files owned by a"
+    + " Workspace account (every Google Forms upload) will fail as inaccessible."
+    + " Set GOOGLE_DRIVE_IMPERSONATE_USER to the account that owns the form and"
+    + " grant it domain-wide delegation for " + SCOPES_READ.join(" ") + "."
+    + " Note this is independent of GMAIL_IMPERSONATE_USER."
+  );
+}
+
 // Share links (/forms/d/e/<publishId>/viewform) carry a publish id, not the form id the API needs.
 function isGoogleFormResponderUrl(input) {
   return /\/forms\/d\/e\//.test(String(input || ""));
@@ -324,6 +342,17 @@ async function getDriveClient() {
     return drive({ version: "v3", auth });
   }
 
+  // No delegation subject configured. A bare service-account client still reads
+  // link-shared files, which is how local dev and non-Workspace deployments
+  // work, so this branch stays — but on a Workspace deployment it is an outage
+  // dressed as a working client: Drive answers 401/403/404 per file and every
+  // caller treats that as "this one file isn't shared" and falls through to the
+  // public URL, which then returns a sign-in page for every restricted upload.
+  //
+  // So warn loudly enough to grep for, and exactly once: getDriveClient() is
+  // called on every resume view and every worker download, and a per-request
+  // line would bury the signal in the noise it is meant to cut through.
+  warnMissingDriveDelegation();
   const auth = new GoogleAuth({ keyFile, scopes: SCOPES_READ });
   const authClient = await auth.getClient();
   return drive({ version: "v3", auth: authClient });
