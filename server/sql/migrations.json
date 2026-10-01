@@ -178,6 +178,11 @@
       "order": 34,
       "file": "add_board_role.sql",
       "mode": "auto"
+    },
+    {
+      "order": 35,
+      "file": "add_user_account_status.sql",
+      "mode": "auto"
     }
   ]
 }

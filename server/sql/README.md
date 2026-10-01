@@ -54,6 +54,7 @@ The table below documents the order and intent; it is kept in sync with
 | 32 | `add_cycle_application_question_mapping.sql` | Additive cycle question catalogs, response snapshots, names, and structured application fields |
 | 33 | `repair_fall_26_application_mapping.sql` | **Manual post-deploy repair** — correct Fall '26 mappings before its one-time re-sync |
 | 34 | `add_board_role.sql` | Add the `board` database role (member access plus FRQ grading in the application) |
+| 35 | `add_user_account_status.sql` | Pending approval, deactivation, and account lifecycle audit metadata |
 
 ## First-time setup on a new database
 
@@ -95,6 +96,7 @@ database that has application tables but no migration history.
   rejects `draft` and `active`, so the database and API cannot straddle the
   change. The script aborts with a named list if any cycle currently has more
   than one open round; close all but one in each, then re-run.
+- **`add_user_account_status.sql` (#35):** Existing admins, board members, and members remain active. Existing applicant-only accounts become pending so an admin can approve or reject them.
 
 - **`add_candidate_referral_resolution.sql` (#25):** Run on existing databases that already applied `add_candidate_referrals.sql` before referral resolution was added.
 

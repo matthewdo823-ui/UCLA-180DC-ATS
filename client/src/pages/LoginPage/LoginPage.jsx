@@ -62,9 +62,17 @@ export default function LoginPage() {
         return;
       }
 
-      const loggedInUser = isCreateMode
-        ? await createAccount({ email, password, first_name: firstName, last_name: lastName })
-        : await login({ email, password });
+      if (isCreateMode) {
+        const result = await createAccount({ email, password, first_name: firstName, last_name: lastName });
+        setMode("login");
+        setNotice(result.message || "Access request submitted. An administrator must approve it before you can sign in.");
+        setPassword("");
+        setConfirmPassword("");
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      const loggedInUser = await login({ email, password });
       navigate(isStaffRole(loggedInUser?.role) ? redirectTo : "/no-access", { replace: true });
     } catch (err) {
       setError(err);
@@ -103,11 +111,11 @@ export default function LoginPage() {
         />
 
         <h1 style={{ fontSize: 26, margin: "0 0 8px", letterSpacing: "-0.03em" }}>
-          {isCreateMode ? "Create account" : isForgotMode ? "Reset your password" : isResetMode ? "Choose a new password" : "Sign in"}
+          {isCreateMode ? "Request access" : isForgotMode ? "Reset your password" : isResetMode ? "Choose a new password" : "Sign in"}
         </h1>
         <p style={{ fontSize: 14, color: css.textGray, marginBottom: 28 }}>
           {isCreateMode
-            ? "New accounts start as applicants until an admin updates their role."
+            ? "Submit your details for approval. You can sign in after a 180DC admin approves your request."
             : isForgotMode ? "Enter your email and we’ll send a password-reset link if an account exists."
             : isResetMode ? "Choose a new password for your account."
             : "Log into your account to continue to the epic 180DC recruitment platform."}
@@ -193,7 +201,7 @@ export default function LoginPage() {
             cursor: submitting ? "not-allowed" : "pointer",
           }}
         >
-          {submitting ? "Please wait..." : (isCreateMode ? "Create account" : isForgotMode ? "Send reset link" : isResetMode ? "Reset password" : "Sign in")}
+          {submitting ? "Please wait..." : (isCreateMode ? "Submit access request" : isForgotMode ? "Send reset link" : isResetMode ? "Reset password" : "Sign in")}
         </button>
 
         {!isCreateMode && !isForgotMode && !isResetMode && <button type="button" onClick={() => { setMode("forgot"); setError(""); setNotice(""); navigate("/forgot-password"); }} style={{ width: "100%", marginTop: 10, border: "none", background: "transparent", color: css.textGray, padding: "6px 0", fontSize: 13, cursor: "pointer" }}>Forgot password?</button>}
@@ -219,7 +227,7 @@ export default function LoginPage() {
             cursor: "pointer",
           }}
         >
-          {isCreateMode ? "Already have an account? Sign in" : isForgotMode || isResetMode ? "Back to sign in" : "Create new account"}
+          {isCreateMode ? "Already approved? Sign in" : isForgotMode || isResetMode ? "Back to sign in" : "Request access"}
         </button>
       </form>
     </div>
