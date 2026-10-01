@@ -101,18 +101,8 @@ BEGIN
             "imageUrl": "/rubrics/SophomoreRubric.png",
             "metrics": ["work experience", "leadership experience", "social impact"]
           },
-          "junior": {
-            "label": "Junior & Senior",
-            "imageUrl": "/rubrics/OthersRubric.png",
-            "metrics": ["leadership/work experience", "business or social impact"]
-          },
           "juniortransfer": {
-            "label": "Junior & Senior",
-            "imageUrl": "/rubrics/OthersRubric.png",
-            "metrics": ["leadership/work experience", "business or social impact"]
-          },
-          "senior": {
-            "label": "Junior & Senior",
+            "label": "Junior Transfer",
             "imageUrl": "/rubrics/OthersRubric.png",
             "metrics": ["leadership/work experience", "business or social impact"]
           }
