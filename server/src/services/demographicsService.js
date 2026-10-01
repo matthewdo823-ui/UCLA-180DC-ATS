@@ -7,9 +7,24 @@ const {
   sortRounds,
 } = require("../utils/rounds");
 
+const IDENTITY_INDICATORS = [
+  { id: "latinx", label: "Latinx", patterns: [/\blatinx\b/i] },
+  { id: "black", label: "Black", patterns: [/\bblack\b/i] },
+  { id: "pacific_islander", label: "Pacific Islander", patterns: [/\bpacific islander\b/i] },
+  { id: "native_indigenous", label: "Native American / Indigenous", patterns: [/\bnative american\b/i, /\bindigenous\b/i] },
+  { id: "first_generation", label: "First-generation college student", patterns: [/\bfirst[ -]?generation college student\b/i] },
+  { id: "pell_cal_grant", label: "Pell / Cal Grant recipient", patterns: [/\bpell\b/i, /\bcal grant\b/i] },
+  { id: "neurodivergent", label: "Neurodivergent", patterns: [/\bneurodivergent\b/i] },
+  { id: "disabled", label: "Disabled", patterns: [/\bdisabled\b/i, /\bdisability\b/i] },
+];
+
 const DEMOGRAPHIC_FIELDS = [
   { id: "year", label: "Class year", type: "categorical" },
-  { id: "urm", label: "URM", type: "grouped" },
+  ...IDENTITY_INDICATORS.map((indicator) => ({
+    ...indicator,
+    type: "indicator",
+    sourceId: "urm",
+  })),
   { id: "pronouns", label: "Pronouns", type: "pronouns" },
   { id: "major", label: "Major", type: "grouped" },
   { id: "gpa", label: "GPA", type: "gpa" },
@@ -40,8 +55,16 @@ function bucketGpa(value) {
   return "3.8+";
 }
 
+function normalizeIndicator(value, patterns = []) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "Not specified";
+  return patterns.some((pattern) => pattern.test(raw)) ? "Selected" : "Not selected";
+}
+
 function normalizeCategoryValue(field, rawValue) {
   switch (field.type) {
+    case "indicator":
+      return normalizeIndicator(rawValue, field.patterns);
     case "pronouns":
       return normalizePronouns(rawValue);
     case "gpa":
@@ -55,6 +78,10 @@ function normalizeCategoryValue(field, rawValue) {
 
 function getCandidateFieldValue(candidate, fieldId) {
   return candidate?.[fieldId] ?? "";
+}
+
+function getCandidateValue(candidate, field) {
+  return getCandidateFieldValue(candidate, field.sourceId || field.id);
 }
 
 function buildGroupedCategoryOrder(appliedCounts) {
@@ -88,9 +115,9 @@ function mapGroupedValue(value, groupedCategoryOrder) {
 function countByField(candidates, field, groupedCategoryOrder = null) {
   const counts = {};
   (candidates || []).forEach((candidate) => {
-    let category = normalizeCategoryValue(field, getCandidateFieldValue(candidate, field.id));
+    let category = normalizeCategoryValue(field, getCandidateValue(candidate, field));
     if (field.type === "grouped" && groupedCategoryOrder) {
-      category = mapGroupedValue(getCandidateFieldValue(candidate, field.id), groupedCategoryOrder);
+      category = mapGroupedValue(getCandidateValue(candidate, field), groupedCategoryOrder);
     }
     counts[category] = (counts[category] || 0) + 1;
   });
@@ -195,6 +222,8 @@ function buildDimensionBreakdown(stages, field) {
     categories = ["Below 3.0", "3.0 – 3.49", "3.5 – 3.79", "3.8+", "Not specified"];
   } else if (field.type === "pronouns") {
     categories = ["He/Him", "She/Her", "They/Them", "Other", "Not specified"];
+  } else if (field.type === "indicator") {
+    categories = ["Selected", "Not selected", "Not specified"];
   } else if (field.type === "grouped") {
     categories = groupedCategoryOrder;
   } else {
@@ -214,6 +243,7 @@ function buildDimensionBreakdown(stages, field) {
   return {
     id: field.id,
     label: field.label,
+    kind: field.type,
     categories,
     stages: stageCounts,
   };
