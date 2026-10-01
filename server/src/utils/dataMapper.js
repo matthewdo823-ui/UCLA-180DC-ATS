@@ -121,12 +121,6 @@ function extractValueForColumn(answer, columnName) {
   return extractTextFromAnswer(answer);
 }
 
-/** Maps common aliases to Postgres column names (unquoted identifiers are lowercased). */
-function normalizeTargetColumn(columnName) {
-  if (columnName === "why_180DC") return "why_180dc";
-  return columnName;
-}
-
 const CANDIDATE_TEXT_COLUMNS = [
   "name",
   "email",
@@ -138,9 +132,6 @@ const CANDIDATE_TEXT_COLUMNS = [
   "linkedin",
   "gm",
   "newbie_training",
-  "why_consulting",
-  "why_180dc",
-  "why_social_impact",
   "resume_file_url",
   "extenuating_circumstances",
   "headshot",
@@ -192,7 +183,7 @@ function mapFormResponseToCandidate(response, config) {
 
   for (const [questionId, rawColumn] of Object.entries(fieldMap)) {
     if (typeof rawColumn !== "string") continue;
-    const columnName = normalizeTargetColumn(rawColumn);
+    const columnName = rawColumn;
     const allowed = CANDIDATE_TEXT_COLUMNS.includes(columnName) || columnName === "year" || columnName === "university_id";
     if (!allowed) continue;
     const answer = answers[questionId];
@@ -238,9 +229,6 @@ function mapFormResponseToCandidate(response, config) {
     linkedin: columnValues.linkedin ?? DEFAULT_TEXT,
     gm: columnValues.gm ?? DEFAULT_TEXT,
     newbie_training: columnValues.newbie_training ?? DEFAULT_TEXT,
-    why_consulting: columnValues.why_consulting ?? DEFAULT_TEXT,
-    why_180dc: columnValues.why_180dc ?? DEFAULT_TEXT,
-    why_social_impact: columnValues.why_social_impact ?? DEFAULT_TEXT,
     resume_file_url: columnValues.resume_file_url ?? DEFAULT_TEXT,
     extenuating_circumstances: columnValues.extenuating_circumstances ?? DEFAULT_TEXT,
     headshot: columnValues.headshot ?? DEFAULT_TEXT,

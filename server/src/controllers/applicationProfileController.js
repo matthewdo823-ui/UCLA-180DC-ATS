@@ -6,8 +6,8 @@ const { isMissingSchemaError } = require('../utils/schemaCompatibility');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BASIC = 'id, cycle_id, name, email, phone_number, major, gpa, year, pronouns, urm, linkedin, gm, newbie_training, referral_source, previously_applied, professional_development, consulting_connect_interest, headshot, created_at';
 const BASIC_LEGACY = 'id, cycle_id, name, email, phone_number, major, gpa, year, pronouns, urm, linkedin, gm, newbie_training, headshot, created_at';
-const RESPONSES = 'id, cycle_id, why_consulting, why_180dc, why_social_impact, application_responses, extenuating_circumstances';
-const RESPONSES_LEGACY = 'id, cycle_id, why_consulting, why_180dc, why_social_impact, extenuating_circumstances';
+const RESPONSES = 'id, cycle_id, application_responses, extenuating_circumstances';
+const RESPONSES_LEGACY = 'id, cycle_id, extenuating_circumstances';
 
 async function fetchProfileRow(client, resumeId, responsesOnly) {
   const selectRow = candidateFields => client.from('resumes').select(`id, name, file_url, created_at, cycle_id,
@@ -44,12 +44,11 @@ function createApplicationProfileHandlers({ client = supabase } = {}) {
         const mapped = mapApplicationCandidate(candidate);
         res.setHeader('Server-Timing', `profile;dur=${(performance.now() - start).toFixed(1)}`);
         if (responsesOnly) return res.json({ responses: {
-          whyConsulting: mapped.whyConsulting, why180dc: mapped.why180dc,
-          whySocialImpact: mapped.whySocialImpact, applicationResponses: mapped.applicationResponses,
+          applicationResponses: mapped.applicationResponses,
           extenuatingCircumstances: mapped.extenuatingCircumstances,
         } });
         // Essays, scores and history have independent requests after this shell.
-        for (const key of ['whyConsulting', 'why180dc', 'whySocialImpact', 'extenuatingCircumstances']) delete mapped[key];
+        for (const key of ['extenuatingCircumstances']) delete mapped[key];
         return res.json({ candidate: mapped,
           resume: { id: row.id, name: row.name, fileUrl: row.file_url, submittedAt: row.created_at },
           context: { cycle: firstRel(row.cycles) },

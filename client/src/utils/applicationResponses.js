@@ -1,23 +1,19 @@
-const LEGACY_RESPONSES = [
-  { camelKey: "whyConsulting", snakeKey: "why_consulting", title: "Why consulting?" },
-  { camelKey: "why180dc", snakeKey: "why_180dc", title: "Why 180 Degrees Consulting?" },
-  { camelKey: "whySocialImpact", snakeKey: "why_social_impact", title: "Why social impact?" },
-];
+// Shown per-field when a response has an answer but no renderable question title.
+export const UNRENDERABLE_QUESTION_LABEL = "Unable to render question field";
+// Shown in place of the whole panel when there are no gradable responses to render.
+export const UNRENDERABLE_RESPONSES_MESSAGE = "Unable to render application responses";
 
+// Responses come straight from the candidate's application_responses snapshot.
+// There is intentionally no legacy why_* fallback: pre-catalog cycles were
+// test-only, so an empty snapshot renders an honest "unable to render" state
+// rather than inventing three hard-coded essays that may not match the form.
 export function getGradableApplicationResponses(candidate = {}) {
-  if (Array.isArray(candidate.applicationResponses) && candidate.applicationResponses.length) {
-    return candidate.applicationResponses
-      .filter((response) => response.gradable !== false)
-      .map((response, index) => ({
-        questionId: response.questionId || `response-${index}`,
-        title: response.title || "Application response",
-        answer: response.answer || "",
-      }));
-  }
-
-  return LEGACY_RESPONSES.map(({ camelKey, snakeKey, title }) => ({
-    questionId: snakeKey,
-    title,
-    answer: candidate[camelKey] ?? candidate[snakeKey] ?? "",
-  }));
+  const responses = Array.isArray(candidate.applicationResponses) ? candidate.applicationResponses : [];
+  return responses
+    .filter((response) => response.gradable !== false)
+    .map((response, index) => ({
+      questionId: response.questionId || `response-${index}`,
+      title: typeof response.title === "string" && response.title.trim() ? response.title.trim() : null,
+      answer: response.answer || "",
+    }));
 }

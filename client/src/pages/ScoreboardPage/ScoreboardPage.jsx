@@ -310,6 +310,9 @@ function ScorecardModal({
   onOverrideSaved,
 }) {
   const [reviewersOpen, setReviewersOpen] = useState(false);
+  // Prefer this candidate's own (year-specific) rubric categories; fall back to the
+  // cross-year union only for older payloads that don't carry rubricMetrics.
+  const displayMetrics = candidate?.rubricMetrics ?? metrics;
   const headlineScore = getHeadlineScore(candidate);
   const sourceNormalizedScore = getSourceNormalizedScore(candidate);
   const reviews = candidate?.reviews ?? [];
@@ -447,14 +450,14 @@ function ScorecardModal({
               ) : null}
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>{metrics.length} CATEGORIES</p>
+              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>{displayMetrics.length} CATEGORIES</p>
               <ScoreTiles score={headlineScore} maxScore={100} />
             </div>
           </div>
 
           <div style={{ padding: "14px 18px 4px" }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 700 }}>CATEGORY BREAKDOWN</p>
-            {metrics.map(metric => (
+            {displayMetrics.map(metric => (
               <CategoryRow
                 key={metric}
                 metric={metric}
@@ -561,7 +564,7 @@ function ScorecardModal({
             <ReviewOverrideSection
               resumeId={candidate.id}
               reviews={reviews}
-              metrics={metrics}
+              metrics={displayMetrics}
               maxPerCategory={maxPerCategory}
               onOverrideSaved={onOverrideSaved}
             />

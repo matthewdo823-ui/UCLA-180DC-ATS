@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { css } from "../../theme/colors";
 import { hasText } from "./applicationUtils";
 import EssayBlock from "./components/EssayBlock";
-import { getGradableApplicationResponses } from "../../utils/applicationResponses";
+import { getGradableApplicationResponses, UNRENDERABLE_RESPONSES_MESSAGE } from "../../utils/applicationResponses";
 
 export default function ApplicationResponsesModal({ open, onClose, candidate, responses, loading = false, error, onRetry }) {
   useEffect(() => {
@@ -68,9 +68,15 @@ export default function ApplicationResponsesModal({ open, onClose, candidate, re
         </div>
         <div style={{ overflowY: "auto", padding: "20px 22px" }}>
           {error ? <ErrorBanner error={error} onRetry={onRetry} /> : loading ? <p role="status">Loading free responses…</p> : <>
-          {gradableResponses.map(({ questionId, title, answer }) => (
-            <EssayBlock key={questionId} label={title} text={answer} />
-          ))}
+          {gradableResponses.length === 0 ? (
+            <p style={{ margin: "0 0 18px", fontSize: 14, fontStyle: "italic", color: css.textGray }}>
+              {UNRENDERABLE_RESPONSES_MESSAGE}
+            </p>
+          ) : (
+            gradableResponses.map(({ questionId, title, answer }) => (
+              <EssayBlock key={questionId} label={title} text={answer} />
+            ))
+          )}
           <div>
             <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: css.textGray }}>Extenuating circumstances</p>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: hasText(answers.extenuatingCircumstances) ? css.textDark : css.textGray, whiteSpace: "pre-wrap" }}>

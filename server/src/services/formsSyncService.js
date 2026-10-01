@@ -11,6 +11,7 @@ const supabase = require("../config/supabase");
 const { getActiveCycleId } = require("../utils/cycleContext");
 const { mapFormResponseToCandidate } = require("../utils/dataMapper");
 const { isGoogleDriveFileUrl } = require("../utils/drive");
+const { isMissingSchemaError } = require("../utils/schemaCompatibility");
 const { enqueueHeadshotDocuments } = require("./documentQueueService");
 const { resolveFormConfigPath } = require("../utils/formConfigPath");
 const {
@@ -21,12 +22,58 @@ const {
   getKeyFilePath,
 } = require("../utils/googleForm");
 
+// Columns added by sql/add_cycle_application_question_mapping.sql (migration 32).
+// The read paths already degrade when code runs ahead of that migration (see
+// applicationProfileController); intake had no such cushion, so a schema lag
+// stopped applicants being recorded at all rather than recording them with
+// fewer fields. Losing the structured snapshot is recoverable; losing the
+// submission is not.
+const CANDIDATE_MAPPING_COLUMNS = [
+  "first_name",
+  "last_name",
+  "referral_source",
+  "previously_applied",
+  "professional_development",
+  "consulting_connect_interest",
+  "application_responses",
+];
+
+function cycleFormColumns({ legacy, includeStatus }) {
+  return [
+    "id, google_form_id, form_field_map, form_resume_question_id, form_headshot_question_id",
+    legacy ? null : "form_question_catalog, form_gradable_question_ids",
+    includeStatus ? "status" : null,
+    "last_form_sync_at",
+  ].filter(Boolean).join(", ");
+}
+
+function withoutMappingColumns(row) {
+  const stripped = { ...row };
+  for (const column of CANDIDATE_MAPPING_COLUMNS) delete stripped[column];
+  return stripped;
+}
+
+// Retried per call rather than latched: the columns appear the moment the
+// migration lands, and a cached "legacy" verdict would keep discarding real
+// answers long after the schema caught up.
+async function withSchemaFallback(label, attempt) {
+  const result = await attempt(false);
+  if (!result.error || !isMissingSchemaError(result.error)) return result;
+  console.error(
+    `[formsSync] ${label}: application-mapping columns are missing, so this pass`
+    + " writes the pre-migration shape and drops application_responses. Apply"
+    + " sql/add_cycle_application_question_mapping.sql, then clear"
+    + " cycles.last_form_sync_at for this cycle to re-ingest the full snapshots."
+  );
+  return attempt(true);
+}
+
 async function fetchCyclesWithFormConfig(client = supabase) {
-  const { data, error } = await client
+  const { data, error } = await withSchemaFallback("cycle discovery", legacy => client
     .from("cycles")
-    .select("id, google_form_id, form_field_map, form_resume_question_id, form_headshot_question_id, form_question_catalog, form_gradable_question_ids, status, last_form_sync_at")
+    .select(cycleFormColumns({ legacy, includeStatus: true }))
     .in("status", ["active", "draft"])
-    .not("google_form_id", "is", null);
+    .not("google_form_id", "is", null));
 
   if (error) throw error;
   return data || [];
@@ -68,29 +115,29 @@ async function upsertCandidateAndResume(client, mapped, cycleId) {
     if (selectError) throw selectError;
 
     if (existing) {
-      const { data, error } = await client
+      const { data, error } = await withSchemaFallback("candidate update", legacy => client
         .from("candidates")
-        .update(candidateRow)
+        .update(legacy ? withoutMappingColumns(candidateRow) : candidateRow)
         .eq("id", existing.id)
         .select("id")
-        .single();
+        .single());
       if (error) throw error;
       candidateId = data.id;
     } else {
-      const { data, error } = await client
+      const { data, error } = await withSchemaFallback("candidate insert", legacy => client
         .from("candidates")
-        .insert(candidateRow)
+        .insert(legacy ? withoutMappingColumns(candidateRow) : candidateRow)
         .select("id")
-        .single();
+        .single());
       if (error) throw error;
       candidateId = data.id;
     }
   } else {
-    const { data, error } = await client
+    const { data, error } = await withSchemaFallback("candidate insert", legacy => client
       .from("candidates")
-      .insert(candidateRow)
+      .insert(legacy ? withoutMappingColumns(candidateRow) : candidateRow)
       .select("id")
-      .single();
+      .single());
     if (error) throw error;
     candidateId = data.id;
   }
@@ -178,10 +225,14 @@ async function upsertCandidateAndResume(client, mapped, cycleId) {
 async function upsertCandidatesAndResumesBatch(client, mappedRows, cycleId, orphanResumes) {
   const candidateRows = mappedRows.map((m) => ({ ...m.candidateRow, cycle_id: cycleId }));
 
-  const { data: upserted, error: upsertError } = await client
-    .from("candidates")
-    .upsert(candidateRows, { onConflict: "cycle_id,google_form_response_id" })
-    .select("id, google_form_response_id");
+  const { data: upserted, error: upsertError } = await withSchemaFallback(
+    "candidate batch upsert",
+    legacy => client
+      .from("candidates")
+      .upsert(legacy ? candidateRows.map(withoutMappingColumns) : candidateRows,
+        { onConflict: "cycle_id,google_form_response_id" })
+      .select("id, google_form_response_id")
+  );
   if (upsertError) throw upsertError;
 
   const candidateIdByResponseId = new Map(
@@ -348,11 +399,11 @@ async function syncFormResponsesForCycle(target) {
  */
 async function syncFormResponsesToDatabase(cycleId) {
   if (cycleId) {
-    const { data: cycle, error } = await supabase
+    const { data: cycle, error } = await withSchemaFallback("cycle lookup", legacy => supabase
       .from("cycles")
-      .select("id, google_form_id, form_field_map, form_resume_question_id, form_headshot_question_id, form_question_catalog, form_gradable_question_ids, last_form_sync_at")
+      .select(cycleFormColumns({ legacy, includeStatus: false }))
       .eq("id", cycleId)
-      .maybeSingle();
+      .maybeSingle());
 
     if (error) throw error;
     if (!cycle) throw new Error("Cycle not found");
@@ -432,6 +483,7 @@ function loadFormConfig() {
 
 module.exports = {
   syncFormResponsesToDatabase,
+  upsertCandidatesAndResumesBatch,
   syncFormResponsesForCycle,
   loadFormConfig,
   resolveFormConfigPath,

@@ -1,6 +1,10 @@
 import { css } from "../../theme/colors";
 import { hasText } from "../../pages/CandidateApplicationPage/applicationUtils";
-import { getGradableApplicationResponses } from "../../utils/applicationResponses";
+import {
+  getGradableApplicationResponses,
+  UNRENDERABLE_QUESTION_LABEL,
+  UNRENDERABLE_RESPONSES_MESSAGE,
+} from "../../utils/applicationResponses";
 
 export default function FrqResponsesPanel({ candidate }) {
   const essays = candidate?.candidates || candidate || {};
@@ -37,24 +41,40 @@ export default function FrqResponsesPanel({ candidate }) {
         Application responses
       </div>
 
-      {responses.map(({ questionId, title, answer }) => {
-        return (
-          <div key={questionId} style={{ marginBottom: 20 }}>
-            <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: css.greenDark }}>{title}</p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 14,
-                lineHeight: 1.6,
-                color: hasText(answer) ? css.textDark : css.textGray,
-                whiteSpace: "pre-wrap",
-              }}
-            >
-              {hasText(answer) ? answer.trim() : "Not provided"}
-            </p>
-          </div>
-        );
-      })}
+      {responses.length === 0 ? (
+        <p style={{ margin: 0, fontSize: 14, fontStyle: "italic", color: css.textGray }}>
+          {UNRENDERABLE_RESPONSES_MESSAGE}
+        </p>
+      ) : (
+        responses.map(({ questionId, title, answer }) => {
+          return (
+            <div key={questionId} style={{ marginBottom: 20 }}>
+              <p
+                style={{
+                  margin: "0 0 8px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  fontStyle: title ? "normal" : "italic",
+                  color: title ? css.greenDark : css.textGray,
+                }}
+              >
+                {title || UNRENDERABLE_QUESTION_LABEL}
+              </p>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  color: hasText(answer) ? css.textDark : css.textGray,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {hasText(answer) ? answer.trim() : "Not provided"}
+              </p>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }
