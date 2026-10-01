@@ -946,9 +946,6 @@ function formatFrqCandidateRow(row) {
             year: candidate.year,
             name: candidate.name,
             major: candidate.major,
-            why_consulting: candidate.why_consulting,
-            why_180dc: candidate.why_180dc,
-            why_social_impact: candidate.why_social_impact,
             applicationResponses: Array.isArray(candidate.application_responses) ? candidate.application_responses : [],
         } : null,
     };
@@ -973,7 +970,7 @@ async function fetchFrqReviewRowById(reviewId, gradedBy) {
         .eq("id", reviewId)
         .eq("graded_by", gradedBy)
         .maybeSingle();
-    const legacyFields = 'year, major, gpa, name, why_consulting, why_180dc, why_social_impact';
+    const legacyFields = 'year, major, gpa, name';
     let result = await selectRow(`${legacyFields}, application_responses`);
     if (result.error && isMissingSchemaError(result.error)) result = await selectRow(legacyFields);
     return result;
@@ -1024,7 +1021,7 @@ exports.getNextFrq = async (req, res) => {
         return query.limit(100);
     };
 
-    const legacyFields = 'year, name, major, why_consulting, why_180dc, why_social_impact';
+    const legacyFields = 'year, name, major';
     let { data: resumeCandidates, error } = await selectCandidates(`${legacyFields}, application_responses`);
     if (error && isMissingSchemaError(error)) {
         ({ data: resumeCandidates, error } = await selectCandidates(legacyFields));
@@ -2542,8 +2539,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
 
     const legacyCandidateFields = `
         id, name, email, phone_number, major, gpa, year, pronouns, urm,
-        linkedin, gm, newbie_training, why_consulting, why_180dc,
-        why_social_impact, extenuating_circumstances, headshot,
+        linkedin, gm, newbie_training, extenuating_circumstances, headshot,
         resume_file_url, created_at, cycle_id`;
     const mappedCandidateFields = `${legacyCandidateFields}, referral_source,
         previously_applied, professional_development,
@@ -2884,9 +2880,6 @@ async function fetchScoreboardApplicationSummarySource(resumeId, requestedCycleI
             candidates (
                 id,
                 name,
-                why_consulting,
-                why_180dc,
-                why_social_impact,
                 ${includeSnapshots ? 'application_responses,' : ''}
                 cycle_id
             )

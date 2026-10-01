@@ -5,7 +5,7 @@ process.env.SUPABASE_SERVICE_KEY ||= 'test-only';
 const { createApplicationProfileHandlers } = require('../../src/controllers/applicationProfileController');
 const id = '00000000-0000-4000-8000-000000000001';
 const cycle = '00000000-0000-4000-8000-000000000002';
-const row = { id, cycle_id: cycle, file_url: 'resume-source', candidates: { id, cycle_id: cycle, name: 'Candidate', why_consulting: 'Essay' }, cycles: { id: cycle, name: 'Cycle' } };
+const row = { id, cycle_id: cycle, file_url: 'resume-source', candidates: { id, cycle_id: cycle, name: 'Candidate', application_responses: [{ questionId: 'q1', title: 'Why consulting?', answer: 'Essay', gradable: true }] }, cycles: { id: cycle, name: 'Cycle' } };
 function fixture(data = row, { firstResumeError = null } = {}) {
   const calls = [];
   let resumeReads = 0;
@@ -36,10 +36,11 @@ test('basic profile requires one database request for an explicit cycle and excl
 test('responses do not wait for grade history or include contact information', async () => {
   const f = fixture(); await f.responses(req(cycle), f.res);
   assert.deepEqual(f.calls, ['resumes']);
-  assert.equal(f.res.body.responses.whyConsulting, 'Essay');
+  assert.equal(f.res.body.responses.applicationResponses[0].answer, 'Essay');
+  assert.equal(f.res.body.responses.whyConsulting, undefined);
   assert.equal(f.res.body.candidate, undefined);
 });
-test('pre-migration schemas fall back to legacy profile and essay columns', async () => {
+test('pre-migration schemas fall back to legacy profile columns', async () => {
   const missingColumn = { code: '42703', message: 'column candidates_1.application_responses does not exist' };
   for (const kind of ['profile', 'responses']) {
     const f = fixture(row, { firstResumeError: missingColumn });
