@@ -2146,6 +2146,10 @@ exports.getScoreboard = async (req, res) => {
                 maxScore: resumeMax,
                 resumeMax,
                 categoryScores,
+                // This candidate's own (year-specific) rubric categories for the
+                // scorecard breakdown — not the cross-year `metrics` union, which
+                // is retained only for override/score math.
+                rubricMetrics: appendFrqMetric(getRubricForYear(resumeRound.rubric_config, c.year).metrics),
                 numReviews: c.numReviews,
                 reviews: c.reviews.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt)),
                 score: normalizedScore == null ? null : Math.round(normalizedScore),
@@ -2803,9 +2807,10 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
             evaluations: interviewEvaluations.filter((evaluation) => evaluation.roundId === round.id),
         })),
     ];
-    // Display only the current rubric's categories; the metricSet union carries retired
-    // categories from older reviews' snapshots (kept for override/score math above).
-    const currentMetrics = getMetricsFromRubricConfig(resumeRound.rubric_config);
+    // Display only THIS candidate's rubric categories (year-specific). The metricSet
+    // union carries both retired snapshot categories and other years' categories,
+    // which are kept for override/score math above but must not surface in the breakdown.
+    const currentMetrics = getRubricForYear(resumeRound.rubric_config, candidate.year).metrics;
 
     return {
         context: {
