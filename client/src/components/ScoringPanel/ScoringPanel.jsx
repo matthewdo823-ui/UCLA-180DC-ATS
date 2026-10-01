@@ -11,6 +11,8 @@ export default function ScoringPanel({
   notes,
   onNotes,
   onAction,
+  onFlag,
+  flagged = false,
   onReset,
   scoringComplete = true,
   submitError = "",
@@ -120,24 +122,25 @@ export default function ScoringPanel({
             onClick={onReset}
           />
         ) : null}
-        {[
-          { type: "flag",   label: "⚑ Flag",    style: { borderColor: css.amber, color: css.amber, bg: css.cardWhite, hoverBg: "rgba(239,159,39,0.05)" } },
-          { type: "pass",   label: "✓ Complete", style: { borderColor: css.greenDark, color: css.cardWhite, bg: css.greenDark, hoverBg: "#1F4E33" } },
-        ].map(({ type, label, style }) => (
-          <ActionBtn
-            key={type}
-            label={submittingAction === type ? "Submitting…" : label}
-            style={style}
-            disabled={Boolean(submittingAction) || !scoringComplete}
-            busy={submittingAction === type}
-            title={submittingAction
-              ? "Waiting for the server to confirm this grade"
-              : !scoringComplete
-                ? `Rate each rubric category from 0 to ${maxPerCategory} first`
-                : undefined}
-            onClick={() => onAction(type)}
-          />
-        ))}
+        <ActionBtn
+          label={flagged ? "⚑ Flagged" : "⚑ Flag"}
+          style={{ borderColor: css.amber, color: css.amber, bg: css.cardWhite, hoverBg: "rgba(239,159,39,0.05)" }}
+          disabled={Boolean(submittingAction) || flagged}
+          title={flagged ? "You already flagged this candidate" : "Flag this candidate for admin review without submitting the grade"}
+          onClick={onFlag}
+        />
+        <ActionBtn
+          label={submittingAction === "pass" ? "Submitting…" : "✓ Complete"}
+          style={{ borderColor: css.greenDark, color: css.cardWhite, bg: css.greenDark, hoverBg: "#1F4E33" }}
+          disabled={Boolean(submittingAction) || !scoringComplete}
+          busy={submittingAction === "pass"}
+          title={submittingAction
+            ? "Waiting for the server to confirm this grade"
+            : !scoringComplete
+              ? `Rate each rubric category from 0 to ${maxPerCategory} first`
+              : undefined}
+          onClick={() => onAction("pass")}
+        />
       </div>
     </div>
   );

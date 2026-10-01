@@ -21,6 +21,7 @@ import FrqDrawer from "../../components/FrqScoringPanel/FrqDrawer";
 import GradeCelebration from "../../components/GradeCelebration/GradeCelebration";
 import PastReviewDetailModal from "../../components/PastReviewDetailModal/PastReviewDetailModal";
 import PageLoader from "../../components/PageLoader";
+import CandidateFlagDialog from "../../components/CandidateFlagDialog/CandidateFlagDialog";
 
 const GRADING_MODES = {
   RESUME: "resume",
@@ -102,6 +103,8 @@ export default function ScreenerPage() {
   const [editingReviewId, setEditingReviewId] = useState(null);
   const [celebrationKey, setCelebrationKey] = useState(0);
   const [submittingAction, setSubmittingAction] = useState(null);
+  const [flagDialogOpen, setFlagDialogOpen] = useState(false);
+  const [flaggedResumeIds, setFlaggedResumeIds] = useState(() => new Set());
   const submittingRef = useRef(false);
   const panelRef = useRef(null);
 
@@ -481,6 +484,7 @@ export default function ScreenerPage() {
     setShowValidationErrors(false);
     setDrawerOpen(false);
     setPastReviewDetail(null);
+    setFlagDialogOpen(false);
   }
 
   const screeningBlocked = !cycleLoading && (!activeRound || cycleError || !isResumeRound);
@@ -576,6 +580,8 @@ export default function ScreenerPage() {
                       notes={notes}
                       onNotes={setNotes}
                       onComplete={handleFrqComplete}
+                      onFlag={() => setFlagDialogOpen(true)}
+                      flagged={flaggedResumeIds.has(resume.id)}
                       scoringComplete={frqScoringComplete}
                       submitError={submitError}
                       submitting={Boolean(submittingAction)}
@@ -588,6 +594,8 @@ export default function ScreenerPage() {
                       notes={notes}
                       onNotes={setNotes}
                       onAction={handleResumeAction}
+                      onFlag={() => setFlagDialogOpen(true)}
+                      flagged={flaggedResumeIds.has(resume.id)}
                       onReset={handleResumeReset}
                       scoringComplete={resumeScoringComplete}
                       submitError={submitError}
@@ -623,6 +631,18 @@ export default function ScreenerPage() {
           onReviewClick={(r) => setPastReviewDetail(r)}
         />
       )}
+
+      <CandidateFlagDialog
+        open={flagDialogOpen}
+        resumeId={resume?.id}
+        candidateName={resume?.candidates?.name || resume?.name}
+        authedFetch={authedFetch}
+        onClose={() => setFlagDialogOpen(false)}
+        onFlagged={() => {
+          if (!resume?.id) return;
+          setFlaggedResumeIds((current) => new Set(current).add(resume.id));
+        }}
+      />
 
       {!isFrqMode && pastReviewDetail ? (
         <PastReviewDetailModal
