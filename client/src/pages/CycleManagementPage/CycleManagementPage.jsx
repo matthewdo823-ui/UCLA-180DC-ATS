@@ -66,7 +66,7 @@ const COLUMN_OPTIONS = [
   { value: "gpa", label: "GPA" },
   { value: "year", label: "Year" },
   { value: "pronouns", label: "Pronouns" },
-  { value: "urm", label: "Diversity identities (multi-select)" },
+  { value: "urm", label: "URM" },
   { value: "linkedin", label: "LinkedIn" },
   { value: "gm", label: "GM interest" },
   { value: "newbie_training", label: "Newbie training" },

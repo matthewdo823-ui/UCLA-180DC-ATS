@@ -13,7 +13,7 @@ export default function ApplicationContactSection({ candidate, resume }) {
         <DetailField label="Year" value={candidate.year} />
         <DetailField label="Major" value={candidate.major} />
         <DetailField label="GPA" value={candidate.gpa} />
-        <DetailField label="Diversity identities" value={candidate.urm} />
+        <DetailField label="URM" value={candidate.urm} />
         <DetailField label="GM interest" value={candidate.gm} />
         <DetailField label="Newbie training" value={candidate.newbieTraining} />
         <DetailField label="How they heard about 180DC" value={candidate.referralSource} />
