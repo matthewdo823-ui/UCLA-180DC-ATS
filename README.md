@@ -101,10 +101,14 @@ curl -X POST http://localhost:3000/auth/register \
   -d '{"email":"you@ucla.edu","password":"your-password","first_name":"Your","last_name":"Name"}'
 ```
 
-Then promote the user to `admin` in Supabase:
+Then approve and promote the user to `admin` in Supabase:
 
 ```sql
-UPDATE users SET role = 'admin' WHERE email = 'you@ucla.edu';
+UPDATE users
+SET role = 'admin',
+    account_status = 'active',
+    approved_at = now()
+WHERE email = 'you@ucla.edu';
 ```
 
 ### 5. Start the app
@@ -171,7 +175,12 @@ the worker can be deployed before or after the API without breaking images.
 |------|--------|
 | `applicant` | Limited — redirected to no-access for most pages |
 | `member` | Grade resumes, view scoreboards |
+| `board` | Member access plus free-response grading on candidate applications |
 | `admin` | Full access — user/cycle management, grader scoreboard, flagged candidates, scoreboard deliberation & export |
+
+New registrations are access requests. They start with `account_status = 'pending'`
+and cannot sign in until an admin approves them from **Team access**. Admins can
+also deactivate active accounts without deleting their historical ATS activity.
 
 ## Production deployment
 

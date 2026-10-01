@@ -11,10 +11,18 @@ import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle } from "../../theme/typography";
 import { displayName, formatDate } from "../../utils/format";
+
 const ASSIGNABLE_ROLES = [
   { value: "member", label: "Member" },
   { value: "board", label: "Board" },
   { value: "admin", label: "Admin" },
+];
+
+const FILTERS = [
+  { value: "all", label: "All" },
+  { value: "pending", label: "Pending" },
+  { value: "active", label: "Active" },
+  { value: "deactivated", label: "Inactive" },
 ];
 
 function roleBadgeStyle(role) {
@@ -30,20 +38,42 @@ function roleBadgeStyle(role) {
   }
 }
 
-function RoleBadge({ role }) {
+function statusBadgeStyle(status) {
+  switch (status) {
+    case "active":
+      return { background: "rgba(29,158,117,0.12)", color: css.greenDark, border: "1px solid rgba(29,158,117,0.28)" };
+    case "pending":
+      return { background: "rgba(239,159,39,0.12)", color: "#9A6200", border: "1px solid rgba(239,159,39,0.3)" };
+    default:
+      return { background: "rgba(226,75,74,0.09)", color: "#C0392B", border: "1px solid rgba(226,75,74,0.22)" };
+  }
+}
+
+function Badge({ children, style }) {
+  return <span style={{ ...badgeStyle, ...style }}>{children}</span>;
+}
+
+function ActionButton({ children, disabled = false, tone = "neutral", ...props }) {
+  const colors = tone === "primary"
+    ? { background: css.greenDark, color: "#FFF", border: `1px solid ${css.greenDark}` }
+    : tone === "danger"
+      ? { background: "#FFF", color: "#C0392B", border: "1px solid rgba(226,75,74,0.35)" }
+      : { background: "#FFF", color: css.textDark, border: `1px solid ${css.borderLight}` };
+
   return (
-    <span style={{
-      ...roleBadgeStyle(role),
-      borderRadius: 999,
-      fontSize: 11,
-      fontWeight: 700,
-      padding: "4px 10px",
-      letterSpacing: "0.04em",
-      textTransform: "uppercase",
-      whiteSpace: "nowrap",
-    }}>
-      {role}
-    </span>
+    <button
+      type="button"
+      disabled={disabled}
+      {...props}
+      style={{
+        ...actionButtonStyle,
+        ...colors,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.55 : 1,
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -51,12 +81,11 @@ export default function UserManagementPage() {
   const { user: currentUser } = useAuth();
   const authedFetch = useAuthedFetch();
   const queryClient = useQueryClient();
-  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(null);
   const [pendingRoles, setPendingRoles] = useState({});
-  const [saveNotice, setSaveNotice] = useState("");
-  // Separate from the load error so a failed save doesn't clobber (or get
-  // clobbered by) the query's own error state.
-  const [saveError, setSaveError] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [actionError, setActionError] = useState(null);
+  const [notice, setNotice] = useState("");
 
   const usersQuery = useQuery({
     queryKey: qk.users(),
@@ -68,263 +97,261 @@ export default function UserManagementPage() {
   });
 
   const users = usersQuery.data?.users ?? [];
-  const loading = usersQuery.isPending;
-  const error = saveError || usersQuery.error;
-
-  const staffCount = useMemo(
-    () => users.filter((u) => u.role === "admin" || u.role === "member" || u.role === "board").length,
-    [users]
+  const counts = useMemo(() => ({
+    all: users.length,
+    pending: users.filter((user) => user.account_status === "pending").length,
+    active: users.filter((user) => user.account_status === "active").length,
+    deactivated: users.filter((user) => user.account_status === "deactivated").length,
+  }), [users]);
+  const visibleUsers = useMemo(
+    () => filter === "all" ? users : users.filter((user) => user.account_status === filter),
+    [filter, users]
   );
 
-  const changedUsers = useMemo(
-    () => users.filter((user) => pendingRoles[user.user_id] && pendingRoles[user.user_id] !== user.role),
-    [pendingRoles, users]
-  );
-
-  async function handleSaveAll() {
-    if (!changedUsers.length || saving) return;
-
-    try {
-      setSaving(true);
-      setSaveError(null);
-      setSaveNotice("");
-      const savedIds = [];
-
-      for (const user of changedUsers) {
-        const nextRole = pendingRoles[user.user_id];
-        const res = await authedFetch(`${API}/users/${user.user_id}/role`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role: nextRole }),
-        });
-
-        if (!res.ok) {
-          throw await formatResponseError(res, nextRole === "applicant" ? "removing a team member" : "updating user roles");
-        }
-
-        const data = await res.json();
-        queryClient.setQueryData(qk.users(), (old) =>
-          old ? { ...old, users: old.users.map((row) => (row.user_id === data.user.user_id ? data.user : row)) } : old
-        );
-        savedIds.push(user.user_id);
-      }
-
-      setPendingRoles((prev) => {
-        const next = { ...prev };
-        savedIds.forEach((id) => delete next[id]);
-        return next;
-      });
-      setSaveNotice(`Saved ${savedIds.length} team ${savedIds.length === 1 ? "change" : "changes"}.`);
-    } catch (err) {
-      setSaveError(err);
-    } finally {
-      setSaving(false);
-    }
+  function updateCachedUser(updatedUser) {
+    queryClient.setQueryData(qk.users(), (old) => old
+      ? { ...old, users: old.users.map((user) => user.user_id === updatedUser.user_id ? updatedUser : user) }
+      : old);
   }
 
-  function toggleRemoval(user) {
-    if (user.user_id === currentUser?.user_id || user.role === "applicant") return;
-    setSaveNotice("");
-    setPendingRoles((prev) => {
-      const next = { ...prev };
-      if (next[user.user_id] === "applicant") delete next[user.user_id];
-      else next[user.user_id] = "applicant";
+  function removeCachedUser(userId) {
+    queryClient.setQueryData(qk.users(), (old) => old
+      ? { ...old, users: old.users.filter((user) => user.user_id !== userId) }
+      : old);
+  }
+
+  function clearPendingRole(userId) {
+    setPendingRoles((previous) => {
+      const next = { ...previous };
+      delete next[userId];
       return next;
     });
   }
 
+  async function request(path, { method = "POST", body } = {}) {
+    const res = await authedFetch(`${API}${path}`, {
+      method,
+      ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+    });
+    if (!res.ok) throw await formatResponseError(res, "updating account access");
+    return res.json().catch(() => ({}));
+  }
+
+  async function runAction(user, action, operation, successMessage) {
+    try {
+      setBusy({ userId: user.user_id, action });
+      setActionError(null);
+      setNotice("");
+      await operation();
+      setNotice(successMessage);
+    } catch (error) {
+      setActionError(error);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function handleSaveRole(user) {
+    const role = pendingRoles[user.user_id];
+    if (!role || role === user.role) return;
+    runAction(user, "role", async () => {
+      const data = await request(`/users/${user.user_id}/role`, { method: "PATCH", body: { role } });
+      updateCachedUser(data.user);
+      clearPendingRole(user.user_id);
+    }, `Updated ${displayName(user)}'s role.`);
+  }
+
+  function handleApprove(user) {
+    const role = pendingRoles[user.user_id];
+    if (!role) {
+      setActionError(new Error(`Choose a role before approving ${user.email}.`));
+      return;
+    }
+    runAction(user, "approve", async () => {
+      const data = await request(`/users/${user.user_id}/approve`, { body: { role } });
+      updateCachedUser(data.user);
+      clearPendingRole(user.user_id);
+    }, `Approved ${displayName(user)} as ${role}.`);
+  }
+
+  function handleReject(user) {
+    if (!window.confirm(`Reject and permanently remove the pending request from ${user.email}?`)) return;
+    runAction(user, "reject", async () => {
+      await request(`/users/${user.user_id}`, { method: "DELETE" });
+      removeCachedUser(user.user_id);
+      clearPendingRole(user.user_id);
+    }, `Rejected ${displayName(user)}'s request.`);
+  }
+
+  function handleDeactivate(user) {
+    if (!window.confirm(`Deactivate ${user.email}? They will immediately lose access to the ATS.`)) return;
+    runAction(user, "deactivate", async () => {
+      const data = await request(`/users/${user.user_id}/deactivate`);
+      updateCachedUser(data.user);
+    }, `Deactivated ${displayName(user)}.`);
+  }
+
+  function handleReactivate(user) {
+    runAction(user, "reactivate", async () => {
+      const data = await request(`/users/${user.user_id}/reactivate`);
+      updateCachedUser(data.user);
+    }, `Reactivated ${displayName(user)}.`);
+  }
+
   return (
     <div style={{ minHeight: "100%", background: css.pageBg, fontFamily: "'DM Sans', sans-serif" }}>
-      <Topbar phaseLabel="Admin · User management" activeLabel="Roles" rightSlot={<></>} />
+      <Topbar phaseLabel="Admin · User management" activeLabel="Access" rightSlot={<></>} />
 
-      <div style={{ padding: "28px 32px 40px", maxWidth: 1100, margin: "0 auto" }}>
+      <div style={{ padding: "28px 32px 40px", maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>
-            Team roles
-          </h1>
+          <h1 style={{ ...pageTitleStyle, margin: "0 0 8px" }}>Team access</h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
-            Assign member or admin access to registered users. Applicants cannot use the ATS until promoted.
+            Approve new requests, assign staff roles, and deactivate accounts that should no longer use the ATS.
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-          <div style={statCardStyle}>
-            <span style={statLabelStyle}>Total users</span>
-            <span style={statValueStyle}>{users.length}</span>
-          </div>
-          <div style={statCardStyle}>
-            <span style={statLabelStyle}>Staff</span>
-            <span style={statValueStyle}>{staffCount}</span>
-          </div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+          {FILTERS.map((item) => {
+            const selected = filter === item.value;
+            return (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setFilter(item.value)}
+                style={{
+                  ...statCardStyle,
+                  borderColor: selected ? css.greenDark : css.borderLight,
+                  boxShadow: selected ? `0 0 0 1px ${css.greenDark}` : "none",
+                  cursor: "pointer",
+                }}
+              >
+                <span style={statLabelStyle}>{item.label}</span>
+                <span style={statValueStyle}>{counts[item.value]}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {error && (
-          <ErrorBanner
-            error={error}
-            onDismiss={saveError ? () => setSaveError(null) : undefined}
-            onRetry={usersQuery.isError ? () => usersQuery.refetch() : undefined}
-            style={{ marginBottom: 16 }}
-          />
+        {usersQuery.error && (
+          <ErrorBanner error={usersQuery.error} onRetry={() => usersQuery.refetch()} style={{ marginBottom: 16 }} />
         )}
-        {saveNotice ? (
-          <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8, border: "1px solid rgba(29,158,117,0.25)", background: "rgba(29,158,117,0.08)", color: css.greenDark, fontSize: 13, fontWeight: 600 }}>
-            {saveNotice}
-          </div>
-        ) : null}
+        {actionError && (
+          <ErrorBanner error={actionError} onDismiss={() => setActionError(null)} style={{ marginBottom: 16 }} />
+        )}
+        {notice && <div style={noticeStyle}>{notice}</div>}
 
-        <div style={{
-          background: css.cardWhite,
-          border: `1px solid ${css.borderLight}`,
-          borderRadius: 12,
-          overflow: "hidden",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-        }}>
-          {loading ? (
+        <div style={tableCardStyle}>
+          {usersQuery.isPending ? (
             <PageLoader />
-          ) : error ? (
+          ) : usersQuery.error ? (
             <div style={{ padding: 40, textAlign: "center", color: css.textGray, fontSize: 14 }}>
-              <p style={{ margin: "0 0 12px" }}>Could not load the user list.</p>
-              <button
-                type="button"
-                onClick={() => usersQuery.refetch()}
-                style={{
-                  border: `1px solid ${css.borderLight}`,
-                  borderRadius: 8,
-                  padding: "8px 14px",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  background: "#FFF",
-                  color: css.textDark,
-                }}
-              >
-                Retry
-              </button>
+              Could not load the user list.
             </div>
-          ) : users.length === 0 ? (
+          ) : visibleUsers.length === 0 ? (
             <div style={{ padding: 40, textAlign: "center", color: css.textGray, fontSize: 14 }}>
-              No users found.
+              No {filter === "all" ? "users" : `${filter} accounts`} found.
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${css.borderLight}`, background: "#FAFBFA" }}>
-                  <th style={thStyle}>Name</th>
-                  <th style={thStyle}>Email</th>
-                  <th style={thStyle}>Current role</th>
-                  <th style={thStyle}>Last login</th>
-                  <th style={{ ...thStyle, textAlign: "right" }}>Team access</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => {
-                  const pendingRole = pendingRoles[user.user_id];
-                  const pendingRemoval = pendingRole === "applicant" && user.role !== "applicant";
-                  const selectedRole = pendingRemoval
-                    ? user.role
-                    : pendingRole
-                    ?? (user.role === "member" || user.role === "admin" || user.role === "board" ? user.role : "");
-                  const isSelf = user.user_id === currentUser?.user_id;
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 960 }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${css.borderLight}`, background: "#FAFBFA" }}>
+                    <th style={thStyle}>Person</th>
+                    <th style={thStyle}>Status</th>
+                    <th style={thStyle}>Current role</th>
+                    <th style={thStyle}>Last login</th>
+                    <th style={{ ...thStyle, textAlign: "right" }}>Access controls</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleUsers.map((user) => {
+                    const status = user.account_status || "active";
+                    const selectedRole = pendingRoles[user.user_id]
+                      ?? (["member", "board", "admin"].includes(user.role) ? user.role : "");
+                    const roleChanged = Boolean(selectedRole) && selectedRole !== user.role;
+                    const isBusy = busy?.userId === user.user_id;
+                    const isCurrentUser = currentUser?.user_id === user.user_id;
 
-                  return (
-                    <tr key={user.user_id} style={{ borderBottom: `1px solid ${css.borderLight}`, background: pendingRemoval ? "rgba(197,48,48,0.05)" : "transparent" }}>
-                      <td style={tdStyle}>
-                        <span style={{ fontWeight: 600, color: css.textDark }}>{displayName(user)}</span>
-                      </td>
-                      <td style={tdStyle}>{user.email}</td>
-                      <td style={tdStyle}><RoleBadge role={user.role} /></td>
-                      <td style={{ ...tdStyle, color: css.textGray, fontSize: 13 }}>{formatDate(user.last_login, { fallback: "Never", style: "datetime" })}</td>
-                      <td style={{ ...tdStyle, textAlign: "right" }}>
-                        <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                          <select
-                            value={selectedRole}
-                            disabled={saving || pendingRemoval}
-                            onChange={(e) => {
-                              setSaveNotice("");
-                              setPendingRoles((prev) => ({ ...prev, [user.user_id]: e.target.value }));
-                            }}
-                            style={{
-                              border: `1px solid ${css.borderLight}`,
-                              borderRadius: 8,
-                              padding: "8px 10px",
-                              fontSize: 13,
-                              color: css.textDark,
-                              background: "#FFF",
-                              cursor: saving || pendingRemoval ? "not-allowed" : "pointer",
-                              opacity: pendingRemoval ? 0.55 : 1,
-                            }}
-                          >
-                            {user.role === "applicant" && (
-                              <option value="" disabled>Select role</option>
+                    return (
+                      <tr key={user.user_id} style={{ borderBottom: `1px solid ${css.borderLight}` }}>
+                        <td style={tdStyle}>
+                          <div style={{ fontWeight: 600, color: css.textDark }}>{displayName(user)}</div>
+                          <div style={{ color: css.textGray, fontSize: 12, marginTop: 2 }}>{user.email}</div>
+                        </td>
+                        <td style={tdStyle}>
+                          <Badge style={statusBadgeStyle(status)}>{status === "deactivated" ? "inactive" : status}</Badge>
+                        </td>
+                        <td style={tdStyle}><Badge style={roleBadgeStyle(user.role)}>{user.role}</Badge></td>
+                        <td style={{ ...tdStyle, color: css.textGray, fontSize: 13 }}>
+                          {formatDate(user.last_login, { fallback: "Never", style: "datetime" })}
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: "right" }}>
+                          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+                            {status !== "deactivated" && (
+                              <select
+                                aria-label={`Role for ${user.email}`}
+                                value={selectedRole}
+                                disabled={isBusy}
+                                onChange={(event) => setPendingRoles((previous) => ({ ...previous, [user.user_id]: event.target.value }))}
+                                style={selectStyle}
+                              >
+                                {!selectedRole && <option value="">Select role</option>}
+                                {ASSIGNABLE_ROLES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                              </select>
                             )}
-                            {ASSIGNABLE_ROLES.map((option) => (
-                              <option key={option.value} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
-                          {pendingRemoval ? (
-                            <span style={{ color: css.red, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>Will remove</span>
-                          ) : null}
-                          {user.role !== "applicant" ? (
-                            <button
-                              type="button"
-                              disabled={saving || isSelf}
-                              onClick={() => toggleRemoval(user)}
-                              title={isSelf ? "You cannot remove your own account from this pane" : pendingRemoval ? "Undo removal" : "Remove from team"}
-                              aria-label={pendingRemoval ? `Undo removal of ${displayName(user)}` : `Remove ${displayName(user)} from team`}
-                              style={{
-                                width: 34,
-                                height: 34,
-                                display: "grid",
-                                placeItems: "center",
-                                border: "1px solid rgba(197,48,48,0.28)",
-                                borderRadius: 8,
-                                background: pendingRemoval ? "rgba(197,48,48,0.13)" : "rgba(197,48,48,0.06)",
-                                color: css.red,
-                                cursor: saving || isSelf ? "not-allowed" : "pointer",
-                                opacity: isSelf ? 0.35 : 1,
-                              }}
-                            >
-                              {pendingRemoval ? "↶" : "🗑"}
-                            </button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-          {!loading && users.length > 0 ? (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, padding: "14px 18px", borderTop: `1px solid ${css.borderLight}`, background: "#FAFBFA" }}>
-              <span style={{ color: changedUsers.length ? css.textDark : css.textGray, fontSize: 12, fontWeight: 600 }}>
-                {changedUsers.length ? `${changedUsers.length} unsaved ${changedUsers.length === 1 ? "change" : "changes"}` : "No unsaved changes"}
-              </span>
-              <button
-                type="button"
-                disabled={!changedUsers.length || saving}
-                onClick={handleSaveAll}
-                style={{
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "9px 18px",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: !changedUsers.length || saving ? "not-allowed" : "pointer",
-                  background: changedUsers.length ? css.greenDark : "#E5E7EB",
-                  color: changedUsers.length ? "#FFF" : css.textGray,
-                  opacity: saving ? 0.7 : 1,
-                }}
-              >
-                {saving ? "Saving changes…" : "Save changes"}
-              </button>
+
+                            {status === "pending" && <>
+                              <ActionButton tone="primary" disabled={!selectedRole || isBusy} onClick={() => handleApprove(user)}>
+                                {busy?.action === "approve" && isBusy ? "Approving…" : "Approve"}
+                              </ActionButton>
+                              <ActionButton tone="danger" disabled={isBusy} onClick={() => handleReject(user)}>
+                                {busy?.action === "reject" && isBusy ? "Rejecting…" : "Reject"}
+                              </ActionButton>
+                            </>}
+
+                            {status === "active" && <>
+                              <ActionButton tone="primary" disabled={!roleChanged || isBusy} onClick={() => handleSaveRole(user)}>
+                                {busy?.action === "role" && isBusy ? "Saving…" : "Save role"}
+                              </ActionButton>
+                              <ActionButton
+                                tone="danger"
+                                disabled={isBusy || isCurrentUser}
+                                title={isCurrentUser ? "You cannot deactivate your own account" : ""}
+                                onClick={() => handleDeactivate(user)}
+                              >
+                                {busy?.action === "deactivate" && isBusy ? "Deactivating…" : "Deactivate"}
+                              </ActionButton>
+                            </>}
+
+                            {status === "deactivated" && (
+                              <ActionButton tone="primary" disabled={isBusy} onClick={() => handleReactivate(user)}>
+                                {busy?.action === "reactivate" && isBusy ? "Reactivating…" : "Reactivate"}
+                              </ActionButton>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>
   );
 }
+
+const badgeStyle = {
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 700,
+  padding: "4px 10px",
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+  whiteSpace: "nowrap",
+};
 
 const thStyle = {
   textAlign: "left",
@@ -336,32 +363,11 @@ const thStyle = {
   textTransform: "uppercase",
 };
 
-const tdStyle = {
-  padding: "16px 18px",
-  fontSize: 14,
-  verticalAlign: "middle",
-};
-
-const statCardStyle = {
-  background: css.cardWhite,
-  border: `1px solid ${css.borderLight}`,
-  borderRadius: 10,
-  padding: "14px 18px",
-  minWidth: 120,
-};
-
-const statLabelStyle = {
-  display: "block",
-  fontSize: 11,
-  fontWeight: 700,
-  color: css.textGray,
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
-  marginBottom: 4,
-};
-
-const statValueStyle = {
-  fontSize: 22,
-  fontWeight: 700,
-  color: css.textDark,
-};
+const tdStyle = { padding: "16px 18px", fontSize: 14, verticalAlign: "middle" };
+const statCardStyle = { appearance: "none", textAlign: "left", background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: "12px 18px", minWidth: 120 };
+const statLabelStyle = { display: "block", fontSize: 11, fontWeight: 700, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 3 };
+const statValueStyle = { fontSize: 22, fontWeight: 700, color: css.textDark };
+const tableCardStyle = { background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" };
+const selectStyle = { border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "8px 10px", fontSize: 13, color: css.textDark, background: "#FFF" };
+const actionButtonStyle = { borderRadius: 8, padding: "8px 12px", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" };
+const noticeStyle = { marginBottom: 16, padding: "10px 14px", borderRadius: 8, border: "1px solid rgba(29,158,117,0.25)", background: "rgba(29,158,117,0.08)", color: css.greenDark, fontSize: 13, fontWeight: 600 };

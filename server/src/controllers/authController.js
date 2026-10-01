@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const supabase = require('../config/supabase');
 const { USER_FIELDS } = require('../middleware/authMiddleware');
 const { getJwtSecret } = require('../utils/auth');
+const { ACCOUNT_STATUSES, isActiveAccount } = require('../utils/accountStatus');
 const { serializeUser } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
 const { isGmailConfigured, sendPlainTextEmail } = require('../services/emailService');
@@ -62,6 +63,13 @@ exports.login = async (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
+        if (!isActiveAccount(user)) {
+            const error = user.account_status === ACCOUNT_STATUSES.PENDING
+                ? 'Your access request is awaiting admin approval'
+                : 'This account has been deactivated. Contact an administrator if you need access.';
+            return res.status(403).json({ error });
+        }
+
         const { data: updatedUser, error: updateError } = await supabase
             .from('users')
             .update({ last_login: new Date().toISOString() })
@@ -108,17 +116,15 @@ exports.register = async (req, res) => {
         }
 
         const passwordHash = await bcrypt.hash(password, 12);
-        const now = new Date().toISOString();
-
         const { data: user, error } = await supabase
             .from('users')
             .insert({
                 email,
                 password_hash: passwordHash,
                 role: 'applicant',
+                account_status: ACCOUNT_STATUSES.PENDING,
                 first_name: firstName,
                 last_name: lastName,
-                last_login: now,
             })
             .select(USER_FIELDS)
             .single();
@@ -132,7 +138,7 @@ exports.register = async (req, res) => {
         }
 
         return res.status(201).json({
-            token: createToken(user),
+            message: 'Access request submitted. An administrator must approve your account before you can sign in.',
             user: serializeUser(user),
         });
     } catch (err) {
@@ -147,11 +153,11 @@ exports.requestPasswordReset = async (req, res) => {
     try {
         const { data: user, error } = await supabase
             .from('users')
-            .select('user_id, email')
+            .select('user_id, email, account_status')
             .eq('email', email)
             .maybeSingle();
         if (error) return respondWithServerError(res, error, 'requestPasswordReset lookup');
-        if (!user || !isGmailConfigured()) return res.json({ message: RESET_RESPONSE });
+        if (!user || !isActiveAccount(user) || !isGmailConfigured()) return res.json({ message: RESET_RESPONSE });
 
         const token = crypto.randomBytes(32).toString('base64url');
         const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS).toISOString();
