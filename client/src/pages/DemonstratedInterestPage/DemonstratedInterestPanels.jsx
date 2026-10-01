@@ -419,6 +419,7 @@ function AddEventForm({ cycleId, authedFetch, onAdded }) {
 
 function InterestReviewQueue({ cycleId, authedFetch, onChanged }) {
   const [selection, setSelection] = useState({});
+  const [expandedId, setExpandedId] = useState(null);
   const [workingId, setWorkingId] = useState(null);
   const [error, setError] = useState("");
 
@@ -431,6 +432,8 @@ function InterestReviewQueue({ cycleId, authedFetch, onChanged }) {
   });
   const entries = queueQuery.data?.entries || [];
   const candidates = queueQuery.data?.candidates || [];
+  const unmatchedCount = entries.filter((entry) => entry.status === "unmatched").length;
+  const lateCount = entries.filter((entry) => entry.status === "late").length;
 
   async function resolve(entry, action) {
     const candidateId = selection[entry.id] ?? entry.matchedCandidate?.id ?? entry.suggestedCandidate?.id ?? "";
@@ -454,9 +457,10 @@ function InterestReviewQueue({ cycleId, authedFetch, onChanged }) {
     <div style={{ border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 14, background: "#FFF" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap", marginBottom: 8 }}>
         <h5 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: css.textDark }}>
-          Review queue{entries.length ? ` (${entries.length})` : ""}
+          {unmatchedCount} unmatched candidate{unmatchedCount === 1 ? "" : "s"}
+          {lateCount ? ` · ${lateCount} late submission${lateCount === 1 ? "" : "s"}` : ""}
         </h5>
-        <span style={{ fontSize: 11, color: css.textGray }}>Unmatched and late entries don&apos;t count until resolved.</span>
+        <span style={{ fontSize: 11, color: css.textGray }}>Select a row to review and resolve it.</span>
       </div>
       {queueQuery.isPending ? (
         <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>Loading…</p>
@@ -465,52 +469,70 @@ function InterestReviewQueue({ cycleId, authedFetch, onChanged }) {
       ) : !entries.length ? (
         <p style={{ margin: 0, fontSize: 12, color: "#1D9E75" }}>Nothing needs review.</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {entries.map((entry) => {
             const selected = selection[entry.id] ?? entry.matchedCandidate?.id ?? entry.suggestedCandidate?.id ?? "";
             const canApprove = entry.status === "late" && entry.matchedCandidate && selected === entry.matchedCandidate.id;
             const rowBusy = workingId === entry.id;
+            const expanded = expandedId === entry.id;
             return (
-              <div key={entry.id} style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, background: css.surfaceMuted }}>
-                <div style={{ minWidth: 220, flex: "1 1 260px" }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: css.textDark }}>{entry.submittedName || "No name given"}</span>
-                    <Badge {...(entry.status === "late"
-                      ? { label: "Late", color: css.red, bg: "rgba(226,75,74,0.1)" }
-                      : { label: "Unmatched", color: "#C47D12", bg: "rgba(239,159,39,0.12)" })} />
+              <div key={entry.id} style={{ borderRadius: 8, border: `1px solid ${expanded ? "rgba(29,158,117,0.35)" : css.borderLight}`, background: expanded ? "rgba(29,158,117,0.035)" : css.cardWhite, overflow: "hidden" }}>
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-controls={`interest-entry-${entry.id}`}
+                  onClick={() => setExpandedId(expanded ? null : entry.id)}
+                  style={{ width: "100%", display: "grid", gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 0.7fr) minmax(0, 1fr) 22px", gap: 12, alignItems: "center", padding: "11px 12px", border: "none", background: "transparent", textAlign: "left", cursor: "pointer", color: css.textDark }}
+                >
+                  <span style={{ minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {entry.submittedName || "No name given"}
+                  </span>
+                  <span style={{ minWidth: 0, fontSize: 12, color: css.textGray, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {entry.submittedEmail || "No email"}
+                  </span>
+                  <span style={{ minWidth: 0, fontSize: 12, color: css.textGray, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    UID {entry.submittedUniversityId || "—"}
+                  </span>
+                  <span style={{ minWidth: 0, fontSize: 12, color: css.textDark, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {entry.eventName}
+                  </span>
+                  <span aria-hidden style={{ color: css.textGray, transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>›</span>
+                </button>
+
+                {expanded ? (
+                  <div id={`interest-entry-${entry.id}`} style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "space-between", padding: "12px", borderTop: `1px solid ${css.borderLight}` }}>
+                    <div style={{ minWidth: 220, flex: "1 1 260px" }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        <Badge {...(entry.status === "late"
+                          ? { label: "Late", color: css.red, bg: "rgba(226,75,74,0.1)" }
+                          : { label: "Unmatched", color: "#C47D12", bg: "rgba(239,159,39,0.12)" })} />
+                        <span style={{ fontSize: 11, color: css.textGray }}>Submitted {formatPacific(entry.submittedAt)}</span>
+                      </div>
+                      {entry.matchedCandidate ? (
+                        <p style={{ margin: "7px 0 0", fontSize: 11, color: css.textGray }}>Matches {entry.matchedCandidate.name}, but was submitted after the form closed.</p>
+                      ) : entry.suggestedCandidate ? (
+                        <p style={{ margin: "7px 0 0", fontSize: 11, color: css.textGray }}>Suggested by name: {entry.suggestedCandidate.name} ({entry.suggestedCandidate.email})</p>
+                      ) : null}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <select
+                        value={selected}
+                        aria-label={`Candidate to credit for ${entry.submittedName || "attendance entry"}`}
+                        onChange={(e) => setSelection((prev) => ({ ...prev, [entry.id]: e.target.value }))}
+                        style={{ ...inputStyle, maxWidth: 260, padding: "6px 8px" }}
+                      >
+                        <option value="">Choose a candidate…</option>
+                        {candidates.map((c) => <option key={c.id} value={c.id}>{c.name || "Unnamed"} — {c.email}</option>)}
+                      </select>
+                      {canApprove ? (
+                        <ActionButton label="Approve late" onClick={() => resolve(entry, "approve")} disabled={rowBusy} variant="primary" />
+                      ) : (
+                        <ActionButton label={entry.status === "late" ? "Match & count" : "Match"} onClick={() => resolve(entry, "match")} disabled={rowBusy || !selected} variant="primary" />
+                      )}
+                      <ActionButton label="Dismiss" onClick={() => resolve(entry, "dismiss")} disabled={rowBusy} />
+                    </div>
                   </div>
-                  <p style={{ margin: "3px 0 0", fontSize: 12, color: css.textGray }}>
-                    {entry.eventName} · submitted {formatPacific(entry.submittedAt)}
-                  </p>
-                  <p style={{ margin: "3px 0 0", fontSize: 12, color: css.textDark }}>
-                    {entry.submittedEmail || "no email"} · UID {entry.submittedUniversityId || "—"}
-                  </p>
-                  {entry.otherAnswers?.length ? (
-                    <p style={{ margin: "3px 0 0", fontSize: 11, color: css.textGray }}>{entry.otherAnswers.join(" · ")}</p>
-                  ) : null}
-                  {entry.matchedCandidate ? (
-                    <p style={{ margin: "3px 0 0", fontSize: 11, color: css.textGray }}>Matches {entry.matchedCandidate.name}, but was submitted after the form closed.</p>
-                  ) : entry.suggestedCandidate ? (
-                    <p style={{ margin: "3px 0 0", fontSize: 11, color: css.textGray }}>Suggested by name: {entry.suggestedCandidate.name} ({entry.suggestedCandidate.email})</p>
-                  ) : null}
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <select
-                    value={selected}
-                    aria-label="Candidate to credit"
-                    onChange={(e) => setSelection((prev) => ({ ...prev, [entry.id]: e.target.value }))}
-                    style={{ ...inputStyle, maxWidth: 260, padding: "6px 8px" }}
-                  >
-                    <option value="">Choose a candidate…</option>
-                    {candidates.map((c) => <option key={c.id} value={c.id}>{c.name || "Unnamed"} — {c.email}</option>)}
-                  </select>
-                  {canApprove ? (
-                    <ActionButton label="Approve late" onClick={() => resolve(entry, "approve")} disabled={rowBusy} variant="primary" />
-                  ) : (
-                    <ActionButton label={entry.status === "late" ? "Match & count" : "Match"} onClick={() => resolve(entry, "match")} disabled={rowBusy || !selected} variant="primary" />
-                  )}
-                  <ActionButton label="Dismiss" onClick={() => resolve(entry, "dismiss")} disabled={rowBusy} />
-                </div>
+                ) : null}
               </div>
             );
           })}
