@@ -11,6 +11,7 @@ import { formatReviewCount } from "../../utils/reviewCounts";
 import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
+import CandidateProfileButton from "../../components/CandidateProfileButton/CandidateProfileButton";
 import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle } from "../../theme/typography";
 
@@ -665,7 +666,9 @@ function CoffeeChatAssignmentsBoard({ board, busyKey, onMoveCandidate, onAssignM
                       return (
                         <div key={candidate.id} className={busy ? "" : "coffee-drag-card"} draggable={!busy} onDragStart={(event) => startDrag(event, "candidate", candidate.id, candidate.groupNumber)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", border: `1px solid ${css.borderLight}`, borderRadius: 9, background: css.cardWhite, cursor: busy ? "wait" : "grab" }}>
                           <span aria-hidden="true" title="Drag to another table" style={{ color: css.textGray, fontSize: 17, lineHeight: 1 }}>⣿</span>
-                          <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={38} background={css.greenDark} />
+                          <CandidateProfileButton resumeId={candidate.resumeId} candidateName={candidate.name} onOpen={onOpenCandidate} style={{ borderRadius: "50%", flexShrink: 0 }}>
+                            <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={38} background={css.greenDark} />
+                          </CandidateProfileButton>
                           <button type="button" onClick={() => candidate.resumeId && onOpenCandidate(candidate.resumeId)} style={{ flex: 1, minWidth: 0, padding: 0, border: "none", background: "transparent", color: css.greenDark, textAlign: "left", cursor: candidate.resumeId ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
                             <span style={{ display: "block", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{candidate.name}</span>
                             <span style={{ display: "block", fontSize: 11, color: css.textGray, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[candidate.year, candidate.major].filter(Boolean).join(" · ") || "—"}</span>

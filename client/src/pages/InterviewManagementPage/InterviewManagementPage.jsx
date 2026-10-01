@@ -11,6 +11,7 @@ import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
+import CandidateProfileButton from "../../components/CandidateProfileButton/CandidateProfileButton";
 import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { getInitials } from "../../utils/format";
@@ -83,7 +84,9 @@ function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave
   return (
     <article style={{ minWidth: 0, containerType: "inline-size", containerName: "coffee-card", background: css.cardWhite, border: `1px solid ${validationError ? css.red : rating ? "rgba(29,158,117,0.28)" : css.borderLight}`, borderRadius: 14, padding: 22, boxShadow: validationError ? "0 0 0 3px rgba(226,75,74,0.08)" : "0 1px 3px rgba(0,0,0,0.035)" }}>
       <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 18 }}>
-        <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={56} background={css.greenDark} />
+        <CandidateProfileButton resumeId={candidate.resumeId} candidateName={candidate.name} onOpen={onOpenProfile} style={{ borderRadius: "50%", flexShrink: 0 }}>
+          <CandidateAvatar name={candidate.name} headshot={candidate.headshot} size={56} background={css.greenDark} />
+        </CandidateProfileButton>
         <div style={{ minWidth: 0 }}>
           <button
             type="button"
