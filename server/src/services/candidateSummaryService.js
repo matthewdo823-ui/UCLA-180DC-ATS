@@ -27,23 +27,18 @@ function trimText(value, maxLen = 2000) {
   return `${text.slice(0, maxLen)}…`;
 }
 
-const FRQ_FIELDS = [
-  ["Why consulting?", "whyConsulting"],
-  ["Why 180 Degrees Consulting?", "why180dc"],
-  ["Why social impact?", "whySocialImpact"],
-];
-
+// Snapshot-only: no legacy why_* fallback. An empty snapshot yields no FRQ
+// blocks, so buildSummaryPrompt returns null and the caller emits the canned
+// "no free responses yet" summary instead of summarizing stale why_* columns.
 function getApplicationResponses(candidate = {}) {
-  if (Array.isArray(candidate.applicationResponses) && candidate.applicationResponses.length) {
-    return candidate.applicationResponses
-      .filter((response) => response.gradable !== false)
-      .map((response) => ({
-        questionId: response.questionId,
-        title: String(response.title || "Application response"),
-        answer: String(response.answer || ""),
-      }));
-  }
-  return FRQ_FIELDS.map(([title, key]) => ({ questionId: key, title, answer: candidate[key] || "" }));
+  const responses = Array.isArray(candidate.applicationResponses) ? candidate.applicationResponses : [];
+  return responses
+    .filter((response) => response.gradable !== false)
+    .map((response) => ({
+      questionId: response.questionId,
+      title: String(response.title || "Application response"),
+      answer: String(response.answer || ""),
+    }));
 }
 
 function formatFrqBlocks(candidate = {}) {
