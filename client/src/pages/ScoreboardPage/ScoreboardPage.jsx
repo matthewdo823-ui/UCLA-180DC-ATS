@@ -8,6 +8,7 @@ import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
 import { candidateProfileQueryOptions } from "../../lib/candidateApplicationQuery";
 import { css } from "../../theme/colors";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
+import CandidateProfileButton from "../../components/CandidateProfileButton/CandidateProfileButton";
 import Topbar from "../../components/Topbar/Topbar";
 import PageLoader from "../../components/PageLoader";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
@@ -302,6 +303,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4, equalized = false }) {
 function ScorecardModal({
   candidate,
   onClose,
+  onOpenProfile,
   round = null,
   metrics = [],
   maxPerCategory = 4,
@@ -393,18 +395,26 @@ function ScorecardModal({
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <CandidateAvatar
-                name={candidate.name}
-                headshot={candidate.headshot}
-                candidateId={candidate.candidateId}
-                size={56}
-                background={cardMint}
-                color={cardPale}
-                border="2px solid #5DCAA5"
-                fontSize={17}
-              />
+              <CandidateProfileButton resumeId={candidate.id} candidateName={candidate.name} onOpen={onOpenProfile} style={{ borderRadius: "50%", flexShrink: 0 }}>
+                <CandidateAvatar
+                  name={candidate.name}
+                  headshot={candidate.headshot}
+                  candidateId={candidate.candidateId}
+                  size={56}
+                  background={cardMint}
+                  color={cardPale}
+                  border="2px solid #5DCAA5"
+                  fontSize={17}
+                />
+              </CandidateProfileButton>
               <div style={{ minWidth: 0 }}>
-                <p style={{ color: cardPale, fontSize: 18, fontFamily: sansFont, fontWeight: 600, margin: "0 0 3px", lineHeight: 1.15 }}>{candidate.name}</p>
+                <button
+                  type="button"
+                  onClick={() => onOpenProfile?.(candidate.id)}
+                  style={{ display: "block", border: "none", background: "transparent", color: cardPale, fontSize: 18, fontFamily: sansFont, fontWeight: 600, margin: "0 0 3px", padding: 0, lineHeight: 1.15, cursor: onOpenProfile ? "pointer" : "default", textAlign: "left" }}
+                >
+                  {candidate.name}
+                </button>
                 <p style={{ color: "#9FE1CB", fontSize: 12, margin: "0 0 2px" }}>{candidate.major || "Undeclared"}</p>
                 <p style={{ color: "#5DCAA5", fontSize: 11, margin: 0 }}>
                   {[candidate.email, candidate.phoneNumber].filter(Boolean).join(" · ") || "Contact not recorded"}
@@ -2041,7 +2051,9 @@ export default function ScoreboardPage() {
             <div style={{ color: isFocused ? t.accent : t.textMuted, fontWeight: 700, fontSize: 13 }}>{index + 1}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-              <CandidateAvatar name={c.name} headshot={c.headshot} candidateId={c.candidateId} size={40} background={deliberationMode ? t.accent : css.greenDark} />
+              <CandidateProfileButton resumeId={c.id} candidateName={c.name} onOpen={() => openCandidateWorkspace(c)} style={{ borderRadius: "50%", flexShrink: 0 }}>
+                <CandidateAvatar name={c.name} headshot={c.headshot} candidateId={c.candidateId} size={40} background={deliberationMode ? t.accent : css.greenDark} />
+              </CandidateProfileButton>
               <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
                   <button
@@ -2170,6 +2182,7 @@ export default function ScoreboardPage() {
           equalized={equalizeActive}
           isAdmin={isAdmin}
           onOverrideSaved={() => fetchScoreboard({ silent: true })}
+          onOpenProfile={() => openCandidateWorkspace(selectedCandidate)}
           onClose={() => setSelectedCandidate(null)}
         />
       )}

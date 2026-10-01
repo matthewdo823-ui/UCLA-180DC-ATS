@@ -12,6 +12,7 @@ import { API } from "../../constants/config";
 import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { formatDate, getInitials } from "../../utils/format";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
+import CandidateProfileButton from "../../components/CandidateProfileButton/CandidateProfileButton";
 
 const SIGNAL_MODES = [
   {
@@ -65,9 +66,9 @@ function FlagCard({ flag, onResolve, resolving, onOpenProfile }) {
     <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 20, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18 }}>
         <div style={{ display: "flex", gap: 14, minWidth: 0 }}>
-          <div style={{ width: 44, height: 44, borderRadius: "50%", background: css.greenDark, color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
+          <CandidateProfileButton resumeId={flag.resumeId || flag.resume?.id} candidateName={candidate.name} onOpen={onOpenProfile} style={{ width: 44, height: 44, borderRadius: "50%", background: css.greenDark, color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
             {getInitials(candidate.name)}
-          </div>
+          </CandidateProfileButton>
           <div style={{ minWidth: 0 }}>
             <CandidateNameButton candidate={candidate} resumeId={flag.resumeId || flag.resume?.id} onOpenProfile={onOpenProfile} />
             <p style={{ fontSize: 13, color: css.textGray, margin: 0 }}>
@@ -139,9 +140,9 @@ function ReferralCard({ referral, onResolve, resolving, onOpenProfile }) {
     <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 20, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18 }}>
         <div style={{ display: "flex", gap: 14, minWidth: 0 }}>
-          <div style={{ width: 44, height: 44, borderRadius: "50%", background: css.greenDark, color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
+          <CandidateProfileButton resumeId={referral.resumeId || referral.resume?.id} candidateName={candidate.name} onOpen={onOpenProfile} style={{ width: 44, height: 44, borderRadius: "50%", background: css.greenDark, color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
             {getInitials(candidate.name)}
-          </div>
+          </CandidateProfileButton>
           <div style={{ minWidth: 0 }}>
             <CandidateNameButton candidate={candidate} resumeId={referral.resumeId || referral.resume?.id} onOpenProfile={onOpenProfile} />
             <p style={{ fontSize: 13, color: css.textGray, margin: 0 }}>
