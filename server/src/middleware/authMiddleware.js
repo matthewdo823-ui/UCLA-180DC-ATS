@@ -1,9 +1,10 @@
 const jwt = require('jsonwebtoken');
 const supabase = require('../config/supabase');
 const { normalizeRole, getJwtSecret } = require('../utils/auth');
+const { isActiveAccount } = require('../utils/accountStatus');
 const { respondWithServerError } = require('../utils/httpErrors');
 
-const USER_FIELDS = 'user_id, email, role, first_name, last_name, created_at, last_login';
+const USER_FIELDS = 'user_id, email, role, account_status, first_name, last_name, created_at, last_login, approved_at, approved_by, deactivated_at, deactivated_by';
 
 async function authenticateToken(req, res, next) {
     const authHeader = req.headers.authorization || '';
@@ -23,6 +24,9 @@ async function authenticateToken(req, res, next) {
 
         if (error) return respondWithServerError(res, error, 'authenticateToken');
         if (!user) return res.status(401).json({ error: 'User no longer exists' });
+        if (!isActiveAccount(user)) {
+            return res.status(401).json({ error: 'Account is not active' });
+        }
 
         req.user = user;
         return next();

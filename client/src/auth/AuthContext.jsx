@@ -160,12 +160,7 @@ export function AuthProvider({ children }) {
     }
 
     const data = await res.json().catch(() => ({}));
-    storeToken(data.token);
-    storeUser(data.user);
-    setToken(data.token);
-    setUser(data.user);
-
-    return data.user;
+    return data;
   }, []);
 
   const requestPasswordReset = useCallback(async (email) => {
