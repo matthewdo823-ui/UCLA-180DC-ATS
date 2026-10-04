@@ -33,14 +33,14 @@ export default function NoAccessPage() {
         boxShadow: "0 18px 60px rgba(17, 24, 39, 0.08)",
       }}>
         <div style={{ fontSize: 13, color: css.textGray, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
-          Access restricted
+          Approval pending
         </div>
         <h1 style={{ fontSize: 26, margin: "0 0 10px", letterSpacing: "-0.03em" }}>
-          Your account cannot access the ATS yet.
+          Thanks for signing up.
         </h1>
         <p style={{ color: css.textGray, fontSize: 14, lineHeight: 1.6, marginBottom: 22 }}>
-          {user?.email ? `${user.email} is signed in as ${user.role}.` : "This account does not have a staff role."}
-          {" "}Only admin and member accounts can view resume screening pages right now.
+          {user?.email ? `We received the account for ${user.email}.` : "We received your account."}
+          {" "}A 180DC admin will approve your team access soon. There is nothing else you need to submit.
         </p>
         <button
           type="button"
