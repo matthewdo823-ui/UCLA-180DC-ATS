@@ -389,6 +389,124 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
   );
 }
 
+function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
+  const [resumeGraderGoal, setResumeGraderGoal] = useState(String(cycle.resumeGraderGoal ?? 30));
+  const [frqGraderGoal, setFrqGraderGoal] = useState(String(cycle.frqGraderGoal ?? 30));
+  const [resumeReviewTarget, setResumeReviewTarget] = useState(cycle.resumeReviewTarget == null ? "" : String(cycle.resumeReviewTarget));
+  const [frqReviewTarget, setFrqReviewTarget] = useState(cycle.frqReviewTarget == null ? "" : String(cycle.frqReviewTarget));
+  const [saving, setSaving] = useState(false);
+  const [panelError, setPanelError] = useState("");
+  const [panelMessage, setPanelMessage] = useState("");
+
+  useEffect(() => {
+    setResumeGraderGoal(String(cycle.resumeGraderGoal ?? 30));
+    setFrqGraderGoal(String(cycle.frqGraderGoal ?? 30));
+    setResumeReviewTarget(cycle.resumeReviewTarget == null ? "" : String(cycle.resumeReviewTarget));
+    setFrqReviewTarget(cycle.frqReviewTarget == null ? "" : String(cycle.frqReviewTarget));
+    setPanelError("");
+  }, [cycle.id, cycle.resumeGraderGoal, cycle.frqGraderGoal, cycle.resumeReviewTarget, cycle.frqReviewTarget]);
+
+  function parseGoal(value, label, { optional = false, max = 10000 } = {}) {
+    const trimmed = String(value).trim();
+    if (optional && !trimmed) return null;
+    const number = Number(trimmed);
+    if (!Number.isInteger(number) || number < 1 || number > max) {
+      throw new Error(`${label} must be a whole number from 1 to ${max}${optional ? ", or left blank for Unlimited" : ""}.`);
+    }
+    return number;
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setPanelError("");
+    setPanelMessage("");
+    try {
+      const payload = {
+        resumeGraderGoal: parseGoal(resumeGraderGoal, "Resume grader goal"),
+        frqGraderGoal: parseGoal(frqGraderGoal, "Free-response grader goal"),
+        resumeReviewTarget: parseGoal(resumeReviewTarget, "Resume pile target", { optional: true, max: 1000 }),
+        frqReviewTarget: parseGoal(frqReviewTarget, "Free-response pile target", { optional: true, max: 1000 }),
+      };
+      const res = await authedFetch(`${API}/cycles/${cycle.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw await formatResponseError(res, "saving grading goals");
+      setPanelMessage("Grading goals saved. Shared-pile changes apply when the next candidate is loaded.");
+      await onSaved();
+    } catch (error) {
+      setPanelError(error.message || "Could not save grading goals");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    borderRadius: 7,
+    border: `1px solid ${css.borderLight}`,
+    fontSize: 13,
+    boxSizing: "border-box",
+  };
+
+  const field = (label, description, value, setValue, optional = false) => (
+    <label style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: css.textDark }}>{label}</span>
+      <span style={{ minHeight: 32, fontSize: 11, color: css.textGray, lineHeight: 1.4 }}>{description}</span>
+      <input
+        type="number"
+        min="1"
+        max={optional ? "1000" : "10000"}
+        step="1"
+        value={value}
+        placeholder={optional ? "Unlimited" : undefined}
+        onChange={(event) => {
+          setValue(event.target.value);
+          setPanelError("");
+          setPanelMessage("");
+        }}
+        disabled={busy || saving}
+        style={inputStyle}
+      />
+    </label>
+  );
+
+  return (
+    <div style={{ border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: 16, background: "#FFF" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+        <div>
+          <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: css.textDark }}>Grading goals</h4>
+          <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray, lineHeight: 1.45 }}>
+            Workload goals track each grader. Shared-pile targets remove candidates after enough completed reviews; blank means Unlimited.
+          </p>
+        </div>
+        <ActionButton label={saving ? "Saving…" : "Save goals"} onClick={handleSave} disabled={busy || saving} variant="primary" />
+      </div>
+
+      <div style={{ marginBottom: 8, fontSize: 10, fontWeight: 800, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        Per-grader workload
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12, marginBottom: 16 }}>
+        {field("Resume grader goal", "Resume reviews expected from each grader.", resumeGraderGoal, setResumeGraderGoal)}
+        {field("Free-response grader goal", "Free-response reviews expected from each eligible grader.", frqGraderGoal, setFrqGraderGoal)}
+      </div>
+
+      <div style={{ marginBottom: 8, fontSize: 10, fontWeight: 800, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        Shared-pile coverage
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
+        {field("Resume reviews before removal", "Stops serving the resume from the shared pile. Direct assignments still override this target.", resumeReviewTarget, setResumeReviewTarget, true)}
+        {field("Free-response reviews before removal", "Stops serving the candidate from the free-response pile.", frqReviewTarget, setFrqReviewTarget, true)}
+      </div>
+
+      {panelError ? <p role="alert" style={{ margin: "10px 0 0", fontSize: 12, color: css.red }}>{panelError}</p> : null}
+      {panelMessage ? <p style={{ margin: "10px 0 0", fontSize: 12, color: "#1D9E75" }}>{panelMessage}</p> : null}
+    </div>
+  );
+}
+
 function RubricEditor({ draft, onChange, error }) {
   function updateYear(yearKey, patch) {
     onChange({
@@ -844,6 +962,7 @@ function CycleCard({ cycle, busy, authedFetch, interviewPool, phaseIssues, onRel
       {expanded ? (
         <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 12, background: "#FCFDFC" }}>
           <FormConfigPanel cycle={cycle} busy={busy} authedFetch={authedFetch} onSaved={onReload} />
+          <GradingGoalsPanel cycle={cycle} busy={busy} authedFetch={authedFetch} onSaved={onReload} />
 
           {(cycle.rounds || []).map((round) => (
             <RoundCard

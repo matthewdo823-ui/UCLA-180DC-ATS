@@ -25,11 +25,10 @@ const {
 } = require("../utils/roundPhases");
 const { hasReviewScoreValues } = require("../utils/rubric");
 const { isMissingSchemaError } = require("../utils/schemaCompatibility");
-
-const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
-const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
-  ? configuredGraderReviewGoal
-  : 30;
+const {
+  DEFAULT_GRADER_REVIEW_GOAL,
+  resolveCycleGradingGoals,
+} = require("../utils/gradingGoals");
 
 function buildPhaseLabel(cycle, activeRound, currentRound) {
   if (!cycle) return "No active cycle";
@@ -40,7 +39,7 @@ function buildPhaseLabel(cycle, activeRound, currentRound) {
   return `${cycle.name} · ${round.name} · ${formatRoundPhase(getRoundPhase(round))}`;
 }
 
-async function loadPersonalResumeProgress(userId, cycleId, resumeRoundId) {
+async function loadPersonalResumeProgress(userId, cycleId, resumeRoundId, expectedReviews) {
   let reviewQuery = supabase
     .from("resume_reviews")
     .select("submitted_at")
@@ -54,7 +53,6 @@ async function loadPersonalResumeProgress(userId, cycleId, resumeRoundId) {
   if (error) throw error;
 
   const count = (reviews || []).length;
-  const expectedReviews = GRADER_REVIEW_GOAL;
   const progressPct = expectedReviews > 0 ? Math.min(100, Math.round((count / expectedReviews) * 100)) : 0;
 
   return {
@@ -246,7 +244,7 @@ async function loadPersonalInterviewProgress(userId, cycleId, activeRound) {
   };
 }
 
-async function loadGraderSummary(cycleId, resumeRound) {
+async function loadGraderSummary(cycleId, resumeRound, expectedReviews) {
   const { data: users, error: userError } = await supabase
     .from("users")
     .select("user_id, email, first_name, last_name, role")
@@ -281,8 +279,8 @@ async function loadGraderSummary(cycleId, resumeRound) {
       email: user.email,
       role: user.role,
       reviewCount,
-      expectedReviews: GRADER_REVIEW_GOAL,
-      progressPct: Math.min(100, Math.round((reviewCount / GRADER_REVIEW_GOAL) * 100)),
+      expectedReviews,
+      progressPct: Math.min(100, Math.round((reviewCount / expectedReviews) * 100)),
     };
   });
 
@@ -292,9 +290,9 @@ async function loadGraderSummary(cycleId, resumeRound) {
   const activeGraders = graders.filter((g) => g.reviewCount > 0).length;
   const notStarted = graders.filter((g) => g.reviewCount === 0).length;
   const behindGraders = graders
-    .filter((g) => g.reviewCount > 0 && g.reviewCount < GRADER_REVIEW_GOAL)
+    .filter((g) => g.reviewCount > 0 && g.reviewCount < expectedReviews)
     .slice(0, 5);
-  const behindCount = graders.filter((g) => g.reviewCount > 0 && g.reviewCount < GRADER_REVIEW_GOAL).length;
+  const behindCount = graders.filter((g) => g.reviewCount > 0 && g.reviewCount < expectedReviews).length;
 
   return {
     graders: graders.length,
@@ -302,10 +300,10 @@ async function loadGraderSummary(cycleId, resumeRound) {
     notStarted,
     totalReviews,
     avgReviews: graders.length ? Number((totalReviews / graders.length).toFixed(1)) : 0,
-    expectedReviews: GRADER_REVIEW_GOAL,
+    expectedReviews,
     behindGraders,
     behindCount,
-    completeCount: graders.filter((g) => g.reviewCount >= GRADER_REVIEW_GOAL).length,
+    completeCount: graders.filter((g) => g.reviewCount >= expectedReviews).length,
   };
 }
 
@@ -517,7 +515,7 @@ async function loadActionItems({
     items.push({
       id: "graders-behind",
       label: "Graders behind on resume reviews",
-      detail: `${behindCount} grader${behindCount === 1 ? "" : "s"} below the ${GRADER_REVIEW_GOAL}-resume-review goal.`,
+      detail: `${behindCount} grader${behindCount === 1 ? "" : "s"} below the ${graderSummary.expectedReviews}-resume-review goal.`,
       count: behindCount,
       severity: "info",
       path: "/grader-scoreboard",
@@ -624,6 +622,7 @@ async function loadDemographicsSnapshot(cycleId) {
 async function getGraderDashboard(userId) {
   const activeCycle = await getActiveCycleRow();
   const activeCycleId = activeCycle?.id || null;
+  const { resumeGraderGoal } = resolveCycleGradingGoals(activeCycle);
   const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
   const { resumeRound, activeRound, currentRound } = resolveDeliberationRounds(cycleRounds);
   const isInterviewRound = isInterviewRoundType(activeRound?.type);
@@ -635,7 +634,8 @@ async function getGraderDashboard(userId) {
     personal = await loadPersonalResumeProgress(
       userId,
       activeCycleId,
-      resumeRound?.id || null
+      resumeRound?.id || null,
+      resumeGraderGoal
     );
   }
 
@@ -657,6 +657,7 @@ async function getGraderDashboard(userId) {
 async function getAdminDashboard(_userId) {
   const activeCycle = await getActiveCycleRow();
   const activeCycleId = activeCycle?.id || null;
+  const { resumeGraderGoal } = resolveCycleGradingGoals(activeCycle);
   const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
   const {
     resumeRound,
@@ -676,7 +677,7 @@ async function getAdminDashboard(_userId) {
     demographics,
   ] = await Promise.all([
     activeCycleId && resumeRound
-      ? loadGraderSummary(activeCycleId, resumeRound)
+      ? loadGraderSummary(activeCycleId, resumeRound, resumeGraderGoal)
       : Promise.resolve(null),
     activeCycleId
       ? supabase
@@ -766,7 +767,7 @@ async function getAdminDashboard(_userId) {
 }
 
 module.exports = {
-  GRADER_REVIEW_GOAL,
+  GRADER_REVIEW_GOAL: DEFAULT_GRADER_REVIEW_GOAL,
   getGraderDashboard,
   getAdminDashboard,
 };

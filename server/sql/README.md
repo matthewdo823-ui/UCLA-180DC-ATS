@@ -54,6 +54,7 @@ The table below documents the order and intent; it is kept in sync with
 | 32 | `add_cycle_application_question_mapping.sql` | Additive cycle question catalogs, response snapshots, names, and structured application fields |
 | 33 | `repair_fall_26_application_mapping.sql` | **Manual post-deploy repair** — correct Fall '26 mappings before its one-time re-sync |
 | 34 | `add_board_role.sql` | Add the `board` database role (member access plus FRQ grading in the application) |
+| 35 | `add_cycle_grading_goals.sql` | Per-cycle resume/FRQ grader goals and optional shared-pile completion targets |
 
 ## First-time setup on a new database
 
