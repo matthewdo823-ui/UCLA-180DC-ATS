@@ -21,6 +21,7 @@ import FrqDrawer from "../../components/FrqScoringPanel/FrqDrawer";
 import GradeCelebration from "../../components/GradeCelebration/GradeCelebration";
 import PastReviewDetailModal from "../../components/PastReviewDetailModal/PastReviewDetailModal";
 import PageLoader from "../../components/PageLoader";
+import ResizableSplitPane from "../../components/ResizableSplitPane/ResizableSplitPane";
 
 const GRADING_MODES = {
   RESUME: "resume",
@@ -545,61 +546,66 @@ export default function ScreenerPage() {
             </div>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.35fr", gap: 14, flex: 1, minHeight: 0, overflow: "hidden" }}>
-            <div ref={panelRef} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-              {loading || cycleLoading ? (
-                <PageLoader />
-              ) : isFrqMode ? (
-                resume ? (
-                  <FrqResponsesPanel candidate={resume} />
+          <ResizableSplitPane
+            leftLabel={isFrqMode ? "free responses" : "resume"}
+            rightLabel="grading panel"
+            left={(
+              <div ref={panelRef} style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                {loading || cycleLoading ? (
+                  <PageLoader />
+                ) : isFrqMode ? (
+                  resume ? (
+                    <FrqResponsesPanel candidate={resume} />
+                  ) : (
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.textGray, fontSize: 13, padding: 24, textAlign: "center" }}>
+                      {fetchError || "No candidates available"}
+                    </div>
+                  )
+                ) : resume?.file_url ? (
+                  <PdfViewer resumeId={resume.id} fileUrl={resume.file_url} authToken={token} />
                 ) : (
                   <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.textGray, fontSize: 13, padding: 24, textAlign: "center" }}>
-                    {fetchError || "No candidates available"}
+                    {fetchError || "No resume available"}
                   </div>
-                )
-              ) : resume?.file_url ? (
-                <PdfViewer resumeId={resume.id} fileUrl={resume.file_url} authToken={token} />
-              ) : (
-                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: css.textGray, fontSize: 13, padding: 24, textAlign: "center" }}>
-                  {fetchError || "No resume available"}
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", gap: 8, minHeight: 0 }}>
-              {!loading && !cycleLoading && resume ? (
-                <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                  {isFrqMode ? (
-                    <FrqScoringPanel
-                      score={frqScore}
-                      onScore={setFrqScore}
-                      notes={notes}
-                      onNotes={setNotes}
-                      onComplete={handleFrqComplete}
-                      scoringComplete={frqScoringComplete}
-                      submitError={submitError}
-                      submitting={Boolean(submittingAction)}
-                    />
-                  ) : (
-                    <ScoringPanel
-                      rubric={rubric}
-                      scores={scores}
-                      onScore={(metric, val) => setScores((s) => ({ ...s, [metric]: val }))}
-                      notes={notes}
-                      onNotes={setNotes}
-                      onAction={handleResumeAction}
-                      onReset={handleResumeReset}
-                      scoringComplete={resumeScoringComplete}
-                      submitError={submitError}
-                      submittingAction={submittingAction}
-                    />
-                  )}
-                </div>
-              ) : (
-                <PageLoader />
-              )}
-            </div>
-          </div>
+                )}
+              </div>
+            )}
+            right={(
+              <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", gap: 8, minHeight: 0 }}>
+                {!loading && !cycleLoading && resume ? (
+                  <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                    {isFrqMode ? (
+                      <FrqScoringPanel
+                        score={frqScore}
+                        onScore={setFrqScore}
+                        notes={notes}
+                        onNotes={setNotes}
+                        onComplete={handleFrqComplete}
+                        scoringComplete={frqScoringComplete}
+                        submitError={submitError}
+                        submitting={Boolean(submittingAction)}
+                      />
+                    ) : (
+                      <ScoringPanel
+                        rubric={rubric}
+                        scores={scores}
+                        onScore={(metric, val) => setScores((s) => ({ ...s, [metric]: val }))}
+                        notes={notes}
+                        onNotes={setNotes}
+                        onAction={handleResumeAction}
+                        onReset={handleResumeReset}
+                        scoringComplete={resumeScoringComplete}
+                        submitError={submitError}
+                        submittingAction={submittingAction}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <PageLoader />
+                )}
+              </div>
+            )}
+          />
         )}
       </div>
 
