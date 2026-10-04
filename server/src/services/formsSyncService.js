@@ -324,6 +324,28 @@ async function upsertCandidatesAndResumesBatch(client, mappedRows, cycleId, orph
 }
 
 /**
+ * Advance a cycle's incremental-sync watermark only after every mapped row was
+ * accepted. A partial failure must be replayed on the next run; response-ID
+ * upserts make replaying the successful rows safe.
+ */
+async function advanceSyncWatermark(client, { cycleId, syncStartedAt, errors }) {
+  if (errors > 0) {
+    console.error(
+      `[formsSync] Keeping the previous watermark for cycle ${cycleId}:`
+      + ` ${errors} response${errors === 1 ? "" : "s"} failed and will be retried.`
+    );
+    return false;
+  }
+
+  const { error } = await client
+    .from("cycles")
+    .update({ last_form_sync_at: syncStartedAt })
+    .eq("id", cycleId);
+  if (error) throw error;
+  return true;
+}
+
+/**
  * @param {{ cycleId: string, config: import('../utils/dataMapper').FormSyncConfig, lastSyncAt?: string|null }} target
  * @returns {Promise<{ processed: number, errors: number }>}
  */
@@ -385,10 +407,7 @@ async function syncFormResponsesForCycle(target) {
     }
   } while (pageToken);
 
-  await supabase
-    .from("cycles")
-    .update({ last_form_sync_at: syncStartedAt })
-    .eq("id", cycleId);
+  await advanceSyncWatermark(supabase, { cycleId, syncStartedAt, errors });
 
   return { processed, errors, cycleId };
 }
@@ -484,6 +503,7 @@ function loadFormConfig() {
 module.exports = {
   syncFormResponsesToDatabase,
   upsertCandidatesAndResumesBatch,
+  advanceSyncWatermark,
   syncFormResponsesForCycle,
   loadFormConfig,
   resolveFormConfigPath,

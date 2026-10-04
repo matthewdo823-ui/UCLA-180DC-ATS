@@ -178,6 +178,11 @@
       "order": 34,
       "file": "add_board_role.sql",
       "mode": "auto"
+    },
+    {
+      "order": 35,
+      "file": "fix_form_sync_legacy_why_defaults.sql",
+      "mode": "auto"
     }
   ]
 }

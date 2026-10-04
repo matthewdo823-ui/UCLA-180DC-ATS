@@ -107,7 +107,7 @@ export default function LoginPage() {
         </h1>
         <p style={{ fontSize: 14, color: css.textGray, marginBottom: 28 }}>
           {isCreateMode
-            ? "New accounts start as applicants until an admin updates their role."
+            ? "Create your team account. A 180DC admin will review and approve your access soon."
             : isForgotMode ? "Enter your email and we’ll send a password-reset link if an account exists."
             : isResetMode ? "Choose a new password for your account."
             : "Log into your account to continue to the epic 180DC recruitment platform."}

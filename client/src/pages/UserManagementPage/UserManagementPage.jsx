@@ -31,6 +31,7 @@ function roleBadgeStyle(role) {
 }
 
 function RoleBadge({ role }) {
+  const label = role === "applicant" ? "Awaiting approval" : role;
   return (
     <span style={{
       ...roleBadgeStyle(role),
@@ -42,7 +43,7 @@ function RoleBadge({ role }) {
       textTransform: "uppercase",
       whiteSpace: "nowrap",
     }}>
-      {role}
+      {label}
     </span>
   );
 }
@@ -143,7 +144,7 @@ export default function UserManagementPage() {
             Team roles
           </h1>
           <p style={{ margin: 0, fontSize: 14, color: css.textGray, lineHeight: 1.5 }}>
-            Assign member or admin access to registered users. Applicants cannot use the ATS until promoted.
+            Assign member, board, or admin access to registered users. New accounts wait here until approved.
           </p>
         </div>
 
