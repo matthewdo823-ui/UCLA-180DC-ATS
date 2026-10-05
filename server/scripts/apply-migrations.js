@@ -15,9 +15,11 @@
  *   node scripts/apply-migrations.js --baseline [--through file.sql]
  *                                                # record existing migrations WITHOUT running
  *
- * Requires SUPABASE_DB_URL (or DATABASE_URL) — a direct Postgres connection
- * string. The Supabase service key will not work: it speaks PostgREST, which
- * cannot execute DDL.
+ * Requires SUPABASE_DB_URL (or DATABASE_URL) — a Postgres connection string.
+ * The Supabase service key will not work: it speaks PostgREST, which cannot
+ * execute DDL. From GitHub Actions use the session pooler URL
+ * (aws-0-<region>.pooler.supabase.com:5432): the direct db.<ref>.supabase.co
+ * host is IPv6-only and hosted runners have no IPv6 route.
  */
 
 const fs = require('node:fs');
@@ -222,5 +224,12 @@ async function main() {
 
 main().catch((err) => {
   console.error(`\n${err.message}`);
+  if (err.code === 'ENETUNREACH' && /:[0-9a-f]*:/i.test(err.address || '')) {
+    console.error(
+      'The database host only resolved to IPv6, which this machine cannot reach.'
+      + ' Point SUPABASE_DB_URL at the Supabase session pooler'
+      + ' (aws-0-<region>.pooler.supabase.com:5432) instead of db.<ref>.supabase.co.'
+    );
+  }
   process.exit(1);
 });
