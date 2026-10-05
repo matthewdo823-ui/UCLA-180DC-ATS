@@ -14,6 +14,7 @@ const VALID_YEAR = new Set([
   "Junior Transfer",
   "Junior",
   "Senior",
+  "Senior Transfer",
 ]);
 
 const YEAR_ALIASES = new Map(
@@ -33,6 +34,11 @@ const YEAR_ALIASES = new Map(
     senior: "Senior",
     "4th year": "Senior",
     "fourth year": "Senior",
+    "senior transfer": "Senior Transfer",
+    "transfer senior": "Senior Transfer",
+    "4th year transfer": "Senior Transfer",
+    "fourth year transfer": "Senior Transfer",
+    "sr transfer": "Senior Transfer",
   }).map(([k, v]) => [k.toLowerCase(), v])
 );
 

@@ -6,9 +6,9 @@ test('eligibility forces zero/reject without destroying original grades',()=>{
  const reviews=[{score:88}];const c=applyScreeningEligibility({id:'a',year:'Junior',score:88,normalizedScore:88,numReviews:1,reviews,decision:{status:'advance'}});
  assert.equal(c.score,0);assert.equal(c.normalizedScore,0);assert.equal(c.decision.status,'reject');assert.equal(c.gradingRequired,false);assert.equal(c.canDecide,false);assert.equal(c.numReviews,1);assert.equal(c.reviews,reviews);
 });
-test('only exact Junior/Senior standing is excluded on read; transfers stay eligible',()=>{
- for(const year of ['Junior','Senior',' junior ','SENIOR']) assert.ok(screeningExclusionReason(year));
- for(const year of ['Junior Transfer','Freshman','Sophomore','Senior Transfer',null,'']) {
+test('Junior, Senior, and Senior Transfer are excluded while Junior Transfer remains eligible',()=>{
+ for(const year of ['Junior','Senior',' junior ','SENIOR','Senior Transfer',' senior transfer ','TRANSFER SENIOR','4th year transfer','Sr Transfer']) assert.ok(screeningExclusionReason(year));
+ for(const year of ['Junior Transfer','Freshman','Sophomore',null,'']) {
   assert.equal(screeningExclusionReason(year),null);
   assert.equal(screeningAccessError({year}),null);
  }
