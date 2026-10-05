@@ -42,7 +42,7 @@ export default function FrqResponsesPanel({ candidate }) {
       </div>
 
       {responses.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 14, fontStyle: "italic", color: css.textGray }}>
+        <p style={{ margin: 0, fontSize: 16, fontStyle: "italic", color: css.textGray }}>
           {UNRENDERABLE_RESPONSES_MESSAGE}
         </p>
       ) : (
@@ -63,7 +63,7 @@ export default function FrqResponsesPanel({ candidate }) {
               <p
                 style={{
                   margin: 0,
-                  fontSize: 14,
+                  fontSize: 16,
                   lineHeight: 1.6,
                   color: hasText(answer) ? css.textDark : css.textGray,
                   whiteSpace: "pre-wrap",
