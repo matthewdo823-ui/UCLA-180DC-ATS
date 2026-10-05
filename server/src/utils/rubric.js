@@ -23,18 +23,8 @@ const DEFAULT_RUBRIC_CONFIG = {
       imageUrl: "/rubrics/SophomoreRubric.png",
       metrics: ["work experience", "leadership experience", "social impact"],
     },
-    junior: {
-      label: "Junior & Senior",
-      imageUrl: "/rubrics/OthersRubric.png",
-      metrics: ["leadership/work experience", "business or social impact"],
-    },
     juniortransfer: {
-      label: "Junior & Senior",
-      imageUrl: "/rubrics/OthersRubric.png",
-      metrics: ["leadership/work experience", "business or social impact"],
-    },
-    senior: {
-      label: "Junior & Senior",
+      label: "Junior Transfer",
       imageUrl: "/rubrics/OthersRubric.png",
       metrics: ["leadership/work experience", "business or social impact"],
     },
@@ -60,8 +50,11 @@ function getRubricForYear(rubricConfig, yearRaw) {
     };
   }
   const entry = byYear[key];
+  const label = key === "juniortransfer" && entry.label === "Junior & Senior"
+    ? "Junior Transfer"
+    : entry.label;
   return {
-    label: entry.label,
+    label,
     imageUrl: entry.imageUrl,
     metrics: entry.metrics,
     maxPerCategory: config.maxPerCategory || RUBRIC_MAX_PER_CATEGORY,
