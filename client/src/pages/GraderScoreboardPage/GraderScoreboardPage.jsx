@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
@@ -13,6 +14,7 @@ import { formatDate, formatNumber, getInitials, hasNumericScore, titleCase } fro
 import { formatReviewCount } from "../../utils/reviewCounts";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { ROUND_TYPES, normalizeRoundType } from "../../constants/rounds";
+import { buildCandidateProfilePath, buildCandidateProfileState } from "../../utils/candidateProfile";
 const cardGreen = "#085041";
 const cardMint = "#1D9E75";
 const cardPale = "#EAF3DE";
@@ -45,7 +47,7 @@ const SCOREBOARD_MODES = [
     columnLabel: "RESUME REVIEWS",
     totalLabel: "TOTAL RESUME REVIEWS",
     gradedLabel: "RESUME REVIEWS",
-    recentLabel: "RECENT RESUME REVIEWS",
+    recentLabel: "RESUME REVIEWS",
     noGradesLabel: "No resume reviews submitted yet.",
     badge: "ROUND 1 · GRADER",
     emptyLabel: "No graders yet.",
@@ -62,7 +64,7 @@ const SCOREBOARD_MODES = [
     columnLabel: "FREE RESPONSE REVIEWS",
     totalLabel: "TOTAL FREE RESPONSE REVIEWS",
     gradedLabel: "FREE RESPONSE REVIEWS",
-    recentLabel: "RECENT FREE RESPONSE REVIEWS",
+    recentLabel: "FREE RESPONSE REVIEWS",
     noGradesLabel: "No free response reviews submitted yet.",
     badge: "FRQ · GRADER",
     emptyLabel: "No FRQ graders yet.",
@@ -79,7 +81,7 @@ const SCOREBOARD_MODES = [
     columnLabel: "COFFEE CHAT GRADES",
     totalLabel: "TOTAL COFFEE CHAT GRADES",
     gradedLabel: "COFFEE CHAT GRADES",
-    recentLabel: "RECENT COFFEE CHAT GRADES",
+    recentLabel: "COFFEE CHAT GRADES",
     noGradesLabel: "No Coffee Chat grades submitted yet.",
     badge: "COFFEE CHAT · MEMBER",
     emptyLabel: "No members have been assigned to this Coffee Chat round yet.",
@@ -156,7 +158,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4 }) {
   );
 }
 
-function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge = "ROUND 1 · GRADER", reviewType = "resume", gradedLabel = "RESUME REVIEWS", recentLabel = "RECENT RESUME REVIEWS", noGradesLabel = "No resume reviews submitted yet.", modeId = "resume" }) {
+export function GraderModal({ grader, onClose, onReviewOpen, metrics = [], maxPerCategory = 4, badge = "ROUND 1 · GRADER", reviewType = "resume", gradedLabel = "RESUME REVIEWS", recentLabel = "RESUME REVIEWS", noGradesLabel = "No resume reviews submitted yet.", modeId = "resume" }) {
   useEffect(() => {
     function onKeyDown(event) {
       if (event.key === "Escape") onClose();
@@ -188,7 +190,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
         padding: 24,
       }}
     >
-      <div className="scorecard-shell" style={{ width: "min(460px, 100%)", position: "relative", perspective: 900 }}>
+      <div className="scorecard-shell" style={{ width: "min(520px, 100%)", maxHeight: "calc(100vh - 48px)", position: "relative", perspective: 900 }}>
         <button
           aria-label="Close grader summary"
           onClick={onClose}
@@ -216,7 +218,7 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
           GRADER SUMMARY
         </p>
 
-        <div className="scorecard-body" style={{ borderRadius: 16, border: `2px solid ${cardGreen}`, background: "#FFF", boxShadow: "0 24px 70px rgba(0,0,0,0.26)" }}>
+        <div className="scorecard-body" style={{ maxHeight: "calc(100vh - 82px)", overflowY: "auto", borderRadius: 16, border: `2px solid ${cardGreen}`, background: "#FFF", boxShadow: "0 24px 70px rgba(0,0,0,0.26)" }}>
           <div style={{ background: cardGreen, padding: "18px 18px 16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
               <span style={{ background: "#04342C", color: "#9FE1CB", fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 20, letterSpacing: "0.04em" }}>
@@ -277,14 +279,22 @@ function GraderModal({ grader, onClose, metrics = [], maxPerCategory = 4, badge 
             <p style={{ fontSize: 11, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em", margin: "0 0 8px" }}>
               {recentLabel} ({grader.reviews?.length ?? 0})
             </p>
-            {(grader.reviews ?? []).slice(0, 5).map(review => (
-              <div key={review.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
+            {(grader.reviews ?? []).map(review => (
+              <button
+                key={review.id}
+                type="button"
+                disabled={!review.resumeId || !onReviewOpen}
+                aria-label={review.resumeId ? `Open ${review.resumeName} review` : undefined}
+                onClick={() => onReviewOpen?.(review)}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 0", border: "none", borderTop: "1px solid #EAEAEA", background: "transparent", textAlign: "left", cursor: review.resumeId && onReviewOpen ? "pointer" : "default" }}
+              >
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{review.resumeName}</p>
                   <p style={{ fontSize: 11, color: css.textGray, margin: 0 }}>{formatDate(review.submittedAt, { fallback: "Not yet" })}</p>
                 </div>
                 <div style={{ fontSize: 12, color: modeId === "coffee" ? (coffeeRatingColors[review.rating] || cardGreen) : cardGreen, fontWeight: 700 }}>{modeId === "coffee" ? review.ratingLabel : `${formatNumber(review.normalizedScore ?? review.score)}%`}</div>
-              </div>
+                {review.resumeId ? <span aria-hidden style={{ color: css.textGray }}>›</span> : null}
+              </button>
             ))}
             {grader.reviews?.length === 0 && (
               <div style={{ fontSize: 12, color: css.textGray, padding: "8px 0" }}>{noGradesLabel}</div>
@@ -300,8 +310,10 @@ const DEFAULT_SCOREBOARD_DATA = { stats: null, graders: [], metrics: [], maxPerC
 
 export default function GraderScoreboardPage() {
   const authedFetch = useAuthedFetch();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { activeRound, loading: cycleLoading } = useActiveCycle();
-  const [mode, setMode] = useState(SCOREBOARD_MODES[0].id);
+  const [mode, setMode] = useState(() => location.state?.graderMode || SCOREBOARD_MODES[0].id);
   const [selectedGrader, setSelectedGrader] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -371,6 +383,25 @@ export default function GraderScoreboardPage() {
 
   const hasActiveSearch = searchQuery.trim().length > 0;
   const hasActiveNarrowing = statusFilter !== "all" || hasActiveSearch;
+
+  useEffect(() => {
+    const requestedId = location.state?.selectedGraderId;
+    if (!requestedId || !graders.length) return;
+    const requestedGrader = graders.find((grader) => String(grader.id) === String(requestedId));
+    if (requestedGrader) setSelectedGrader(requestedGrader);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [graders, location.pathname, location.state, navigate]);
+
+  function openReviewCandidate(review) {
+    const path = buildCandidateProfilePath(review.resumeId, data.context?.cycle?.id);
+    if (!path || !selectedGrader) return;
+    navigate(path, {
+      state: buildCandidateProfileState("/grader-scoreboard", {
+        graderMode: activeMode.id,
+        selectedGraderId: selectedGrader.id,
+      }),
+    });
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: css.bgLight, color: css.textDark, fontFamily: "'DM Sans', sans-serif", fontSize: 13, overflow: "auto" }}>
@@ -609,7 +640,7 @@ export default function GraderScoreboardPage() {
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: css.greenDark, color: "#FFF", border: "none", fontSize: 13, cursor: "pointer" }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-                Summary
+                View profile
               </button>
             </div>
           </div>
@@ -630,6 +661,7 @@ export default function GraderScoreboardPage() {
           recentLabel={activeMode.recentLabel}
           noGradesLabel={activeMode.noGradesLabel}
           modeId={activeMode.id}
+          onReviewOpen={openReviewCandidate}
           onClose={() => setSelectedGrader(null)}
         />
       )}

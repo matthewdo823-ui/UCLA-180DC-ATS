@@ -12,6 +12,7 @@ import ApplicationSignalsSection from "./ApplicationSignalsSection";
 import ApplicationSummarySection from "./ApplicationSummarySection";
 import useCandidateApplication from "./useCandidateApplication";
 import useCandidateApplicationSummary from "./useCandidateApplicationSummary";
+import AdminReviewOverridesSection from "./AdminReviewOverridesSection";
 
 export default function CandidateApplicationPage() {
   const { candidateId: resumeId } = useParams();
@@ -19,7 +20,7 @@ export default function CandidateApplicationPage() {
   const cycleId = new URLSearchParams(location.search).get("cycleId") || null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { candidate, resume, scoring, signals, roundDecision, contextLabel, loading, error, refresh, verified, detailsLoading, detailsError, refreshDetails, responsesState } = useCandidateApplication(resumeId, cycleId);
   const summaryState = useCandidateApplicationSummary(resumeId, verified, cycleId);
   const cachedScoreboard = queryClient
@@ -36,7 +37,8 @@ export default function CandidateApplicationPage() {
 
   function returnToSource() {
     if (returnTo) {
-      navigate(returnTo, { state: { selectedCandidateId: resumeId } });
+      const { returnTo: _returnTo, ...sourceState } = location.state || {};
+      navigate(returnTo, { state: { ...sourceState, selectedCandidateId: resumeId } });
       return;
     }
     if ((window.history.state?.idx ?? 0) > 0) {
@@ -104,6 +106,15 @@ export default function CandidateApplicationPage() {
               ) : <>
                 <ApplicationSignalsSection signals={signals} />
                 <ApplicationRoundsSection scoring={scoring} roundDecision={roundDecision} />
+                <AdminReviewOverridesSection
+                  isAdmin={user?.role === "admin"}
+                  resumeId={resume?.id || resumeId}
+                  scoring={scoring}
+                  onOverrideSaved={() => {
+                    refreshDetails();
+                    queryClient.invalidateQueries({ queryKey: qk.scoreboardRoot() });
+                  }}
+                />
               </>}
             </div>
           </div>

@@ -26,6 +26,7 @@ const {
 } = require("../utils/rounds");
 const { TABLE_PHASES } = require("../utils/roundPhases");
 const { isNoShowGroup } = require("../utils/interviewGroups");
+const { mapCoffeeChatGraderReview } = require("../utils/adminWorkflowViews");
 
 const VALID_DECISIONS = new Set(["pending", "pass", "fail", "hold"]);
 const COFFEE_CHAT_SCORES = Object.freeze({ strong_yes: 2, yes: 1, no: -1, strong_no: -2 });
@@ -653,7 +654,7 @@ exports.getCoffeeChatGraderScoreboard = async (req, res) => {
       candidateIds.length
         ? supabase
           .from("candidates")
-          .select("id, name")
+          .select("id, name, resumes(id)")
           .in("id", candidateIds)
         : { data: [], error: null },
       memberIds.length
@@ -678,26 +679,10 @@ exports.getCoffeeChatGraderScoreboard = async (req, res) => {
       evaluationsByUser[evaluation.evaluated_by].push(evaluation);
     });
 
-    const ratingLabel = (rating) => ({
-      strong_yes: "Strong yes",
-      yes: "Yes",
-      no: "No",
-      strong_no: "Strong no",
-    }[rating] || rating || "—");
-
     const expectedReviews = candidateIds.length;
     const graders = (userRes.data || []).map((user) => {
       const reviews = (evaluationsByUser[user.user_id] || [])
-        .map((evaluation) => ({
-          id: evaluation.id,
-          candidateId: evaluation.candidate_id,
-          resumeName: candidateById[evaluation.candidate_id]?.name || "Unknown candidate",
-          rating: evaluation.rating,
-          ratingLabel: ratingLabel(evaluation.rating),
-          score: Number(evaluation.weighted_score),
-          notes: evaluation.notes || "",
-          submittedAt: evaluation.updated_at || evaluation.submitted_at,
-        }))
+        .map((evaluation) => mapCoffeeChatGraderReview(evaluation, candidateById[evaluation.candidate_id]))
         .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
       const totalScore = reviews.reduce((sum, review) => sum + (Number.isFinite(review.score) ? review.score : 0), 0);
       const reviewCount = reviews.length;
