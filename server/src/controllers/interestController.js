@@ -1,5 +1,6 @@
 const supabase = require("../config/supabase");
 const { respondWithServerError } = require("../utils/httpErrors");
+const { mapInterestReviewEntry } = require("../utils/adminWorkflowViews");
 const {
   INTEREST_FIELD_TARGETS,
   INTEREST_TITLE_HINTS,
@@ -262,7 +263,7 @@ exports.listInterestAttendance = async (req, res) => {
     const rows = await fetchAllPages(() =>
       supabase
         .from("interest_attendance")
-        .select("id, event_id, submitted_at, answers, submitted_name, submitted_email, submitted_university_id, candidate_id, match_method, status, interest_events!inner(name, field_map)")
+        .select("id, event_id, submitted_at, submitted_name, submitted_email, submitted_university_id, candidate_id, match_method, status, interest_events!inner(name)")
         .eq("cycle_id", cycleId)
         .in("status", statuses)
         .order("submitted_at")
@@ -278,23 +279,7 @@ exports.listInterestAttendance = async (req, res) => {
     const entries = rows.map((row) => {
       const matched = row.candidate_id ? byId.get(row.candidate_id) : null;
       const suggestion = matched ? null : suggestCandidateByName(row.submitted_name, index);
-      const mapped = new Set(Object.keys(row.interest_events?.field_map || {}));
-      return {
-        id: row.id,
-        eventId: row.event_id,
-        eventName: row.interest_events?.name || "Event",
-        status: row.status,
-        submittedAt: row.submitted_at,
-        submittedName: row.submitted_name,
-        submittedEmail: row.submitted_email,
-        submittedUniversityId: row.submitted_university_id,
-        // Unmapped answers (Major, Year, ...) help an admin identify the person.
-        otherAnswers: Object.entries(row.answers || {})
-          .filter(([questionId, value]) => !mapped.has(questionId) && value)
-          .map(([, value]) => value),
-        matchedCandidate: matched ? { id: matched.id, name: matched.name, email: matched.email } : null,
-        suggestedCandidate: suggestion ? { id: suggestion.id, name: suggestion.name, email: suggestion.email } : null,
-      };
+      return mapInterestReviewEntry(row, { matched, suggestion });
     });
 
     return res.json({
