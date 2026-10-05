@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
+import CandidateFlagDialog from "../CandidateFlagDialog/CandidateFlagDialog";
 
 const MIN_NOTE_LENGTH = 20;
 
@@ -31,6 +32,7 @@ export default function CandidateSignalActions({
   dark = false,
 }) {
   const [open, setOpen] = useState(null);
+  const [flagOpen, setFlagOpen] = useState(false);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -68,7 +70,6 @@ export default function CandidateSignalActions({
 
   function openPopover(type) {
     if (!canAct) return;
-    if (type === "flag" && flaggedByMe) return;
     if (type === "refer" && referredByMe) return;
     setOpen(type);
     setNote("");
@@ -87,28 +88,24 @@ export default function CandidateSignalActions({
       resume_id: resumeId,
       candidate_id: candidateId || undefined,
     };
-    const isFlag = open === "flag";
-    if (isFlag) body.reason = trimmedNote;
-    else body.note = trimmedNote;
+    body.note = trimmedNote;
 
     try {
-      const res = await authedFetch(`${API}/${isFlag ? "candidate-flags" : "candidate-referrals"}`, {
+      const res = await authedFetch(`${API}/candidate-referrals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(json.error || `Could not ${isFlag ? "flag" : "refer"} candidate`);
+        throw new Error(json.error || "Could not refer candidate");
       }
 
       onUpdated?.({
         resumeId,
         candidateId,
         type: open,
-        flagCount: json.flagCount,
         referralCount: json.referralCount,
-        flaggedByMe: json.flaggedByMe ?? flaggedByMe,
         referredByMe: json.referredByMe ?? referredByMe,
       });
       setOpen(null);
@@ -131,8 +128,8 @@ export default function CandidateSignalActions({
         type="button"
         title={flaggedByMe ? "You flagged this candidate" : "Flag for admin review"}
         disabled={!canAct || flaggedByMe}
-        onClick={() => openPopover("flag")}
-        style={iconBtnStyle(open === "flag", !canAct || flaggedByMe, css.amber)}
+        onClick={() => setFlagOpen(true)}
+        style={iconBtnStyle(flagOpen, !canAct || flaggedByMe, css.amber)}
         aria-label="Flag candidate"
       >
         ⚑
@@ -165,12 +162,12 @@ export default function CandidateSignalActions({
           onClick={(e) => e.stopPropagation()}
         >
           <div style={{ fontSize: 12, fontWeight: 700, color: panelText, marginBottom: 8 }}>
-            {open === "flag" ? "Flag candidate" : "Refer candidate"}
+            Refer candidate
           </div>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value.slice(0, 300))}
-            placeholder={open === "flag" ? "Reason (required, min 20 characters)" : "Why are you referring them? (required, min 20 characters)"}
+            placeholder="Why are you referring them? (required, min 20 characters)"
             rows={3}
             style={{
               width: "100%",
@@ -220,19 +217,36 @@ export default function CandidateSignalActions({
                 padding: "6px 10px",
                 borderRadius: 6,
                 border: "none",
-                background: open === "flag" ? css.amber : css.greenDark,
-                color: open === "flag" ? css.textDark : "#FFF",
+                background: css.greenDark,
+                color: "#FFF",
                 fontSize: 11,
                 fontWeight: 700,
                 cursor: busy || noteTooShort ? "not-allowed" : "pointer",
                 opacity: busy || noteTooShort ? 0.5 : 1,
               }}
             >
-              {busy ? "Saving…" : open === "flag" ? "Flag" : "Refer"}
+              {busy ? "Saving…" : "Refer"}
             </button>
           </div>
         </div>
       ) : null}
+      <CandidateFlagDialog
+        open={flagOpen}
+        candidateId={candidateId}
+        resumeId={resumeId}
+        authedFetch={authedFetch}
+        onClose={() => setFlagOpen(false)}
+        onFlagged={(json) => {
+          onUpdated?.({
+            resumeId,
+            candidateId,
+            type: "flag",
+            flagCount: json.flagCount,
+            flaggedByMe: json.flaggedByMe ?? true,
+            referredByMe,
+          });
+        }}
+      />
     </div>
   );
 }

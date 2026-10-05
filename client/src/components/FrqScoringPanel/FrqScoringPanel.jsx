@@ -9,6 +9,8 @@ export default function FrqScoringPanel({
   notes,
   onNotes,
   onComplete,
+  onFlag,
+  flagged = false,
   scoringComplete = true,
   submitError = "",
   submitting = false,
@@ -213,18 +215,27 @@ export default function FrqScoringPanel({
         </div>
       ) : null}
 
-      <ActionBtn
-        label={submitting ? "Submitting…" : "✓ Complete"}
-        style={{ borderColor: css.greenDark, color: css.cardWhite, bg: css.greenDark, hoverBg: "#1F4E33" }}
-        disabled={submitting || !scoringComplete}
-        busy={submitting}
-        title={submitting
-          ? "Waiting for the server to confirm this grade"
-          : !scoringComplete
-            ? `Rate application responses from 0 to ${FRQ_MAX_SCORE} first`
-            : undefined}
-        onClick={onComplete}
-      />
+      <div style={{ display: "flex", gap: 12 }}>
+        <ActionBtn
+          label={flagged ? "⚑ Flagged" : "⚑ Flag"}
+          style={{ borderColor: css.amber, color: css.amber, bg: css.cardWhite, hoverBg: "rgba(239,159,39,0.05)" }}
+          disabled={submitting || flagged}
+          title={flagged ? "You already flagged this candidate" : "Flag this candidate for admin review without submitting the grade"}
+          onClick={onFlag}
+        />
+        <ActionBtn
+          label={submitting ? "Submitting…" : "✓ Complete"}
+          style={{ borderColor: css.greenDark, color: css.cardWhite, bg: css.greenDark, hoverBg: "#1F4E33" }}
+          disabled={submitting || !scoringComplete}
+          busy={submitting}
+          title={submitting
+            ? "Waiting for the server to confirm this grade"
+            : !scoringComplete
+              ? `Rate application responses from 0 to ${FRQ_MAX_SCORE} first`
+              : undefined}
+          onClick={onComplete}
+        />
+      </div>
     </div>
   );
 }
