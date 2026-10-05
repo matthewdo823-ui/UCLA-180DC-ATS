@@ -139,8 +139,11 @@ export default function ScreenerPage() {
   );
 
   const frqScoringComplete = useMemo(
-    () => typeof frqScore === "number" && frqScore >= 0 && frqScore <= FRQ_MAX_SCORE,
-    [frqScore]
+    () => typeof frqScore === "number"
+      && frqScore >= 0
+      && frqScore <= FRQ_MAX_SCORE
+      && notes.trim().length > 0,
+    [frqScore, notes]
   );
 
   const fetchMyReviews = useCallback(async (opts = {}) => {
@@ -410,7 +413,7 @@ export default function ScreenerPage() {
 
     if (!frqScoringComplete) {
       setShowValidationErrors(true);
-      setSubmitError("Complete the free-response grade before submitting.");
+      setSubmitError("Choose an FRQ score and add the required 1–2 sentence deliberation comment.");
       return;
     }
     setShowValidationErrors(false);
