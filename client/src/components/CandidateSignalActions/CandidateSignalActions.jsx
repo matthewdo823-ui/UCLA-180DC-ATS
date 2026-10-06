@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { API } from "../../constants/config";
 import { css } from "../../theme/colors";
 
 const MIN_NOTE_LENGTH = 20;
+const PANEL_WIDTH = 240;
+const PANEL_GAP = 6;
 
 const iconBtnStyle = (active, disabled, accent) => ({
   display: "inline-flex",
@@ -34,18 +37,22 @@ export default function CandidateSignalActions({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [panelPos, setPanelPos] = useState(null);
   const wrapRef = useRef(null);
+  const panelRef = useRef(null);
 
   const canAct = Boolean(candidateId || resumeId);
   const muted = dark ? "#8FA3B8" : css.textGray;
-  const panelBg = dark ? "#0B1628" : "#FFF";
+  const panelBg = dark ? "#0B1628" : "var(--color-surface)";
   const panelBorder = dark ? "rgba(255,255,255,0.12)" : css.borderLight;
   const panelText = dark ? "#E8EEF4" : css.textDark;
 
   useEffect(() => {
     if (!open) return undefined;
     function onPointerDown(event) {
-      if (wrapRef.current && !wrapRef.current.contains(event.target)) {
+      const inWrap = wrapRef.current?.contains(event.target);
+      const inPanel = panelRef.current?.contains(event.target);
+      if (!inWrap && !inPanel) {
         setOpen(null);
         setNote("");
         setError("");
@@ -65,6 +72,36 @@ export default function CandidateSignalActions({
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
+
+  // The popover is portaled to <body> so scroll/overflow containers (e.g. the
+  // scoreboard card) can't clip it. Position it under the buttons, or above
+  // them when there isn't room below.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPanelPos(null);
+      return undefined;
+    }
+    function place() {
+      const anchor = wrapRef.current?.getBoundingClientRect();
+      if (!anchor) return;
+      const panelHeight = panelRef.current?.offsetHeight || 0;
+      const below = anchor.bottom + PANEL_GAP;
+      const fitsBelow = below + panelHeight <= window.innerHeight - 8;
+      const top = fitsBelow ? below : Math.max(8, anchor.top - PANEL_GAP - panelHeight);
+      const left = Math.min(
+        Math.max(8, anchor.right - PANEL_WIDTH),
+        window.innerWidth - PANEL_WIDTH - 8,
+      );
+      setPanelPos((prev) => (prev && prev.top === top && prev.left === left ? prev : { top, left }));
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, error]);
 
   function openPopover(type) {
     if (!canAct) return;
@@ -148,14 +185,16 @@ export default function CandidateSignalActions({
         ★
       </button>
 
-      {open ? (
+      {open ? createPortal(
         <div
+          ref={panelRef}
           style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            right: 0,
-            zIndex: 30,
-            width: 240,
+            position: "fixed",
+            top: panelPos?.top ?? 0,
+            left: panelPos?.left ?? 0,
+            visibility: panelPos ? "visible" : "hidden",
+            zIndex: 1000,
+            width: PANEL_WIDTH,
             padding: 12,
             borderRadius: 8,
             border: `1px solid ${panelBorder}`,
@@ -170,6 +209,14 @@ export default function CandidateSignalActions({
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value.slice(0, 300))}
+            onKeyDown={(e) => {
+              // Enter submits; Shift+Enter still inserts a newline.
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                if (!busy) submit();
+              }
+            }}
+            autoFocus
             placeholder={open === "flag" ? "Reason (required, min 20 characters)" : "Why are you referring them? (required, min 20 characters)"}
             rows={3}
             style={{
@@ -178,7 +225,7 @@ export default function CandidateSignalActions({
               padding: "8px 10px",
               borderRadius: 6,
               border: `1px solid ${panelBorder}`,
-              background: dark ? "#141F33" : "#F9FAFB",
+              background: dark ? "#141F33" : "var(--color-surface-subtle)",
               color: panelText,
               fontSize: 12,
               resize: "none",
@@ -221,7 +268,7 @@ export default function CandidateSignalActions({
                 borderRadius: 6,
                 border: "none",
                 background: open === "flag" ? css.amber : css.greenDark,
-                color: open === "flag" ? css.textDark : "#FFF",
+                color: open === "flag" ? css.textDark : "var(--color-on-primary)",
                 fontSize: 11,
                 fontWeight: 700,
                 cursor: busy || noteTooShort ? "not-allowed" : "pointer",
@@ -231,7 +278,8 @@ export default function CandidateSignalActions({
               {busy ? "Saving…" : open === "flag" ? "Flag" : "Refer"}
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
@@ -258,7 +306,7 @@ export function CandidateSignalBadges({ flagCount = 0, referralCount = 0, dark =
           style={{
             ...badgeBase,
             background: "rgba(239,159,39,0.12)",
-            color: dark ? "#F5C060" : "#B45309",
+            color: dark ? "#F5C060" : "var(--color-warning-text)",
             border: "1px solid rgba(239,159,39,0.28)",
           }}
           title={`${flagCount} open flag${flagCount === 1 ? "" : "s"}`}

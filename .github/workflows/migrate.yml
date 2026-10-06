@@ -36,6 +36,9 @@ jobs:
     # string rather than tell anyone anything useful.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    # Every job reads SUPABASE_DB_URL from this one environment, so a password
+    # rotation is a single secret update.
+    environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -73,6 +76,7 @@ jobs:
   manual-plan:
     if: github.event_name == 'workflow_dispatch' && inputs.plan_only
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

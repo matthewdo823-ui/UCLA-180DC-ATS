@@ -4,26 +4,17 @@ const cors = require('cors');
 const helmet = require('helmet');
 
 const authRoutes = require('./src/routes/authRoutes');
+const { isAllowedClientOrigin } = require('./src/utils/clientOrigins');
 
 const app = express();
 
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 
-function parseAllowedOrigins() {
-  const raw = process.env.CORS_ALLOWED_ORIGINS || '';
-  return raw.split(',').map((origin) => origin.trim()).filter(Boolean);
-}
-
-function isLocalDevelopmentOrigin(origin) {
-  return /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d+$/.test(origin);
-}
-
 app.use(express.json());
 app.use(cors({
   origin(origin, callback) {
-    const allowed = parseAllowedOrigins();
-    if (!origin || allowed.includes(origin) || isLocalDevelopmentOrigin(origin)) {
+    if (!origin || isAllowedClientOrigin(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));

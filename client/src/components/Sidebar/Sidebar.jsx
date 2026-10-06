@@ -111,7 +111,7 @@ function NavLink({ link, active, onNavigate }) {
     <button type="button"
       onClick={() => onNavigate(link.path)}
       onMouseOver={(e) => {
-        if (!active) e.currentTarget.style.background = "#F3F4F6";
+        if (!active) e.currentTarget.style.background = "var(--color-surface-muted)";
       }}
       onMouseOut={(e) => {
         if (!active) e.currentTarget.style.background = "transparent";
@@ -127,7 +127,7 @@ function NavLink({ link, active, onNavigate }) {
         borderRadius: 8,
         cursor: "pointer",
         background: active ? css.greenDark : "transparent",
-        color: active ? "#FFF" : css.textGray,
+        color: active ? "var(--color-on-primary)" : css.textGray,
         transition: "all 0.15s ease",
         fontWeight: active ? 600 : 500,
         fontSize: 14,

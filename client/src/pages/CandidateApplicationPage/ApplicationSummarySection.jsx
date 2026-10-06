@@ -1,5 +1,4 @@
 import { css } from "../../theme/colors";
-import { cardGreen, cardPale } from "./constants";
 import SectionCard from "./components/SectionCard";
 import ErrorBanner from "../../components/ErrorBanner/ErrorBanner";
 
@@ -50,7 +49,7 @@ export default function ApplicationSummarySection({
               borderRadius: 6,
               border: `1px solid ${css.borderLight}`,
               background: css.cardWhite,
-              color: cardGreen,
+              color: "var(--color-card-ink)",
               fontSize: 12,
               fontWeight: 600,
               cursor: "pointer",
@@ -70,7 +69,7 @@ export default function ApplicationSummarySection({
                 height: 12,
                 width: `${width * 100}%`,
                 borderRadius: 6,
-                background: `linear-gradient(90deg, ${cardPale} 0%, #f3f7ef 50%, ${cardPale} 100%)`,
+                background: "linear-gradient(90deg, var(--color-card-pale) 0%, var(--color-surface-subtle) 50%, var(--color-card-pale) 100%)",
                 backgroundSize: "200% 100%",
                 animation: "summaryShimmer 1.4s ease-in-out infinite",
               }}

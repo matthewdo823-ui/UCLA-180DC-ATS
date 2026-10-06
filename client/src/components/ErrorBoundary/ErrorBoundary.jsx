@@ -55,7 +55,7 @@ export default class ErrorBoundary extends React.Component {
             style={{
               maxWidth: 540,
               width: "100%",
-              background: "#FFF",
+              background: "var(--color-surface)",
               borderRadius: 16,
               border: `1px solid ${css.borderLight}`,
               boxShadow: "0 12px 40px rgba(0, 0, 0, 0.08)",
@@ -94,7 +94,7 @@ export default class ErrorBoundary extends React.Component {
                 onClick={this.handleReload}
                 style={{
                   background: css.greenDark,
-                  color: "#FFF",
+                  color: "var(--color-on-primary)",
                   border: "none",
                   borderRadius: 8,
                   padding: "10px 18px",
@@ -109,7 +109,7 @@ export default class ErrorBoundary extends React.Component {
                 type="button"
                 onClick={() => { window.location.href = "/"; }}
                 style={{
-                  background: "#FFF",
+                  background: "var(--color-surface)",
                   color: css.textDark,
                   border: `1px solid ${css.borderLight}`,
                   borderRadius: 8,
@@ -133,7 +133,7 @@ export default class ErrorBoundary extends React.Component {
                   paddingTop: 14,
                 }}
               >
-                <summary style={{ cursor: "pointer", fontSize: 11, fontWeight: 700, color: "#991B1B" }}>
+                <summary style={{ cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--color-danger-text)" }}>
                   🛠 Developer Stack Trace (Local Dev Only)
                 </summary>
                 <pre

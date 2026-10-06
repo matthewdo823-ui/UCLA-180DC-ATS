@@ -65,7 +65,7 @@ export default function ErrorBanner({
               type="button"
               onClick={onRetry}
               style={{
-                background: "#FFF",
+                background: "var(--color-surface)",
                 border: `1px solid ${css.borderLight}`,
                 borderRadius: 6,
                 padding: "5px 10px",
@@ -113,7 +113,7 @@ export default function ErrorBanner({
               cursor: "pointer",
               fontSize: 11,
               fontWeight: 700,
-              color: "#991B1B",
+              color: "var(--color-danger-text)",
               userSelect: "none",
             }}
           >

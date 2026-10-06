@@ -39,7 +39,7 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring, 
               {[candidate.year, candidate.major, candidate.gpa ? `GPA ${candidate.gpa}` : ""].filter(Boolean).map(tag => (
                 <span
                   key={tag}
-                  style={{ display: "inline-block", alignSelf: "flex-start", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", background: cardPale, color: cardGreen, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 20, boxSizing: "border-box" }}
+                  style={{ display: "inline-block", alignSelf: "flex-start", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", background: "var(--color-card-pale)", color: "var(--color-card-ink)", fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 20, boxSizing: "border-box" }}
                 >
                   {tag}
                 </span>
@@ -62,7 +62,7 @@ export default function ApplicationProfileSidebar({ candidate, resume, scoring, 
                 <>
                   <div style={{ display: "flex", alignItems: "stretch", gap: 13 }}>
                     <div style={{ minWidth: 48, paddingRight: 13, borderRight: `1px solid ${css.borderLight}` }}>
-                      <p style={{ margin: 0, fontSize: 25, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>
+                      <p style={{ margin: 0, fontSize: 25, fontWeight: 700, color: "var(--color-card-ink)", lineHeight: 1 }}>
                         {resumeScreenRank ? `#${resumeScreenRank}` : "—"}
                       </p>
                       <p style={{ margin: "5px 0 0", fontSize: 10, color: css.textGray }}>

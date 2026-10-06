@@ -84,6 +84,8 @@ export default function GraderDashboard() {
       ? `${goal - count} more to go`
       : null;
 
+  const frq = data?.personalFrq;
+
   const buttonLabel = isInterview
     ? `Open ${activeRound?.name || "Interviews"}`
     : "Start Grading Session";
@@ -173,6 +175,7 @@ export default function GraderDashboard() {
           ) : null}
         </div>}
 
+
         {isInterview && personal?.ratingMode === "coffee_chat" && personal?.breakdown && !loading ? (
           <Panel title="Your Coffee Chat grading">
             <CoffeeChatPersonalStats total={personal.expectedReviews} graded={personal.count} breakdown={personal.breakdown} />
@@ -197,6 +200,7 @@ export default function GraderDashboard() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
             {[
               { label: "Past resume reviews", path: gradingPath, icon: "📋", desc: "View and edit your resume reviews", state: { openPastQueue: true } },
+              ...(frqGrader && frq ? [{ label: "Past free-response reviews", path: "/resume-screener", icon: "⚖️", desc: "View and edit your free-response grades", state: { openPastQueue: true, gradingMode: "frq" } }] : []),
               { label: "Scoreboard", path: "/scoreboard", icon: "📊", desc: "See ranked candidates" },
               { label: "Demographics", path: "/demographics", icon: "📈", desc: "Pipeline diversity overview" },
             ].map((link) => (

@@ -1,4 +1,5 @@
 import { css } from "../../theme/colors";
+import { formatDate } from "../../utils/format";
 import { ProgressBar, PrimaryButton } from "./dashboardComponents";
 
 export default function FrqProgressCard({ progress, gradingOpen, onGrade, onHistory }) {
@@ -15,6 +16,7 @@ export default function FrqProgressCard({ progress, gradingOpen, onGrade, onHist
           <div style={{ fontSize: 13, color: remaining ? css.textGray : css.green, marginTop: 6, fontWeight: 600 }}>
             {remaining ? `${remaining} more to go` : "Goal complete — thank you!"}
           </div>
+          {progress.lastActivityAt && <div style={{ fontSize: 12, color: css.textGray, marginTop: 4 }}>Last activity: {formatDate(progress.lastActivityAt)}</div>}
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 12, color: css.textGray, fontWeight: 500 }}>{count} free response{count === 1 ? "" : "s"} graded</div>

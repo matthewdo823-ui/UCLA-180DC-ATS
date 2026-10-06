@@ -191,6 +191,21 @@
     },
     {
       "order": 37,
+      "file": "reapply_allow_frq_score_zero.sql",
+      "mode": "auto"
+    },
+    {
+      "order": 38,
+      "file": "add_review_claims.sql",
+      "mode": "auto"
+    },
+    {
+      "order": 39,
+      "file": "add_review_claim_renewal.sql",
+      "mode": "auto"
+    },
+    {
+      "order": 40,
       "file": "add_cycle_grading_goals.sql",
       "mode": "auto"
     }

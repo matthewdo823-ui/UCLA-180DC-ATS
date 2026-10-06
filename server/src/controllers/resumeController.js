@@ -90,6 +90,7 @@ const {
     resolveCycleGradingGoals,
 } = require('../utils/gradingGoals');
 const { normalizeRequiredFrqNotes } = require('../utils/frqReview');
+const { claimNextReview, renewReviewClaim, releaseReviewClaim } = require('../services/reviewClaimService');
 const VALID_REVIEW_DECISIONS = new Set(["pass", "flag", "reject"]);
 const MIN_SIGNAL_NOTE_LENGTH = 20;
 
@@ -437,19 +438,32 @@ exports.getNextResume = async (req, res) => {
 
     if (error) return respondWithServerError(res, error, 'getNextResume');
 
-    for (const row of resumeCandidates || []) {
-        if (reviewedResumeIdSet.has(row.id)) {
-            continue;
-        }
-
+    const servable = (resumeCandidates || []).filter((row) => {
+        if (reviewedResumeIdSet.has(row.id)) return false;
         if (!isGoogleDriveFileUrl(row.file_url)) {
             console.warn(`[getNextResume] Skipping resume ${row.id}: not a valid Google Drive URL`);
-            continue;
+            return false;
         }
+        return true;
+    });
 
-        const fileID = extractDriveFileID(row.file_url);
+    let claimedId;
+    try {
+        claimedId = await claimNextReview({
+            kind: "resume",
+            cycleId: screening.cycle.id,
+            graderId: gradedBy,
+            candidateIds: servable.map((row) => row.id),
+        });
+    } catch (claimError) {
+        return respondWithServerError(res, claimError, 'getNextResume claim');
+    }
+
+    const claimed = servable.find((row) => row.id === claimedId);
+    if (claimed) {
+        const fileID = extractDriveFileID(claimed.file_url);
         return res.json({
-            ...row,
+            ...claimed,
             file_url: toDownloadURL(fileID),
         });
     }
@@ -721,6 +735,7 @@ exports.saveReview = async (req, res) => {
         return respondWithServerError(res, saveError, 'saveReview rpc');
     }
 
+    await releaseReviewClaim({ kind: "resume", cycleId: screening.cycle.id, graderId: gradedBy, resumeId: resume_id });
     return res.json({ success: true });
 };
 
@@ -1030,10 +1045,22 @@ exports.getNextFrq = async (req, res) => {
     }
     if (error) return respondWithServerError(res, error, "getNextFrq");
 
-    for (const row of resumeCandidates || []) {
-        if (reviewedResumeIdSet.has(row.id)) continue;
-        return res.json(formatFrqCandidateRow(row));
+    const servable = (resumeCandidates || []).filter((row) => !reviewedResumeIdSet.has(row.id));
+
+    let claimedId;
+    try {
+        claimedId = await claimNextReview({
+            kind: "frq",
+            cycleId: screening.cycle.id,
+            graderId: gradedBy,
+            candidateIds: servable.map((row) => row.id),
+        });
+    } catch (claimError) {
+        return respondWithServerError(res, claimError, "getNextFrq claim");
     }
+
+    const claimed = servable.find((row) => row.id === claimedId);
+    if (claimed) return res.json(formatFrqCandidateRow(claimed));
 
     return res.status(404).json({ error: "No candidates available for FRQ grading" });
 };
@@ -1202,6 +1229,7 @@ exports.saveFrqReview = async (req, res) => {
         return respondWithServerError(res, saveError, "saveFrqReview rpc");
     }
 
+    await releaseReviewClaim({ kind: "frq", cycleId: screening.cycle.id, graderId: gradedBy, resumeId: resume_id });
     return res.json({ success: true });
 };
 
@@ -3682,5 +3710,34 @@ exports.getCandidateHeadshotUrl = async (req, res) => {
         return res.json({ url, expires_in: SIGNED_URL_TTL_SECONDS });
     } catch (err) {
         return respondWithServerError(res, err, 'getCandidateHeadshotUrl');
+    }
+};
+
+// Heartbeat from the grading page while the grader is active, so their resume
+// stays reserved past the short lease. `held: false` means another grader has
+// since been given it.
+exports.renewReviewClaim = async (req, res) => {
+    const { kind, resume_id } = req.body || {};
+    if (kind !== "resume" && kind !== "frq") {
+        return res.status(400).json({ error: "kind must be resume or frq" });
+    }
+    if (!resume_id) return res.status(400).json({ error: "resume_id is required" });
+    if (kind === "frq" && !canGradeFrq(req.user?.role)) {
+        return res.status(403).json({ error: "Only board members can grade free responses" });
+    }
+
+    const screening = await requireOpenResumeRound();
+    if (screening.error) return res.status(screening.status).json({ error: screening.error });
+
+    try {
+        const held = await renewReviewClaim({
+            kind,
+            cycleId: screening.cycle.id,
+            graderId: req.user?.user_id,
+            resumeId: resume_id,
+        });
+        return res.json({ held });
+    } catch (error) {
+        return respondWithServerError(res, error, "renewReviewClaim");
     }
 };

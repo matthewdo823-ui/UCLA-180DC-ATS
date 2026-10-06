@@ -147,11 +147,11 @@ function CategoryRow({ metric, value, maxPerCategory = 4 }) {
     <div style={{ marginBottom: 9 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
         <span style={{ fontSize: 12, color: css.textDark }}>{titleCase(metric)}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: cardGreen }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-card-ink)" }}>
           {formatNumber(value)} <span style={{ color: css.textGray, fontWeight: 400 }}>/ {maxPerCategory}</span>
         </span>
       </div>
-      <div style={{ height: 5, background: "#EEF1EC", borderRadius: 3, overflow: "hidden" }}>
+      <div style={{ height: 5, background: "var(--color-track)", borderRadius: 3, overflow: "hidden" }}>
         <div style={{ height: "100%", width: `${pct}%`, background: cardMint, borderRadius: 3, transition: "width 0.35s ease" }} />
       </div>
     </div>
@@ -202,8 +202,8 @@ export function GraderModal({ grader, onClose, onReviewOpen, metrics = [], maxPe
             height: 34,
             borderRadius: "50%",
             border: "1px solid rgba(255,255,255,0.75)",
-            background: "#FFF",
-            color: cardGreen,
+            background: "var(--color-surface)",
+            color: "var(--color-card-ink)",
             cursor: "pointer",
             fontSize: 22,
             lineHeight: "30px",
@@ -218,7 +218,7 @@ export function GraderModal({ grader, onClose, onReviewOpen, metrics = [], maxPe
           GRADER SUMMARY
         </p>
 
-        <div className="scorecard-body" style={{ maxHeight: "calc(100vh - 82px)", overflowY: "auto", borderRadius: 16, border: `2px solid ${cardGreen}`, background: "#FFF", boxShadow: "0 24px 70px rgba(0,0,0,0.26)" }}>
+        <div className="scorecard-body" style={{ maxHeight: "calc(100vh - 82px)", overflowY: "auto", borderRadius: 16, border: `2px solid ${cardGreen}`, background: "var(--color-surface)", boxShadow: "0 24px 70px rgba(0,0,0,0.26)" }}>
           <div style={{ background: cardGreen, padding: "18px 18px 16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
               <span style={{ background: "#04342C", color: "#9FE1CB", fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 20, letterSpacing: "0.04em" }}>
@@ -243,16 +243,16 @@ export function GraderModal({ grader, onClose, onReviewOpen, metrics = [], maxPe
             </div>
           </div>
 
-          <div style={{ background: cardPale, padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #DCE7D2" }}>
+          <div style={{ background: "var(--color-card-pale)", padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border)" }}>
             <div>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>{gradedLabel}</p>
-              <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
-                {grader.reviewCount} {grader.expectedReviews > 0 && <span style={{ fontSize: 14, color: "#3B6D11" }}>/ {grader.expectedReviews}</span>}
+              <p style={{ fontSize: 10, color: "var(--color-card-pale-text)", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>{gradedLabel}</p>
+              <p style={{ fontSize: 30, fontWeight: 700, color: "var(--color-card-ink)", margin: 0, lineHeight: 1 }}>
+                {grader.reviewCount} {grader.expectedReviews > 0 && <span style={{ fontSize: 14, color: "var(--color-card-pale-text)" }}>/ {grader.expectedReviews}</span>}
               </p>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "4px 0 0", fontWeight: 600 }}>{formatReviewCount(grader.reviewCount, reviewType)}</p>
+              <p style={{ fontSize: 10, color: "var(--color-card-pale-text)", margin: "4px 0 0", fontWeight: 600 }}>{formatReviewCount(grader.reviewCount, reviewType)}</p>
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>
+              <p style={{ fontSize: 10, color: "var(--color-card-pale-text)", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>
                 {grader.expectedReviews > 0 ? `${grader.progressScore}% COMPLETE` : "NO QUOTA"}
               </p>
               {grader.expectedReviews > 0 && <ProgressTiles count={grader.reviewCount} expected={grader.expectedReviews} />}
@@ -266,7 +266,7 @@ export function GraderModal({ grader, onClose, onReviewOpen, metrics = [], maxPe
             ))}
           </div> : null}
 
-          <div style={{ margin: "6px 18px 0", padding: "10px 12px", background: "#F8FAF6", border: "1px solid #E3E8DD", borderRadius: 8 }}>
+          <div style={{ margin: "6px 18px 0", padding: "10px 12px", background: "var(--color-surface-subtle)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.05em", margin: "0 0 5px", fontWeight: 700 }}>SUMMARY</p>
             <p style={{ fontSize: 12, lineHeight: 1.45, color: css.textDark, margin: 0 }}>
               {modeId === "coffee"
@@ -275,7 +275,7 @@ export function GraderModal({ grader, onClose, onReviewOpen, metrics = [], maxPe
             </p>
           </div>
 
-          <div style={{ padding: "12px 18px 18px", borderTop: "1px solid #EAEAEA", marginTop: 12 }}>
+          <div style={{ padding: "12px 18px 18px", borderTop: "1px solid var(--color-border)", marginTop: 12 }}>
             <p style={{ fontSize: 11, color: css.textGray, fontWeight: 700, letterSpacing: "0.05em", margin: "0 0 8px" }}>
               {recentLabel} ({grader.reviews?.length ?? 0})
             </p>
@@ -286,7 +286,7 @@ export function GraderModal({ grader, onClose, onReviewOpen, metrics = [], maxPe
                 disabled={!review.resumeId || !onReviewOpen}
                 aria-label={review.resumeId ? `Open ${review.resumeName} review` : undefined}
                 onClick={() => onReviewOpen?.(review)}
-                style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 0", border: "none", borderTop: "1px solid #EAEAEA", background: "transparent", textAlign: "left", cursor: review.resumeId && onReviewOpen ? "pointer" : "default" }}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 0", border: "none", borderTop: "1px solid var(--color-border)", background: "transparent", textAlign: "left", cursor: review.resumeId && onReviewOpen ? "pointer" : "default" }}
               >
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <p style={{ fontSize: 12, color: css.textDark, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{review.resumeName}</p>
@@ -429,7 +429,7 @@ export default function GraderScoreboardPage() {
                 padding: "9px 18px",
                 borderRadius: 8,
                 background: active ? css.greenDark : css.cardWhite,
-                color: active ? "#FFF" : css.textDark,
+                color: active ? "var(--color-on-primary)" : css.textDark,
                 border: `1px solid ${active ? css.greenDark : css.borderLight}`,
                 fontSize: 13,
                 fontWeight: 700,
@@ -482,7 +482,7 @@ export default function GraderScoreboardPage() {
                   padding: "10px 16px",
                   borderRadius: 8,
                   background: active ? css.greenDark : css.cardWhite,
-                  color: active ? "#FFF" : css.textDark,
+                  color: active ? "var(--color-on-primary)" : css.textDark,
                   border: `1px solid ${active ? css.greenDark : css.borderLight}`,
                   fontSize: 13,
                   fontWeight: 600,
@@ -613,12 +613,12 @@ export default function GraderScoreboardPage() {
             <div style={{ color: css.greenDark, fontWeight: 700, fontSize: 14 }}>{grader.rank}</div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-              <div style={{ width: 44, height: 44, background: css.greenDark, color: "#FFF", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
+              <div style={{ width: 44, height: 44, background: css.greenDark, color: "var(--color-on-primary)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
                 {getInitials(grader.name)}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                <span style={{ fontSize: 16, fontWeight: 500, fontFamily: sansFont, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{grader.name}</span>
-                <span style={{ fontSize: 13, color: "#888", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textTransform: "capitalize" }}>
+                <span style={{ fontSize: 16, fontWeight: 500, fontFamily: sansFont, color: "var(--color-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{grader.name}</span>
+                <span style={{ fontSize: 13, color: "var(--color-text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textTransform: "capitalize" }}>
                   {[grader.role, grader.email].filter(Boolean).join(" · ")}
                 </span>
               </div>
@@ -637,7 +637,7 @@ export default function GraderScoreboardPage() {
               <button
                 type="button"
                 onClick={() => setSelectedGrader(grader)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: css.greenDark, color: "#FFF", border: "none", fontSize: 13, cursor: "pointer" }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 4, background: css.greenDark, color: "var(--color-on-primary)", border: "none", fontSize: 13, cursor: "pointer" }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                 View profile

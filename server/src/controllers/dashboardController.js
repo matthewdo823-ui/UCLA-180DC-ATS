@@ -7,7 +7,7 @@ exports.getGraderDashboard = async (req, res) => {
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-    const payload = await getGraderDashboard(userId, req.user.role);
+    const payload = await getGraderDashboard(userId, req.user?.role);
     return res.json(payload);
   } catch (err) {
     return respondWithServerError(res, err, "getGraderDashboard");

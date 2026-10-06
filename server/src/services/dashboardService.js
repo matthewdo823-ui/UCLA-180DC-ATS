@@ -67,6 +67,7 @@ async function loadPersonalResumeProgress(userId, cycleId, resumeRoundId, expect
   };
 }
 
+
 async function loadPriorRoundGate(cycleId, activeRound) {
   const rounds = await getRoundsForCycle(cycleId);
   const priorRound = getPriorRound(rounds, activeRound);
@@ -652,13 +653,19 @@ async function getGraderDashboard(userId, role) {
 
   let personalFrq = null;
   if (['admin', 'board'].includes(role) && activeCycleId && resumeRound) {
-    const { count, error } = await supabase.from('frq_reviews')
-      .select('id', { count: 'exact', head: true })
+    const { data: latest, count, error } = await supabase.from('frq_reviews')
+      .select('submitted_at', { count: 'exact' })
       .eq('graded_by', userId)
       .eq('cycle_id', activeCycleId)
-      .eq('round_id', resumeRound.id);
+      .eq('round_id', resumeRound.id)
+      .order('submitted_at', { ascending: false }).limit(1);
     if (error) throw error;
-    personalFrq = { count: count ?? 0, expectedReviews: frqGraderGoal };
+    personalFrq = {
+      mode: 'frq', count: count ?? 0, expectedReviews: frqGraderGoal,
+      progressPct: Math.min(100, Math.round((count ?? 0) / frqGraderGoal * 100)),
+      goalComplete: (count ?? 0) >= frqGraderGoal,
+      lastActivityAt: latest?.[0]?.submitted_at || null,
+    };
   }
 
   return {

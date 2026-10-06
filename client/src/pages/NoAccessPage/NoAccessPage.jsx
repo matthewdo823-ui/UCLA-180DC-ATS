@@ -25,7 +25,7 @@ export default function NoAccessPage() {
       <div style={{
         width: "100%",
         maxWidth: 480,
-        background: "#FFF",
+        background: "var(--color-surface)",
         border: `1px solid ${css.borderLight}`,
         borderRadius: 18,
         padding: 32,
@@ -49,7 +49,7 @@ export default function NoAccessPage() {
             border: "none",
             borderRadius: 10,
             background: css.greenDark,
-            color: "#FFF",
+            color: "var(--color-on-primary)",
             padding: "12px 18px",
             fontSize: 14,
             fontWeight: 700,

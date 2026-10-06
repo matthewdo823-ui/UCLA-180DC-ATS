@@ -10,8 +10,8 @@ export default function ActionButton({ label, onClick, disabled, variant = "seco
       disabled={disabled}
       style={{
         border: `1px solid ${isPrimary ? css.greenDark : isDanger ? css.red : css.borderLight}`,
-        background: isPrimary ? css.greenDark : "#FFF",
-        color: isPrimary ? "#FFF" : isDanger ? css.red : css.textDark,
+        background: isPrimary ? css.greenDark : "var(--color-surface)",
+        color: isPrimary ? "var(--color-on-primary)" : isDanger ? css.red : css.textDark,
         borderRadius: 8,
         padding: "8px 12px",
         fontSize: 12,

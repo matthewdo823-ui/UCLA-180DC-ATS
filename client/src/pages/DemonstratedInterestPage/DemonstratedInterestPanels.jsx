@@ -29,7 +29,7 @@ const inputStyle = {
   border: `1px solid ${css.borderLight}`,
   fontSize: 13,
   boxSizing: "border-box",
-  background: "#FFF",
+  background: "var(--color-surface)",
 };
 const cellStyle = { padding: "7px 8px", borderBottom: `1px solid ${css.borderLight}`, verticalAlign: "middle" };
 const labelStyle = { fontSize: 11, fontWeight: 700, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.05em" };
@@ -98,7 +98,7 @@ function InterestMultiplierEditor({ cycle, busy, authedFetch, onSaved }) {
   }
 
   return (
-    <div style={{ border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 14, background: "#FFF" }}>
+    <div style={{ border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 14, background: "var(--color-surface)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline", marginBottom: 8 }}>
         <h5 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: css.textDark }}>Multiplier by events attended</h5>
         <span style={{ fontSize: 11, color: css.textGray }}>The last row applies to that many events or more. Scores can exceed 100%.</span>
@@ -267,7 +267,7 @@ function InterestEventPanel({ event, authedFetch, onChanged }) {
   const isBusy = Boolean(working);
 
   return (
-    <div style={{ border: `1px solid ${event.mappingStatus === "stale" ? "rgba(226,75,74,0.4)" : css.borderLight}`, borderRadius: 10, padding: "12px 14px", background: "#FFF" }}>
+    <div style={{ border: `1px solid ${event.mappingStatus === "stale" ? "rgba(226,75,74,0.4)" : css.borderLight}`, borderRadius: 10, padding: "12px 14px", background: "var(--color-surface)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -451,7 +451,7 @@ function InterestReviewQueue({ cycleId, authedFetch, onChanged }) {
   }
 
   return (
-    <div style={{ border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 14, background: "#FFF" }}>
+    <div style={{ border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 14, background: "var(--color-surface)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap", marginBottom: 8 }}>
         <h5 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: css.textDark }}>
           Review queue{entries.length ? ` (${entries.length})` : ""}

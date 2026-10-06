@@ -25,6 +25,7 @@ router.get('/resume/:id', resumeController.getResumeById);
 router.get('/reviews', resumeController.listMyReviews);
 router.get('/reviews/:reviewId/resume', resumeController.getReviewResume);
 router.post('/reviews', resumeController.saveReview);
+router.post('/review-claims/renew', resumeController.renewReviewClaim);
 router.patch('/reviews/:reviewId', resumeController.patchMyReview);
 router.post('/candidate-flags', resumeController.createCandidateFlag);
 router.post('/candidate-referrals', resumeController.createCandidateReferral);

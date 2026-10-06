@@ -32,7 +32,7 @@ import PhaseStepper from "./PhaseStepper";
 const CYCLE_STATUS_STYLE = {
   active: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
   draft: { bg: "rgba(239,159,39,0.12)", color: "#C47D12", bd: "rgba(239,159,39,0.28)" },
-  archived: { bg: "rgba(107,114,128,0.12)", color: "#6B7280", bd: "rgba(107,114,128,0.28)" },
+  archived: { bg: "rgba(107,114,128,0.12)", color: "var(--color-text-muted)", bd: "rgba(107,114,128,0.28)" },
 };
 
 function StatusBadge({ status, styles }) {
@@ -210,7 +210,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
       border: `1px solid ${cycle.hasFormConfig ? "rgba(29,158,117,0.22)" : css.borderLight}`,
       borderRadius: 12,
       padding: expanded ? 16 : "12px 14px",
-      background: "#FFF",
+      background: "var(--color-surface)",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: expanded ? "flex-start" : "center", marginBottom: expanded ? 10 : 0 }}>
         <button
@@ -318,7 +318,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
           Duplicate destinations must be fixed before saving: {[...new Set(duplicateTargets)].join(", ")}.
         </p>
       ) : unresolvedQuestions.length ? (
-        <p style={{ margin: "0 0 10px", padding: "8px 10px", borderRadius: 7, background: "rgba(239,159,39,0.10)", fontSize: 12, color: "#9A6110" }}>
+        <p style={{ margin: "0 0 10px", padding: "8px 10px", borderRadius: 7, background: "rgba(239,159,39,0.10)", fontSize: 12, color: "var(--color-warning-text)" }}>
           {unresolvedQuestions.length} question{unresolvedQuestions.length === 1 ? " is" : "s are"} neither mapped to a profile field nor marked as a gradable response.
         </p>
       ) : null}
@@ -542,7 +542,7 @@ function RubricEditor({ draft, onChange, error }) {
         gap: 12,
         padding: "10px 12px",
         borderRadius: 8,
-        background: "#FFF",
+        background: "var(--color-surface)",
         border: `1px solid ${css.borderLight}`,
       }}>
         <label style={{ fontSize: 12, fontWeight: 700, color: css.textDark, whiteSpace: "nowrap" }}>
@@ -569,7 +569,7 @@ function RubricEditor({ draft, onChange, error }) {
               padding: 14,
               borderRadius: 10,
               border: `1px solid ${css.borderLight}`,
-              background: "#FFF",
+              background: "var(--color-surface)",
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 12 }}>
@@ -616,7 +616,7 @@ function RubricEditor({ draft, onChange, error }) {
                   borderRadius: 8,
                   border: `1px solid ${css.borderLight}`,
                   marginBottom: 12,
-                  background: "#FAFBFA",
+                  background: "var(--color-surface-subtle)",
                 }}
               />
             ) : null}
@@ -640,7 +640,7 @@ function RubricEditor({ draft, onChange, error }) {
                     disabled={entry.metrics.length <= 1}
                     style={{
                       border: `1px solid ${css.borderLight}`,
-                      background: "#FFF",
+                      background: "var(--color-surface)",
                       color: entry.metrics.length <= 1 ? css.textGray : css.red,
                       borderRadius: 6,
                       padding: "0 10px",
@@ -751,7 +751,7 @@ function RoundCard({ round, cycle, busy, interviewPool, phaseIssue, onChangePhas
       border: `1px solid ${css.borderLight}`,
       borderRadius: 12,
       padding: 16,
-      background: "#FAFBFA",
+      background: "var(--color-surface-subtle)",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
         <div>
@@ -952,7 +952,7 @@ function CycleCard({ cycle, busy, authedFetch, interviewPool, phaseIssues, onRel
       </div>
 
       {expanded ? (
-        <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 12, background: "#FCFDFC" }}>
+        <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 12, background: "var(--color-surface-subtle)" }}>
           <FormConfigPanel cycle={cycle} busy={busy} authedFetch={authedFetch} onSaved={onReload} />
           <GradingGoalsPanel cycle={cycle} busy={busy} authedFetch={authedFetch} onSaved={onReload} />
 
@@ -1010,7 +1010,7 @@ function PastCycleCard({ cycle, busy, onReactivate, onViewCandidates }) {
       </div>
 
       {expanded ? (
-        <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "18px 22px 22px", background: "#FCFDFC" }}>
+        <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "18px 22px 22px", background: "var(--color-surface-subtle)" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, overflowX: "auto" }}>
             {(cycle.rounds || []).map((round, index) => {
               const decisions = round.decisionCounts || {};
@@ -1213,7 +1213,7 @@ export default function CycleManagementPage() {
               <button key={tab.value} type="button" role="tab" aria-selected={selected} onClick={() => {
                 setCycleView(tab.value);
                 setViewParams(tab.value === "past" ? { view: "past" } : {});
-              }} style={{ border: "none", borderRadius: 7, padding: "9px 14px", background: selected ? css.greenDark : "transparent", color: selected ? "#FFF" : css.textGray, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              }} style={{ border: "none", borderRadius: 7, padding: "9px 14px", background: selected ? css.greenDark : "transparent", color: selected ? "var(--color-on-primary)" : css.textGray, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
                 {tab.label}
               </button>
             );
@@ -1268,7 +1268,7 @@ export default function CycleManagementPage() {
             style={{
               border: `1px solid ${css.greenDark}`,
               background: css.greenDark,
-              color: "#FFF",
+              color: "var(--color-on-primary)",
               borderRadius: 8,
               padding: "8px 12px",
               fontSize: 12,
