@@ -88,7 +88,6 @@ const {
 } = require('../services/frqScoringService');
 const {
     resolveCycleGradingGoals,
-    applyReviewTarget,
 } = require('../utils/gradingGoals');
 const { normalizeRequiredFrqNotes } = require('../utils/frqReview');
 const VALID_REVIEW_DECISIONS = new Set(["pass", "flag", "reject"]);
@@ -429,12 +428,6 @@ exports.getNextResume = async (req, res) => {
         .or(ELIGIBLE_YEAR_FILTER, { referencedTable: "candidates" })
         .order('review_count', { ascending: true })
         .order('created_at', { ascending: true });
-
-    query = applyReviewTarget(
-        query,
-        'review_count',
-        resolveCycleGradingGoals(screening.cycle).resumeReviewTarget
-    );
 
     if (reviewedResumeIds.length) {
         query = query.not('id', 'in', `(${reviewedResumeIds.join(',')})`);
@@ -1023,12 +1016,6 @@ exports.getNextFrq = async (req, res) => {
         .or(ELIGIBLE_YEAR_FILTER, { referencedTable: "candidates" })
         .order("frq_review_count", { ascending: true })
         .order("created_at", { ascending: true });
-
-        query = applyReviewTarget(
-            query,
-            "frq_review_count",
-            resolveCycleGradingGoals(screening.cycle).frqReviewTarget
-        );
 
         if (reviewedResumeIds.length) {
             query = query.not("id", "in", `(${reviewedResumeIds.join(",")})`);

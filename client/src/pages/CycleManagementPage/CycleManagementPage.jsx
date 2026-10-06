@@ -392,8 +392,6 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
 export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
   const [resumeGraderGoal, setResumeGraderGoal] = useState(String(cycle.resumeGraderGoal ?? 30));
   const [frqGraderGoal, setFrqGraderGoal] = useState(String(cycle.frqGraderGoal ?? 30));
-  const [resumeReviewTarget, setResumeReviewTarget] = useState(cycle.resumeReviewTarget == null ? "" : String(cycle.resumeReviewTarget));
-  const [frqReviewTarget, setFrqReviewTarget] = useState(cycle.frqReviewTarget == null ? "" : String(cycle.frqReviewTarget));
   const [saving, setSaving] = useState(false);
   const [panelError, setPanelError] = useState("");
   const [panelMessage, setPanelMessage] = useState("");
@@ -401,17 +399,14 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
   useEffect(() => {
     setResumeGraderGoal(String(cycle.resumeGraderGoal ?? 30));
     setFrqGraderGoal(String(cycle.frqGraderGoal ?? 30));
-    setResumeReviewTarget(cycle.resumeReviewTarget == null ? "" : String(cycle.resumeReviewTarget));
-    setFrqReviewTarget(cycle.frqReviewTarget == null ? "" : String(cycle.frqReviewTarget));
     setPanelError("");
-  }, [cycle.id, cycle.resumeGraderGoal, cycle.frqGraderGoal, cycle.resumeReviewTarget, cycle.frqReviewTarget]);
+  }, [cycle.id, cycle.resumeGraderGoal, cycle.frqGraderGoal]);
 
-  function parseGoal(value, label, { optional = false, max = 10000 } = {}) {
+  function parseGoal(value, label) {
     const trimmed = String(value).trim();
-    if (optional && !trimmed) return null;
     const number = Number(trimmed);
-    if (!Number.isInteger(number) || number < 1 || number > max) {
-      throw new Error(`${label} must be a whole number from 1 to ${max}${optional ? ", or left blank for Unlimited" : ""}.`);
+    if (!Number.isInteger(number) || number < 1 || number > 10000) {
+      throw new Error(`${label} must be a whole number from 1 to 10000.`);
     }
     return number;
   }
@@ -424,8 +419,6 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
       const payload = {
         resumeGraderGoal: parseGoal(resumeGraderGoal, "Resume grader goal"),
         frqGraderGoal: parseGoal(frqGraderGoal, "Free-response grader goal"),
-        resumeReviewTarget: parseGoal(resumeReviewTarget, "Resume pile target", { optional: true, max: 1000 }),
-        frqReviewTarget: parseGoal(frqReviewTarget, "Free-response pile target", { optional: true, max: 1000 }),
       };
       const res = await authedFetch(`${API}/cycles/${cycle.id}`, {
         method: "PATCH",
@@ -433,7 +426,7 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw await formatResponseError(res, "saving grading goals");
-      setPanelMessage("Grading goals saved. Shared-pile changes apply when the next candidate is loaded.");
+      setPanelMessage("Grading goals saved.");
       await onSaved();
     } catch (error) {
       setPanelError(error.message || "Could not save grading goals");
@@ -451,17 +444,16 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
     boxSizing: "border-box",
   };
 
-  const field = (label, description, value, setValue, optional = false) => (
+  const field = (label, description, value, setValue) => (
     <label style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
       <span style={{ fontSize: 12, fontWeight: 700, color: css.textDark }}>{label}</span>
       <span style={{ minHeight: 32, fontSize: 11, color: css.textGray, lineHeight: 1.4 }}>{description}</span>
       <input
         type="number"
         min="1"
-        max={optional ? "1000" : "10000"}
+        max="10000"
         step="1"
         value={value}
-        placeholder={optional ? "Unlimited" : undefined}
         onChange={(event) => {
           setValue(event.target.value);
           setPanelError("");
@@ -479,7 +471,7 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
         <div>
           <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: css.textDark }}>Grading goals</h4>
           <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray, lineHeight: 1.45 }}>
-            Workload goals track each grader. Shared-pile targets remove candidates after enough completed reviews; blank means Unlimited.
+            Set the number of resume and free-response reviews expected from each grader.
           </p>
         </div>
         <ActionButton label={saving ? "Saving…" : "Save goals"} onClick={handleSave} disabled={busy || saving} variant="primary" />
@@ -493,13 +485,6 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
         {field("Free-response grader goal", "Free-response reviews expected from each eligible grader.", frqGraderGoal, setFrqGraderGoal)}
       </div>
 
-      <div style={{ marginBottom: 8, fontSize: 10, fontWeight: 800, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-        Shared-pile coverage
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
-        {field("Resume reviews before removal", "Stops serving the resume from the shared pile. Direct assignments still override this target.", resumeReviewTarget, setResumeReviewTarget, true)}
-        {field("Free-response reviews before removal", "Stops serving the candidate from the free-response pile.", frqReviewTarget, setFrqReviewTarget, true)}
-      </div>
 
       {panelError ? <p role="alert" style={{ margin: "10px 0 0", fontSize: 12, color: css.red }}>{panelError}</p> : null}
       {panelMessage ? <p style={{ margin: "10px 0 0", fontSize: 12, color: "#1D9E75" }}>{panelMessage}</p> : null}
