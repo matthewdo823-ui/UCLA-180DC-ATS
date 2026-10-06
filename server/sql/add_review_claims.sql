@@ -3,9 +3,7 @@
 -- moves when a review is submitted, so graders who open the queue around the
 -- same time were all handed the same lowest-count resume. A claim reserves the
 -- served resume for one grader until they submit or the lease runs out, and
--- claims held by others count toward a resume's place in the queue. The lease
--- is short; the grading page renews it while the grader is active, so an
--- abandoned tab frees its resume within minutes.
+-- claims held by others count toward a resume's place in the queue.
 
 CREATE TABLE IF NOT EXISTS public.review_claims (
   kind       TEXT NOT NULL CHECK (kind IN ('resume', 'frq')),
@@ -30,7 +28,7 @@ CREATE OR REPLACE FUNCTION public.claim_next_review(
   cycle_id_input UUID,
   grader_id_input INT,
   candidate_ids UUID[],
-  lease_seconds INT DEFAULT 300
+  lease_seconds INT DEFAULT 1200
 )
 RETURNS UUID
 LANGUAGE plpgsql
@@ -87,53 +85,11 @@ BEGIN
 END;
 $$;
 
--- Heartbeat from an active grader. Extends their claim on resume_id_input, or
--- re-takes it if their lease lapsed while nobody else picked it up. Returns
--- FALSE when another grader now holds it.
-CREATE OR REPLACE FUNCTION public.renew_review_claim(
-  kind_input TEXT,
-  cycle_id_input UUID,
-  grader_id_input INT,
-  resume_id_input UUID,
-  lease_seconds INT DEFAULT 300
-)
-RETURNS BOOLEAN
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  IF kind_input NOT IN ('resume', 'frq') THEN
-    RAISE EXCEPTION 'Unknown review kind: %', kind_input;
-  END IF;
-
-  -- Same lock as claim_next_review so a re-take cannot race a new claim.
-  PERFORM pg_advisory_xact_lock(hashtext('review_claims:' || kind_input || ':' || cycle_id_input::text));
-
-  DELETE FROM public.review_claims WHERE expires_at <= now();
-
-  IF EXISTS (
-    SELECT 1 FROM public.review_claims
-    WHERE kind = kind_input AND cycle_id = cycle_id_input
-      AND resume_id = resume_id_input AND grader_id <> grader_id_input
-  ) THEN
-    RETURN FALSE;
-  END IF;
-
-  INSERT INTO public.review_claims (kind, cycle_id, grader_id, resume_id, expires_at)
-  VALUES (kind_input, cycle_id_input, grader_id_input, resume_id_input, now() + make_interval(secs => lease_seconds))
-  ON CONFLICT (kind, cycle_id, grader_id)
-  DO UPDATE SET resume_id = EXCLUDED.resume_id, expires_at = EXCLUDED.expires_at;
-
-  RETURN TRUE;
-END;
-$$;
-
 -- Supabase API roles only exist on Supabase; keep the file runnable elsewhere.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
     REVOKE ALL ON FUNCTION public.claim_next_review(TEXT, UUID, INT, UUID[], INT) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.claim_next_review(TEXT, UUID, INT, UUID[], INT) TO service_role;
-    REVOKE ALL ON FUNCTION public.renew_review_claim(TEXT, UUID, INT, UUID, INT) FROM PUBLIC, anon, authenticated;
-    GRANT EXECUTE ON FUNCTION public.renew_review_claim(TEXT, UUID, INT, UUID, INT) TO service_role;
   END IF;
 END $$;

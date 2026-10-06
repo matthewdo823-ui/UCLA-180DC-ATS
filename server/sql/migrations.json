@@ -198,6 +198,11 @@
       "order": 38,
       "file": "add_review_claims.sql",
       "mode": "auto"
+    },
+    {
+      "order": 39,
+      "file": "add_review_claim_renewal.sql",
+      "mode": "auto"
     }
   ]
 }
