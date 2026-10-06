@@ -72,3 +72,31 @@ check('an empty queue releases the grader\'s claim', async () => {
   assert.equal(await claim(1, 'resume', []), null);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM review_claims')).rows[0].n, 0);
 });
+
+const renew = async (grader, resumeId, kind = 'resume') =>
+  (await db.query('SELECT renew_review_claim($1, $2, $3, $4) AS held', [kind, cycle, grader, resumeId])).rows[0].held;
+
+check('an active grader keeps their resume past the original lease', async () => {
+  assert.equal(await claim(1), ids[0]);
+  await db.query("UPDATE review_claims SET expires_at = now() + interval '10 seconds'");
+  assert.equal(await renew(1, ids[0]), true);
+  const { rows } = await db.query("SELECT expires_at > now() + interval '4 minutes' AS extended FROM review_claims");
+  assert.equal(rows[0].extended, true);
+  assert.equal(await claim(2), ids[1]);
+});
+
+check('an idle grader whose lease lapsed gets the resume back if nobody took it', async () => {
+  assert.equal(await claim(1), ids[0]);
+  await db.query("UPDATE review_claims SET expires_at = now() - interval '1 second'");
+  assert.equal(await renew(1, ids[0]), true);
+  assert.equal(await claim(2), ids[1]);
+});
+
+check('an idle grader learns another grader was given their resume', async () => {
+  assert.equal(await claim(1), ids[0]);
+  await db.query("UPDATE review_claims SET expires_at = now() - interval '1 second'");
+  assert.equal(await claim(2), ids[0]);
+  assert.equal(await renew(1, ids[0]), false);
+  // Losing the hold does not touch the new holder's claim.
+  assert.equal(await claim(2), ids[0]);
+});

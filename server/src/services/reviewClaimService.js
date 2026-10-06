@@ -1,8 +1,9 @@
 const supabase = require("../config/supabase");
 const { isMissingSchemaError } = require("../utils/schemaCompatibility");
 
-// Long enough to read a resume and score it; an abandoned claim frees itself.
-const CLAIM_LEASE_SECONDS = 20 * 60;
+// The grading page renews the lease while the grader is active, so this only
+// bounds how long an abandoned resume stays held.
+const CLAIM_LEASE_SECONDS = 5 * 60;
 
 function isMissingClaimFunction(error) {
   // PGRST202: PostgREST cannot find the function (migration not applied yet).
@@ -43,6 +44,29 @@ async function claimNextReview({ kind, cycleId, graderId, candidateIds }) {
   return data || null;
 }
 
+/**
+ * Keep an active grader's claim alive (or re-take it if it lapsed and nobody
+ * else picked the resume up). Returns false only when another grader holds it.
+ *
+ * @param {{ kind: "resume"|"frq", cycleId: string, graderId: number, resumeId: string }} args
+ * @returns {Promise<boolean>}
+ */
+async function renewReviewClaim({ kind, cycleId, graderId, resumeId }) {
+  const { data, error } = await supabase.rpc("renew_review_claim", {
+    kind_input: kind,
+    cycle_id_input: cycleId,
+    grader_id_input: graderId,
+    resume_id_input: resumeId,
+    lease_seconds: CLAIM_LEASE_SECONDS,
+  });
+  if (error) {
+    // Without the migration there are no claims to lose.
+    if (isMissingClaimFunction(error)) return true;
+    throw error;
+  }
+  return data !== false;
+}
+
 /** Drop a grader's claim once their review is saved. Best effort: claims also expire. */
 async function releaseReviewClaim({ kind, cycleId, graderId, resumeId }) {
   const { error } = await supabase
@@ -54,4 +78,4 @@ async function releaseReviewClaim({ kind, cycleId, graderId, resumeId }) {
   }
 }
 
-module.exports = { claimNextReview, releaseReviewClaim, CLAIM_LEASE_SECONDS };
+module.exports = { claimNextReview, renewReviewClaim, releaseReviewClaim, CLAIM_LEASE_SECONDS };

@@ -87,7 +87,7 @@ const {
     appendFrqMetric,
 } = require('../services/frqScoringService');
 const { normalizeRequiredFrqNotes } = require('../utils/frqReview');
-const { claimNextReview, releaseReviewClaim } = require('../services/reviewClaimService');
+const { claimNextReview, renewReviewClaim, releaseReviewClaim } = require('../services/reviewClaimService');
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
     ? configuredGraderReviewGoal
@@ -3707,5 +3707,34 @@ exports.getCandidateHeadshotUrl = async (req, res) => {
         return res.json({ url, expires_in: SIGNED_URL_TTL_SECONDS });
     } catch (err) {
         return respondWithServerError(res, err, 'getCandidateHeadshotUrl');
+    }
+};
+
+// Heartbeat from the grading page while the grader is active, so their resume
+// stays reserved past the short lease. `held: false` means another grader has
+// since been given it.
+exports.renewReviewClaim = async (req, res) => {
+    const { kind, resume_id } = req.body || {};
+    if (kind !== "resume" && kind !== "frq") {
+        return res.status(400).json({ error: "kind must be resume or frq" });
+    }
+    if (!resume_id) return res.status(400).json({ error: "resume_id is required" });
+    if (kind === "frq" && !canGradeFrq(req.user?.role)) {
+        return res.status(403).json({ error: "Only board members can grade free responses" });
+    }
+
+    const screening = await requireOpenResumeRound();
+    if (screening.error) return res.status(screening.status).json({ error: screening.error });
+
+    try {
+        const held = await renewReviewClaim({
+            kind,
+            cycleId: screening.cycle.id,
+            graderId: req.user?.user_id,
+            resumeId: resume_id,
+        });
+        return res.json({ held });
+    } catch (error) {
+        return respondWithServerError(res, error, "renewReviewClaim");
     }
 };
