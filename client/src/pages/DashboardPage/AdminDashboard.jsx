@@ -232,7 +232,7 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => navigate(focus.path)}
-                  style={{ border: "none", borderRadius: 8, background: css.greenDark, color: "#FFF", padding: "11px 13px", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(40, 98, 65, 0.16)" }}
+                  style={{ border: "none", borderRadius: 8, background: css.greenDark, color: "var(--color-on-primary)", padding: "11px 13px", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(40, 98, 65, 0.16)" }}
                 >
                   {focus.actionLabel} →
                 </button>

@@ -35,11 +35,11 @@ function CategoryRowEdit({ metric, value, onScore, maxPerCategory = RUBRIC_MAX_P
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 6, alignItems: "center" }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: css.textDark }}>{titleCase(metric)}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: cardGreen, fontFamily: "'DM Mono', monospace" }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-card-ink)", fontFamily: "'DM Mono', monospace" }}>
           {formatScore(value, { fallback: "—" })} <span style={{ color: css.textGray, fontWeight: 500 }}>/ {maxPerCategory}</span>
         </span>
       </div>
-      <div style={{ height: 6, background: "#E8EDE4", borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
+      <div style={{ height: 6, background: "var(--color-track)", borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
         <div style={{ height: "100%", width: `${pct}%`, background: cardMint, borderRadius: 3, transition: "width 0.25s ease" }} />
       </div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -59,9 +59,9 @@ function CategoryRowEdit({ metric, value, onScore, maxPerCategory = RUBRIC_MAX_P
                 fontSize: 12,
                 fontWeight: 600,
                 cursor: "pointer",
-                border: `1px solid ${sel ? c.bd : "#DDE3D8"}`,
+                border: `1px solid ${sel ? c.bd : "var(--color-border)"}`,
                 color: sel ? c.color : css.textGray,
-                background: sel ? c.bg : "#FFF",
+                background: sel ? c.bg : "var(--color-surface)",
                 fontFamily: "'DM Mono', monospace",
                 boxShadow: sel ? `0 0 0 1px ${c.bd}22` : "none",
               }}
@@ -252,7 +252,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
             height: 32,
             borderRadius: "50%",
             border: `1px solid ${css.borderLight}`,
-            background: "#FFF",
+            background: "var(--color-surface)",
             color: css.textGray,
             cursor: "pointer",
             fontSize: 18,
@@ -266,7 +266,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
           ×
         </button>
 
-        <div style={{ borderRadius: 20, overflow: "hidden", border: `1px solid ${cardGreen}`, background: "#FFF" }}>
+        <div style={{ borderRadius: 20, overflow: "hidden", border: `1px solid ${cardGreen}`, background: "var(--color-surface)" }}>
           <div style={{ background: `linear-gradient(165deg, ${cardGreen} 0%, #0a3d32 100%)`, padding: "20px 20px 18px" }}>
             <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.55)", margin: "0 0 12px", textTransform: "uppercase" }}>
               Your review
@@ -338,15 +338,15 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
             ) : null}
           </div>
 
-          <div style={{ background: cardPale, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, borderBottom: "1px solid #D4DECC" }}>
+          <div style={{ background: "var(--color-card-pale)", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, borderBottom: "1px solid var(--color-border)" }}>
             <div>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 4px", fontWeight: 700, letterSpacing: "0.06em" }}>NORMALIZED SCORE</p>
-              <p style={{ fontSize: 28, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1, fontFamily: "'DM Mono', monospace" }}>
-                {formatScore(normalizedScore, { fallback: "—" })}<span style={{ fontSize: 14, color: "#3B6D11", fontWeight: 600 }}>%</span>
+              <p style={{ fontSize: 10, color: "var(--color-card-pale-text)", margin: "0 0 4px", fontWeight: 700, letterSpacing: "0.06em" }}>NORMALIZED SCORE</p>
+              <p style={{ fontSize: 28, fontWeight: 700, color: "var(--color-card-ink)", margin: 0, lineHeight: 1, fontFamily: "'DM Mono', monospace" }}>
+                {formatScore(normalizedScore, { fallback: "—" })}<span style={{ fontSize: 14, color: "var(--color-card-pale-text)", fontWeight: 600 }}>%</span>
               </p>
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: 0, fontWeight: 700, letterSpacing: "0.06em" }}>{metrics.length} categories</p>
+              <p style={{ fontSize: 10, color: "var(--color-card-pale-text)", margin: 0, fontWeight: 700, letterSpacing: "0.06em" }}>{metrics.length} categories</p>
             </div>
           </div>
 
@@ -357,7 +357,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
             ))}
           </div>
 
-          <div style={{ margin: "0 20px 16px", padding: "14px 14px", background: "#FAFBF9", border: `1px solid ${css.borderLight}`, borderRadius: 12 }}>
+          <div style={{ margin: "0 20px 16px", padding: "14px 14px", background: "var(--color-surface-subtle)", border: `1px solid ${css.borderLight}`, borderRadius: 12 }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.08em", margin: "0 0 8px", fontWeight: 700 }}>NOTES</p>
             <textarea
               value={notes}
@@ -374,7 +374,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
                 fontSize: 13,
                 fontFamily: "'DM Sans', sans-serif",
                 color: css.textDark,
-                background: "#FFF",
+                background: "var(--color-surface)",
               }}
             />
             <div style={{ fontSize: 10, color: css.textGray, marginTop: 6, textAlign: "right" }}>{notes.length} / 300</div>
@@ -410,7 +410,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
             </div>
           ) : null}
 
-          <div style={{ padding: "14px 20px 18px", borderTop: `1px solid ${css.borderLight}`, display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", background: "#FAFBF9" }}>
+          <div style={{ padding: "14px 20px 18px", borderTop: `1px solid ${css.borderLight}`, display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", background: "var(--color-surface-subtle)" }}>
             <button
               type="button"
               onClick={onClose}
@@ -418,7 +418,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
                 padding: "10px 18px",
                 borderRadius: 10,
                 border: `1px solid ${css.borderLight}`,
-                background: "#FFF",
+                background: "var(--color-surface)",
                 color: css.textDark,
                 fontSize: 13,
                 fontWeight: 600,
@@ -436,7 +436,7 @@ export default function PastReviewDetailModal({ review, onClose, onSaved, onOpen
                 borderRadius: 10,
                 border: "none",
                 background: scoringComplete && !saving ? css.greenDark : css.borderLight,
-                color: "#FFF",
+                color: "var(--color-on-primary)",
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: scoringComplete && !saving ? "pointer" : "not-allowed",

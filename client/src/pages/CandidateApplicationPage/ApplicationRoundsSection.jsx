@@ -48,7 +48,7 @@ function AggregateScoreRow({ scoring, expanded, onToggle }) {
     <button type="button" onClick={onToggle} style={{ ...unstyledButton, padding: "4px 0 18px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, textAlign: "left" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <p style={{ margin: 0, fontSize: 30, fontWeight: 700, color: cardGreen, lineHeight: 1 }}>
+          <p style={{ margin: 0, fontSize: 30, fontWeight: 700, color: "var(--color-card-ink)", lineHeight: 1 }}>
             {hasNumericScore(scoring.normalizedScore) ? `${formatScore(scoring.normalizedScore)}%` : "—"}
           </p>
           <p style={{ margin: 0, fontSize: 13, color: css.textGray }}>overall average</p>
@@ -80,7 +80,7 @@ function ReviewRow({ review, expanded, onToggle, maxPerCategory, isFirst }) {
         <span style={{ fontSize: 12, color: css.textGray, whiteSpace: "nowrap" }}>
           {formatDate(review.submittedAt, { style: "short" })}
         </span>
-        {isFlagged && <Tag label={titleCase(review.decision)} color="#B45309" bg="rgba(239,159,39,0.14)" />}
+        {isFlagged && <Tag label={titleCase(review.decision)} color="var(--color-warning-text)" bg="rgba(239,159,39,0.14)" />}
         {reviewOverridden && <Tag label="Overridden" color="#E24B4A" bg="rgba(226,75,74,0.12)" />}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
@@ -127,7 +127,7 @@ function FrqReviewRow({ review, isFirst }) {
             {formatDate(review.submittedAt, { style: "short" })} · Free response
           </span>
         </div>
-        <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: cardGreen, whiteSpace: "nowrap" }}>
+        <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--color-card-ink)", whiteSpace: "nowrap" }}>
           {hasNumericScore(review.normalizedScore)
             ? formatScore(review.normalizedScore)
             : formatScore(Number(review.score) / 4 * 100)}%

@@ -39,8 +39,8 @@ export const PHASE_DESCRIPTIONS = Object.freeze({
 export const ROUND_PHASE_STYLE = Object.freeze({
   [ROUND_PHASES.SETUP]: { bg: "rgba(239,159,39,0.12)", color: "#C47D12", bd: "rgba(239,159,39,0.28)" },
   [ROUND_PHASES.GRADING]: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
-  [ROUND_PHASES.DELIBERATION]: { bg: "rgba(59,130,246,0.12)", color: "#2563EB", bd: "rgba(59,130,246,0.28)" },
-  [ROUND_PHASES.CLOSED]: { bg: "rgba(107,114,128,0.12)", color: "#6B7280", bd: "rgba(107,114,128,0.28)" },
+  [ROUND_PHASES.DELIBERATION]: { bg: "rgba(59,130,246,0.12)", color: "var(--color-info-text)", bd: "rgba(59,130,246,0.28)" },
+  [ROUND_PHASES.CLOSED]: { bg: "rgba(107,114,128,0.12)", color: "var(--color-text-muted)", bd: "rgba(107,114,128,0.28)" },
 });
 
 /** Unknown values pass through rather than defaulting, so they fail every check below. */

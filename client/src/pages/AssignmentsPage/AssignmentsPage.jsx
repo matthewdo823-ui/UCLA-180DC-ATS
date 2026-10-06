@@ -495,8 +495,8 @@ export default function AssignmentsPage() {
                   fontSize: 13,
                   fontWeight: 700,
                   cursor: !pairCount || saving ? "not-allowed" : "pointer",
-                  background: pairCount ? css.greenDark : "#E5E7EB",
-                  color: pairCount ? "#FFF" : css.textGray,
+                  background: pairCount ? css.greenDark : "var(--color-track)",
+                  color: pairCount ? "var(--color-on-primary)" : css.textGray,
                   opacity: saving ? 0.7 : 1,
                 }}
               >
@@ -744,8 +744,8 @@ function AssignmentTable({ graders, assignments, candidates, onRemove }) {
                     fontSize: 12,
                     fontWeight: 600,
                     border: `1px solid ${row.completed ? "rgba(29,158,117,0.28)" : css.borderLight}`,
-                    background: row.completed ? "rgba(29,158,117,0.10)" : "#FAFBFA",
-                    color: row.completed ? "#1D7A5B" : css.textDark,
+                    background: row.completed ? "rgba(29,158,117,0.10)" : "var(--color-surface-subtle)",
+                    color: row.completed ? "var(--color-success-text)" : css.textDark,
                   }}
                 >
                   {row.completed ? "✓ " : ""}
@@ -799,10 +799,10 @@ function StatCard({ label, value }) {
 
 function Banner({ tone, children }) {
   const palette = tone === "error"
-    ? { bg: "rgba(226,75,74,0.08)", border: "rgba(226,75,74,0.22)", color: "#C0392B" }
+    ? { bg: "rgba(226,75,74,0.08)", border: "rgba(226,75,74,0.22)", color: "var(--color-danger-text)" }
     : tone === "warning"
-      ? { bg: "rgba(239,159,39,0.10)", border: "rgba(239,159,39,0.30)", color: "#9A6700" }
-      : { bg: "rgba(29,158,117,0.08)", border: "rgba(29,158,117,0.22)", color: "#1D7A5B" };
+      ? { bg: "rgba(239,159,39,0.10)", border: "rgba(239,159,39,0.30)", color: "var(--color-warning-text)" }
+      : { bg: "rgba(29,158,117,0.08)", border: "rgba(29,158,117,0.22)", color: "var(--color-success-text)" };
 
   return (
     <div
@@ -851,7 +851,7 @@ const panelCountStyle = {
 const metaPillStyle = {
   borderRadius: 999,
   border: `1px solid ${css.borderLight}`,
-  background: "#FAFBFA",
+  background: "var(--color-surface-subtle)",
   color: css.textGray,
   fontSize: 11,
   fontWeight: 700,
@@ -862,7 +862,7 @@ const metaPillStyle = {
 const assignedPillStyle = {
   border: "1px solid rgba(29,158,117,0.28)",
   background: "rgba(29,158,117,0.10)",
-  color: "#1D7A5B",
+  color: "var(--color-success-text)",
 };
 
 const secondaryButtonStyle = {
@@ -872,7 +872,7 @@ const secondaryButtonStyle = {
   fontSize: 13,
   fontWeight: 700,
   cursor: "pointer",
-  background: "#FFF",
+  background: "var(--color-surface)",
   color: css.textDark,
   fontFamily: "'DM Sans', sans-serif",
 };
@@ -885,8 +885,8 @@ function chipStyle(active) {
     fontSize: 12,
     fontWeight: 700,
     cursor: "pointer",
-    background: active ? css.greenDark : "#FFF",
-    color: active ? "#FFF" : css.textGray,
+    background: active ? css.greenDark : "var(--color-surface)",
+    color: active ? "var(--color-on-primary)" : css.textGray,
     fontFamily: "'DM Sans', sans-serif",
   };
 }
