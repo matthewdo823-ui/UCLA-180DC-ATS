@@ -1,9 +1,18 @@
-const EXCLUSION_MESSAGE = 'Automatically rejected: Junior/Senior standing. Junior transfers remain eligible.';
-const ELIGIBLE_YEAR_FILTER = 'year.is.null,year.not.in.(Junior,Senior)';
+const EXCLUSION_MESSAGE = 'Automatically rejected: Junior, Senior, and Senior Transfer standing. Junior Transfers remain eligible.';
+const ELIGIBLE_YEAR_FILTER = 'year.is.null,year.not.in.("Junior","Senior","Senior Transfer")';
+const EXCLUDED_STANDINGS = new Set([
+  'junior',
+  'senior',
+  'senior transfer',
+  'transfer senior',
+  '4th year transfer',
+  'fourth year transfer',
+  'sr transfer',
+]);
 
 function screeningExclusionReason(year) {
   const standing = String(year || '').trim().toLowerCase();
-  return standing === 'junior' || standing === 'senior' ? EXCLUSION_MESSAGE : null;
+  return EXCLUDED_STANDINGS.has(standing) ? EXCLUSION_MESSAGE : null;
 }
 
 // Presentation only: never write a fabricated grade or committee decision.

@@ -10,6 +10,7 @@ import {
   isSetupPhase,
 } from "../../constants/roundPhases";
 import useGraderDashboard from "./useGraderDashboard";
+import PersonalFrqProgress from "./PersonalFrqProgress";
 import {
   pageStyle,
   Panel,
@@ -187,6 +188,7 @@ export default function GraderDashboard() {
           </Panel>
         ) : null}
 
+        <PersonalFrqProgress />
         <Panel title="Quick links">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
             {[

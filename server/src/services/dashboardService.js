@@ -619,10 +619,10 @@ async function loadDemographicsSnapshot(cycleId) {
   };
 }
 
-async function getGraderDashboard(userId) {
+async function getGraderDashboard(userId, role) {
   const activeCycle = await getActiveCycleRow();
   const activeCycleId = activeCycle?.id || null;
-  const { resumeGraderGoal } = resolveCycleGradingGoals(activeCycle);
+  const { resumeGraderGoal, frqGraderGoal } = resolveCycleGradingGoals(activeCycle);
   const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
   const { resumeRound, activeRound, currentRound } = resolveDeliberationRounds(cycleRounds);
   const isInterviewRound = isInterviewRoundType(activeRound?.type);
@@ -639,7 +639,19 @@ async function getGraderDashboard(userId) {
     );
   }
 
+  let personalFrq = null;
+  if (['admin', 'board'].includes(role) && activeCycleId && resumeRound) {
+    const { count, error } = await supabase.from('frq_reviews')
+      .select('id', { count: 'exact', head: true })
+      .eq('graded_by', userId)
+      .eq('cycle_id', activeCycleId)
+      .eq('round_id', resumeRound.id);
+    if (error) throw error;
+    personalFrq = { count: count ?? 0, expectedReviews: frqGraderGoal };
+  }
+
   return {
+    personalFrq,
     context: {
       cycle: activeCycle ? { id: activeCycle.id, name: activeCycle.name } : null,
       activeRound: mapScoreboardRoundContext(activeRound),

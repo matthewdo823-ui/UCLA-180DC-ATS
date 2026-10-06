@@ -181,6 +181,16 @@
     },
     {
       "order": 35,
+      "file": "fix_form_sync_legacy_why_defaults.sql",
+      "mode": "auto"
+    },
+    {
+      "order": 36,
+      "file": "add_senior_transfer_year.sql",
+      "mode": "auto"
+    },
+    {
+      "order": 37,
       "file": "add_cycle_grading_goals.sql",
       "mode": "auto"
     }

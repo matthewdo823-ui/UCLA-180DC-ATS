@@ -15,6 +15,7 @@ export default function FrqScoringPanel({
 }) {
   const total = typeof score === "number" ? score : 0;
   const hasScore = typeof score === "number" && score >= 0 && score <= FRQ_MAX_SCORE;
+  const hasNotes = notes.trim().length > 0;
   const scoreColor = total >= FRQ_MAX_SCORE * 0.75 ? css.greenDark : total >= FRQ_MAX_SCORE * 0.5 ? css.amber : css.red;
   const levels = Array.from({ length: FRQ_MAX_SCORE + 1 }, (_, i) => i);
 
@@ -40,11 +41,11 @@ export default function FrqScoringPanel({
         }}
       >
         <div style={{ fontSize: 11, fontWeight: 700, color: css.greenDark, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 8 }}>
-          WHY 180 rubric
+          CONSULTING &amp; 180DC INTEREST RUBRIC
         </div>
         <img
-          src="/rubrics/Why180Rubric.svg"
-          alt="WHY 180 FRQ scoring rubric"
+          src="/rubrics/FRQRubric.png"
+          alt="Four-point rubric for the consulting and 180DC interest free response"
           style={{ width: "100%", height: "auto", display: "block", borderRadius: 8, border: `1px solid ${css.borderLight}` }}
         />
       </div>
@@ -171,7 +172,7 @@ export default function FrqScoringPanel({
             }}
           >
             <span style={{ fontSize: 14 }}>📝</span>
-            NOTES
+            NOTES · REQUIRED
           </div>
           <span style={{ fontSize: 11, color: css.textGray, fontWeight: 500, fontFamily: "'DM Mono', monospace" }}>
             {notes.length} / 300
@@ -180,7 +181,8 @@ export default function FrqScoringPanel({
         <textarea
           value={notes}
           onChange={(e) => onNotes(e.target.value.slice(0, 300))}
-          placeholder="Add notes about this candidate's application responses..."
+          aria-required="true"
+          placeholder="Write 1–2 sentences for deliberations: standout creativity, possible AI use, writing quality, or extenuating circumstances."
           style={{
             width: "100%",
             height: 80,
@@ -196,6 +198,9 @@ export default function FrqScoringPanel({
             boxSizing: "border-box",
           }}
         />
+        <p style={{ margin: "8px 0 0", fontSize: 11, lineHeight: 1.45, color: hasNotes ? css.textGray : css.red }}>
+          A deliberation comment is required by the FRQ rubric.
+        </p>
       </div>
 
       {submitError ? (
@@ -221,7 +226,9 @@ export default function FrqScoringPanel({
         title={submitting
           ? "Waiting for the server to confirm this grade"
           : !scoringComplete
-            ? `Rate application responses from 0 to ${FRQ_MAX_SCORE} first`
+            ? !hasScore
+              ? `Rate application responses from 0 to ${FRQ_MAX_SCORE} first`
+              : "Add the required deliberation comment first"
             : undefined}
         onClick={onComplete}
       />

@@ -3,15 +3,13 @@ import { RUBRIC_MAX_PER_CATEGORY } from "../constants/config";
 export const RUBRIC_YEAR_KEYS = [
   { key: "freshman", title: "Freshman" },
   { key: "sophomore", title: "Sophomore" },
-  { key: "junior", title: "Junior" },
   { key: "juniortransfer", title: "Junior Transfer" },
-  { key: "senior", title: "Senior" },
 ];
 
 export const RUBRIC_IMAGE_OPTIONS = [
   { value: "/rubrics/FreshmanRubric.png", label: "Freshman rubric image" },
   { value: "/rubrics/SophomoreRubric.png", label: "Sophomore rubric image" },
-  { value: "/rubrics/OthersRubric.png", label: "Junior & Senior rubric image" },
+  { value: "/rubrics/OthersRubric.png", label: "Junior Transfer rubric image" },
 ];
 
 export const DEFAULT_RUBRIC_CONFIG = {
@@ -27,18 +25,8 @@ export const DEFAULT_RUBRIC_CONFIG = {
       imageUrl: "/rubrics/SophomoreRubric.png",
       metrics: ["work experience", "leadership experience", "social impact"],
     },
-    junior: {
-      label: "Junior & Senior",
-      imageUrl: "/rubrics/OthersRubric.png",
-      metrics: ["leadership/work experience", "business or social impact"],
-    },
     juniortransfer: {
-      label: "Junior & Senior",
-      imageUrl: "/rubrics/OthersRubric.png",
-      metrics: ["leadership/work experience", "business or social impact"],
-    },
-    senior: {
-      label: "Junior & Senior",
+      label: "Junior Transfer",
       imageUrl: "/rubrics/OthersRubric.png",
       metrics: ["leadership/work experience", "business or social impact"],
     },
@@ -55,7 +43,9 @@ export function cloneRubricConfig(config) {
         return [
           key,
           {
-            label: entry?.label || DEFAULT_RUBRIC_CONFIG.byYear[key].label,
+            label: key === "juniortransfer" && entry?.label === "Junior & Senior"
+              ? "Junior Transfer"
+              : entry?.label || DEFAULT_RUBRIC_CONFIG.byYear[key].label,
             imageUrl: entry?.imageUrl || DEFAULT_RUBRIC_CONFIG.byYear[key].imageUrl,
             metrics: [...(entry?.metrics || DEFAULT_RUBRIC_CONFIG.byYear[key].metrics)],
           },
@@ -97,9 +87,12 @@ export function getRubricForYear(rubricConfig, yearRaw) {
   const fallback = byYear.sophomore || Object.values(byYear)[0] || {};
   const entry = key && byYear[key] ? byYear[key] : fallback;
   const maxPerCategory = config.maxPerCategory || RUBRIC_MAX_PER_CATEGORY;
+  const label = key === "juniortransfer" && entry.label === "Junior & Senior"
+    ? "Junior Transfer"
+    : entry.label;
 
   return {
-    label: entry.label || "Rubric",
+    label: label || "Rubric",
     imageUrl: entry.imageUrl || null,
     metrics: entry.metrics || [],
     maxPerCategory,

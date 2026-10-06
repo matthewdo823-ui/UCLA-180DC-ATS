@@ -66,7 +66,7 @@ const COLUMN_OPTIONS = [
   { value: "gpa", label: "GPA" },
   { value: "year", label: "Year" },
   { value: "pronouns", label: "Pronouns" },
-  { value: "urm", label: "URM" },
+  { value: "urm", label: "Diversity identities (multi-select)" },
   { value: "linkedin", label: "LinkedIn" },
   { value: "gm", label: "GM interest" },
   { value: "newbie_training", label: "Newbie training" },
@@ -389,7 +389,7 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
   );
 }
 
-function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
+export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
   const [resumeGraderGoal, setResumeGraderGoal] = useState(String(cycle.resumeGraderGoal ?? 30));
   const [frqGraderGoal, setFrqGraderGoal] = useState(String(cycle.frqGraderGoal ?? 30));
   const [resumeReviewTarget, setResumeReviewTarget] = useState(cycle.resumeReviewTarget == null ? "" : String(cycle.resumeReviewTarget));
@@ -1081,7 +1081,12 @@ export default function CycleManagementPage() {
   // Expiring ["cycles"] also expires ["cycles","active"] (hierarchical key), so
   // activating a cycle or round here refreshes the active-cycle entry every page reads.
   const reloadCycles = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: qk.cycles() }),
+    () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: qk.cycles() }),
+      queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() }),
+      queryClient.invalidateQueries({ queryKey: qk.graderScoreboard() }),
+      queryClient.invalidateQueries({ queryKey: qk.frqGraderScoreboard() }),
+    ]),
     [queryClient]
   );
 

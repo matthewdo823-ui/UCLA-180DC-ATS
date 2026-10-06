@@ -46,6 +46,42 @@ function averageFrqScore(frqReviews = []) {
   return Number((sum / frqReviews.length).toFixed(1));
 }
 
+const RESUME_WEIGHT = 2 / 3;
+const FRQ_WEIGHT = 1 / 3;
+
+function clampPercent(value) {
+  return Math.max(0, Math.min(100, Number(value)));
+}
+
+function hasNumericValue(value) {
+  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+}
+
+/**
+ * Combine independently normalized components so every resume rubric receives
+ * the same 2:1 weight relative to the FRQ, regardless of its raw point maximum.
+ * If one component has not been graded yet, show the completed component alone.
+ */
+function computeWeightedCompositePercent(resumePercent, frqScore, frqMax = FRQ_MAX_SCORE) {
+  const hasResume = hasNumericValue(resumePercent);
+  const hasFrq = hasNumericValue(frqScore);
+  const numericFrqMax = Number(frqMax);
+
+  if (!hasResume && !hasFrq) return null;
+  if (!hasFrq) return Number(clampPercent(resumePercent).toFixed(1));
+
+  const frqPercent = Number.isFinite(numericFrqMax) && numericFrqMax > 0
+    ? clampPercent((Number(frqScore) / numericFrqMax) * 100)
+    : null;
+  if (frqPercent == null) return hasResume ? Number(clampPercent(resumePercent).toFixed(1)) : null;
+  if (!hasResume) return Number(frqPercent.toFixed(1));
+
+  return Number((
+    clampPercent(resumePercent) * RESUME_WEIGHT
+    + frqPercent * FRQ_WEIGHT
+  ).toFixed(1));
+}
+
 /**
  * Merge resume-only aggregates with FRQ grades into composite headline scores.
  * aggregateScore retains rubric arithmetic; normalizedScore/score are the
@@ -78,18 +114,18 @@ function applyCompositeScoringToCandidate(candidate, {
   let aggregateScore = resumeAggregateScore;
   let normalizedScore = resumeNormalizedScore;
   const frqPending = numFrqReviews === 0;
-  const hasResumeScore = Number.isFinite(Number(resumeAggregateScore));
+  const hasResumeScore = hasNumericValue(resumeAggregateScore);
   const hasResumeMax = Number.isFinite(Number(resumeMax)) && Number(resumeMax) > 0;
   let compositeMax = hasResumeMax ? Number(resumeMax) : null;
 
   if (frqAvg != null && hasResumeScore && hasResumeMax) {
     aggregateScore = Number((resumeAggregateScore + frqAvg).toFixed(1));
     compositeMax = Number(resumeMax) + FRQ_MAX_SCORE;
-    normalizedScore = computeNormalizedFromAggregate(aggregateScore, compositeMax);
+    normalizedScore = computeWeightedCompositePercent(resumeNormalizedScore, frqAvg);
   } else if (frqAvg != null && !hasResumeScore) {
     aggregateScore = frqAvg;
     compositeMax = FRQ_MAX_SCORE;
-    normalizedScore = computeNormalizedFromAggregate(frqAvg, FRQ_MAX_SCORE);
+    normalizedScore = computeWeightedCompositePercent(null, frqAvg);
   }
 
   return {
@@ -138,6 +174,7 @@ module.exports = {
   mapFrqReviewRow,
   groupFrqReviewsByResumeId,
   averageFrqScore,
+  computeWeightedCompositePercent,
   applyCompositeScoringToCandidate,
   applyCompositeScoringToCandidates,
   appendFrqMetric,

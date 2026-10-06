@@ -5,6 +5,7 @@ import PageLoader from "../../components/PageLoader";
 import { css } from "../../theme/colors";
 import { formatReviewCountPair } from "../../utils/reviewCounts";
 import useAdminDashboard from "./useAdminDashboard";
+import PersonalFrqProgress from "./PersonalFrqProgress";
 import {
   pageStyle,
   Panel,
@@ -161,6 +162,7 @@ export default function AdminDashboard() {
       <Topbar phaseLabel={phaseLabel} showActivePill={Boolean(context?.activeRound)} activeLabel="Admin" />
 
       <div style={{ padding: "24px 32px 40px", maxWidth: 1440, width: "100%", boxSizing: "border-box", margin: "0 auto" }}>
+        <PersonalFrqProgress />
         {error ? (
           <div style={{
             background: "rgba(226,75,74,0.08)",

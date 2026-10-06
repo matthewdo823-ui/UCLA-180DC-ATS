@@ -50,7 +50,9 @@ function DimensionPanel({ dimension, stages }) {
         {dimension.label}
       </h2>
       <p style={{ margin: "8px 0 0", fontSize: 13, color: css.textGray, lineHeight: 1.5 }}>
-        Share of each group at every pipeline stage. Hover anywhere on a bar for exact counts.
+        {dimension.kind === "indicator"
+          ? "A mutually exclusive Selected / Not selected / Not specified breakdown at every pipeline stage."
+          : "Share of each group at every pipeline stage. Hover anywhere on a bar for exact counts."}
       </p>
 
       <DemographicsStackedBarChart

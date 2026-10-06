@@ -1,4 +1,5 @@
 import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
+import { computeWeightedCompositePercent } from "../../utils/compositeScore";
 
 function getGraderKey(review) {
   if (review?.gradedBy != null) return String(review.gradedBy);
@@ -183,6 +184,10 @@ function averageFrqScore(frqReviews = []) {
   return Number((sum / frqReviews.length).toFixed(1));
 }
 
+function hasNumericValue(value) {
+  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+}
+
 // Server scores arrive with Demonstrated Interest applied; fallbacks must use the pre-DI base
 // or the multiplier would be applied twice.
 function preInterestScore(candidate) {
@@ -193,7 +198,7 @@ function applyCompositeFromParts(candidate, resumeAggregateScore, resumePossible
   const frqAvg = averageFrqScore(frqReviews);
   const frqPending = !frqReviews.length;
   const resumeMax = Number(resumePossibleScore);
-  const hasResumeScore = Number.isFinite(Number(resumeAggregateScore));
+  const hasResumeScore = hasNumericValue(resumeAggregateScore);
   const hasResumeMax = Number.isFinite(resumeMax) && resumeMax > 0;
   let compositeMax = hasResumeMax ? resumeMax : null;
 
@@ -203,11 +208,11 @@ function applyCompositeFromParts(candidate, resumeAggregateScore, resumePossible
   if (frqAvg != null && hasResumeScore && hasResumeMax) {
     aggregateScore = Number((resumeAggregateScore + frqAvg).toFixed(1));
     compositeMax = resumeMax + FRQ_MAX_SCORE;
-    normalizedScore = Number(Math.min(100, (aggregateScore / compositeMax) * 100).toFixed(1));
+    normalizedScore = computeWeightedCompositePercent(resumeNormalizedScore, frqAvg);
   } else if (frqAvg != null && !hasResumeScore) {
     aggregateScore = frqAvg;
     compositeMax = FRQ_MAX_SCORE;
-    normalizedScore = Number(Math.min(100, (frqAvg / FRQ_MAX_SCORE) * 100).toFixed(1));
+    normalizedScore = computeWeightedCompositePercent(null, frqAvg);
   }
 
   return {

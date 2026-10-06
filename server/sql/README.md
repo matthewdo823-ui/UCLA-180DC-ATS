@@ -54,7 +54,9 @@ The table below documents the order and intent; it is kept in sync with
 | 32 | `add_cycle_application_question_mapping.sql` | Additive cycle question catalogs, response snapshots, names, and structured application fields |
 | 33 | `repair_fall_26_application_mapping.sql` | **Manual post-deploy repair** — correct Fall '26 mappings before its one-time re-sync |
 | 34 | `add_board_role.sql` | Add the `board` database role (member access plus FRQ grading in the application) |
-| 35 | `add_cycle_grading_goals.sql` | Per-cycle resume/FRQ grader goals and optional shared-pile completion targets |
+| 35 | `fix_form_sync_legacy_why_defaults.sql` | Default retired `why_*` columns and replay open-cycle form responses skipped by the stale constraint |
+| 36 | `add_senior_transfer_year.sql` | Add the `Senior Transfer` standing to `year_enum` so intake and the screening filter can name it |
+| 37 | `add_cycle_grading_goals.sql` | Per-cycle resume/FRQ grader goals and optional shared-pile completion targets |
 
 ## First-time setup on a new database
 
@@ -116,6 +118,11 @@ database that has application tables but no migration history.
   snapshotless reviews retain their original scores and labels. The API projects
   those labels only when building profile category summaries; original review
   rows and ranking totals remain unchanged.
+- **`fix_form_sync_legacy_why_defaults.sql` (#35):** Keeps the retired fixed
+  essay columns compatible with older readers while allowing the current
+  `application_responses` snapshot writer to omit them. It clears the sync
+  watermark for configured active/draft cycles once so responses skipped by the
+  old constraint are recovered by the next idempotent sync.
 - **Optional future data backfill:** permanently rewriting legacy review rows
   should happen only after the team decides how retired categories contribute
   to historical totals. That backfill could change rankings and is intentionally

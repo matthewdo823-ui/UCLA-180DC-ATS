@@ -90,6 +90,7 @@ const {
     resolveCycleGradingGoals,
     applyReviewTarget,
 } = require('../utils/gradingGoals');
+const { normalizeRequiredFrqNotes } = require('../utils/frqReview');
 const VALID_REVIEW_DECISIONS = new Set(["pass", "flag", "reject"]);
 const MIN_SIGNAL_NOTE_LENGTH = 20;
 
@@ -1150,7 +1151,6 @@ exports.saveFrqReview = async (req, res) => {
     if (!Number.isFinite(numericScore) || numericScore < 0 || numericScore > FRQ_MAX_SCORE) {
         return res.status(400).json({ error: `score must be a number between 0 and ${FRQ_MAX_SCORE}` });
     }
-
     const screening = await requireResumeGradingPhase();
     if (screening.error) {
         return res.status(screening.status).json({ error: screening.error });
@@ -1171,6 +1171,11 @@ exports.saveFrqReview = async (req, res) => {
     const exclusion = screeningAccessError(firstRel(resumeRow.candidates));
     if (exclusion) return res.status(exclusion.status).json({ error: exclusion.error });
 
+    const normalizedNotes = normalizeRequiredFrqNotes(notes);
+    if (!normalizedNotes) {
+        return res.status(400).json({ error: "A 1–2 sentence deliberation comment is required" });
+    }
+
     const { data: existingReview, error: existingError } = await supabase
         .from("frq_reviews")
         .select("id")
@@ -1185,7 +1190,7 @@ exports.saveFrqReview = async (req, res) => {
             .from("frq_reviews")
             .update({
                 score: Math.round(numericScore),
-                notes: notes ?? "",
+                notes: normalizedNotes,
             })
             .eq("id", existingReview.id)
             .eq("graded_by", gradedBy);
@@ -1197,7 +1202,7 @@ exports.saveFrqReview = async (req, res) => {
     const { error: saveError } = await supabase.rpc("save_frq_review", {
         resume_id_input: resume_id,
         score_input: Math.round(numericScore),
-        notes_input: notes ?? "",
+        notes_input: normalizedNotes,
         graded_by_input: gradedBy,
         cycle_id_input: screening.cycle.id,
         round_id_input: screening.round.id,
@@ -1232,7 +1237,6 @@ exports.patchMyFrqReview = async (req, res) => {
     if (!Number.isFinite(numericScore) || numericScore < 0 || numericScore > FRQ_MAX_SCORE) {
         return res.status(400).json({ error: `score must be a number between 0 and ${FRQ_MAX_SCORE}` });
     }
-
     const { data: existing, error: fetchError } = await supabase
         .from("frq_reviews")
         .select("id, cycle_id, resumes(candidates(year))")
@@ -1250,11 +1254,16 @@ exports.patchMyFrqReview = async (req, res) => {
         if (exclusion) return res.status(exclusion.status).json({ error: exclusion.error });
     }
 
+    const normalizedNotes = normalizeRequiredFrqNotes(notes);
+    if (!normalizedNotes) {
+        return res.status(400).json({ error: "A 1–2 sentence deliberation comment is required" });
+    }
+
     const { error: updateError } = await supabase
         .from("frq_reviews")
         .update({
             score: Math.round(numericScore),
-            notes: notes ?? "",
+            notes: normalizedNotes,
         })
         .eq("id", reviewId)
         .eq("graded_by", gradedBy);
