@@ -481,8 +481,8 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
         Per-grader workload
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12, marginBottom: 16 }}>
-        {field("Resume grader goal", "Resume reviews expected from each grader.", resumeGraderGoal, setResumeGraderGoal)}
-        {field("Free-response grader goal", "Free-response reviews expected from each eligible grader.", frqGraderGoal, setFrqGraderGoal)}
+        {field("Resume grader goal", "Resume reviews expected from each regular member (not admins or board).", resumeGraderGoal, setResumeGraderGoal)}
+        {field("Free-response grader goal", "Free-response reviews expected from each admin and board member.", frqGraderGoal, setFrqGraderGoal)}
       </div>
 
 

@@ -736,7 +736,7 @@ exports.listMyReviews = async (req, res) => {
         return res.json({
             reviews: [],
             count: 0,
-            expectedReviews: resolveCycleGradingGoals(null).resumeGraderGoal,
+            expectedReviews: req.user.role === 'member' ? resolveCycleGradingGoals(null).resumeGraderGoal : 0,
         });
     }
     const activeCycleId = activeCycle.id;
@@ -775,7 +775,7 @@ exports.listMyReviews = async (req, res) => {
     return res.json({
         reviews,
         count: reviews.length,
-        expectedReviews: resumeGraderGoal,
+        expectedReviews: req.user.role === 'member' ? resumeGraderGoal : 0,
     });
 };
 
@@ -3466,8 +3466,8 @@ exports.getGraderScoreboard = async (req, res) => {
                 createdAt: grader.createdAt,
                 lastLogin: grader.lastLogin,
                 reviewCount: grader.reviewCount,
-                expectedReviews: resumeGraderGoal,
-                progressScore: Math.min(100, Math.round((grader.reviewCount / resumeGraderGoal) * 100)),
+                expectedReviews: grader.role === 'member' ? resumeGraderGoal : 0,
+                progressScore: grader.role === 'member' ? Math.min(100, Math.round((grader.reviewCount / resumeGraderGoal) * 100)) : 0,
                 averageScore: averageScore === null ? null : Number(averageScore.toFixed(1)),
                 averageNormalizedScore: averageNormalizedScore === null
                     ? null

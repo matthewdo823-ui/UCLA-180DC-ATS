@@ -17,7 +17,7 @@ export default function PersonalFrqProgress() {
   return <FrqProgressCard
     progress={data.personalFrq}
     gradingOpen={data.context?.isResumeRound && canRecordGrades(data.context?.activeRound?.status)}
-    onGrade={() => navigate("/grading", { state: { gradingMode: "frq" } })}
-    onHistory={() => navigate("/grading", { state: { gradingMode: "frq", openPastQueue: true } })}
+    onGrade={() => navigate("/resume-screener", { state: { gradingMode: "frq" } })}
+    onHistory={() => navigate("/resume-screener", { state: { gradingMode: "frq", openPastQueue: true } })}
   />;
 }

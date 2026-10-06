@@ -1,4 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../auth/AuthContext";
+import { canGradeFrq } from "../../utils/auth";
 import logo180 from "@images/180logo.webp";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { css } from "../../theme/colors";
@@ -34,6 +36,8 @@ function relativeLastActivity(iso) {
 }
 
 export default function GraderDashboard() {
+  const { user } = useAuth();
+  const frqGrader = canGradeFrq(user?.role);
   const navigate = useNavigate();
   const { gradingPath } = useActiveCycle();
   const { data, loading, error } = useGraderDashboard();
@@ -115,7 +119,7 @@ export default function GraderDashboard() {
           </div>
         ) : null}
 
-        <div style={{
+        {(isInterview || !frqGrader) && <div style={{
           background: css.cardWhite,
           border: `1px solid ${css.borderLight}`,
           borderRadius: 16,
@@ -167,7 +171,7 @@ export default function GraderDashboard() {
               />
             </div>
           ) : null}
-        </div>
+        </div>}
 
         {isInterview && personal?.ratingMode === "coffee_chat" && personal?.breakdown && !loading ? (
           <Panel title="Your Coffee Chat grading">

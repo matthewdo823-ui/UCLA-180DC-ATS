@@ -248,7 +248,7 @@ async function loadGraderSummary(cycleId, resumeRound, expectedReviews) {
   const { data: users, error: userError } = await supabase
     .from("users")
     .select("user_id, email, first_name, last_name, role")
-    .in("role", ["admin", "member", "board"])
+    .eq("role", "member")
     .order("first_name", { ascending: true });
 
   if (userError) throw userError;
@@ -635,7 +635,7 @@ async function getGraderDashboard(userId, role) {
       userId,
       activeCycleId,
       resumeRound?.id || null,
-      resumeGraderGoal
+      role === "member" ? resumeGraderGoal : 0
     );
   }
 

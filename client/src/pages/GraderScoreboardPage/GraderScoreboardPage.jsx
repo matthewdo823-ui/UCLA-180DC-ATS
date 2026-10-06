@@ -247,15 +247,15 @@ export function GraderModal({ grader, onClose, onReviewOpen, metrics = [], maxPe
             <div>
               <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>{gradedLabel}</p>
               <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
-                {grader.reviewCount} <span style={{ fontSize: 14, color: "#3B6D11" }}>/ {grader.expectedReviews}</span>
+                {grader.reviewCount} {grader.expectedReviews > 0 && <span style={{ fontSize: 14, color: "#3B6D11" }}>/ {grader.expectedReviews}</span>}
               </p>
               <p style={{ fontSize: 10, color: "#3B6D11", margin: "4px 0 0", fontWeight: 600 }}>{formatReviewCount(grader.reviewCount, reviewType)}</p>
             </div>
             <div style={{ textAlign: "right" }}>
               <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>
-                {grader.progressScore}% COMPLETE
+                {grader.expectedReviews > 0 ? `${grader.progressScore}% COMPLETE` : "NO QUOTA"}
               </p>
-              <ProgressTiles count={grader.reviewCount} expected={grader.expectedReviews} />
+              {grader.expectedReviews > 0 && <ProgressTiles count={grader.reviewCount} expected={grader.expectedReviews} />}
             </div>
           </div>
 
@@ -626,10 +626,10 @@ export default function GraderScoreboardPage() {
 
             <div>
               <div style={{ color: progressColor(grader.progressScore), fontSize: 18, fontFamily: sansFont, fontWeight: 600 }}>
-                {grader.reviewCount} / {grader.expectedReviews}
+                {grader.reviewCount}{grader.expectedReviews > 0 ? ` / ${grader.expectedReviews}` : ""}
               </div>
               <div style={{ fontSize: 11, color: css.textGray }}>
-                {formatReviewCount(grader.reviewCount, activeMode.reviewType)} · {grader.progressScore}% complete{activeMode.id === "coffee" ? ` · starts at Table ${grader.startingGroupNumber || "—"}` : ` · avg ${formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%`}
+                {formatReviewCount(grader.reviewCount, activeMode.reviewType)} · {grader.expectedReviews > 0 ? `${grader.progressScore}% complete` : "No quota"}{activeMode.id === "coffee" ? ` · starts at Table ${grader.startingGroupNumber || "—"}` : ` · avg ${formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%`}
               </div>
             </div>
 
