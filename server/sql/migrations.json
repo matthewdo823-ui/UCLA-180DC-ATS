@@ -193,6 +193,11 @@
       "order": 37,
       "file": "reapply_allow_frq_score_zero.sql",
       "mode": "auto"
+    },
+    {
+      "order": 38,
+      "file": "add_review_claims.sql",
+      "mode": "auto"
     }
   ]
 }
