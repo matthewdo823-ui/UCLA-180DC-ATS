@@ -450,10 +450,9 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
     boxSizing: "border-box",
   };
 
-  const field = (label, description, value, setValue) => (
+  const field = (label, value, setValue) => (
     <label style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
       <span style={{ fontSize: 12, fontWeight: 700, color: css.textDark }}>{label}</span>
-      <span style={{ minHeight: 32, fontSize: 11, color: css.textGray, lineHeight: 1.4 }}>{description}</span>
       <input
         type="number"
         min="1"
@@ -476,9 +475,6 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
         <div>
           <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: css.textDark }}>Grading goals</h4>
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: css.textGray, lineHeight: 1.45 }}>
-            Set the number of resume and free-response reviews expected from each grader.
-          </p>
         </div>
         <ActionButton label={saving ? "Saving…" : "Save goals"} onClick={handleSave} disabled={busy || saving} variant="primary" />
       </div>
@@ -487,16 +483,15 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
         Per-grader workload
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12, marginBottom: 16 }}>
-        {field("Resume grader goal", "Resume reviews expected from each regular member (not admins or board).", resumeGraderGoal, setResumeGraderGoal)}
-        {field("Free-response grader goal", "Free-response reviews expected from each admin and board member.", frqGraderGoal, setFrqGraderGoal)}
+        {field("Resume grader goal", resumeGraderGoal, setResumeGraderGoal)}
+        {field("Free-response grader goal", frqGraderGoal, setFrqGraderGoal)}
       </div>
 
 
       <div style={{ marginBottom: 8, fontSize: 10, fontWeight: 800, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.06em" }}>Per-applicant coverage</div>
-      <p style={{ fontSize: 12, color: css.textGray }}>Total coverage goal = eligible applicants × reviews per applicant. Reporting only—these goals do not remove anyone from the pile.</p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
-        {field("Resume reviews per applicant", "Independent resume reviews wanted for each eligible applicant.", resumeCoverage, setResumeCoverage)}
-        {field("FRQ reviews per applicant", "Independent free-response reviews wanted for each eligible applicant.", frqCoverage, setFrqCoverage)}
+        {field("Resume reviews per applicant", resumeCoverage, setResumeCoverage)}
+        {field("FRQ reviews per applicant", frqCoverage, setFrqCoverage)}
       </div>
       {panelError ? <p role="alert" style={{ margin: "10px 0 0", fontSize: 12, color: css.red }}>{panelError}</p> : null}
       {panelMessage ? <p style={{ margin: "10px 0 0", fontSize: 12, color: "#1D9E75" }}>{panelMessage}</p> : null}
