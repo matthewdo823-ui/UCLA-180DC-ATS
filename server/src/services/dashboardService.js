@@ -25,11 +25,18 @@ const {
 } = require("../utils/roundPhases");
 const { hasReviewScoreValues } = require("../utils/rubric");
 const { isMissingSchemaError } = require("../utils/schemaCompatibility");
+const { canGradeFrq } = require("../utils/auth");
 
 const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
 const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
   ? configuredGraderReviewGoal
   : 30;
+// Mirrors the FRQ grader scoreboard (resumeController) so a board member's own
+// count is measured against the same goal admins see.
+const configuredFrqReviewGoal = Number(process.env.FRQ_REVIEW_GOAL);
+const FRQ_REVIEW_GOAL = Number.isFinite(configuredFrqReviewGoal) && configuredFrqReviewGoal > 0
+  ? configuredFrqReviewGoal
+  : GRADER_REVIEW_GOAL;
 
 function buildPhaseLabel(cycle, activeRound, currentRound) {
   if (!cycle) return "No active cycle";
@@ -65,6 +72,30 @@ async function loadPersonalResumeProgress(userId, cycleId, resumeRoundId) {
     goalComplete: count >= expectedReviews,
     lastActivityAt: reviews?.[0]?.submitted_at || null,
     breakdown: null,
+  };
+}
+
+async function loadPersonalFrqProgress(userId, cycleId) {
+  if (!cycleId) return null;
+
+  const { data: reviews, error } = await supabase
+    .from("frq_reviews")
+    .select("submitted_at")
+    .eq("graded_by", userId)
+    .eq("cycle_id", cycleId)
+    .order("submitted_at", { ascending: false });
+  if (error) throw error;
+
+  const count = (reviews || []).length;
+  const expectedReviews = FRQ_REVIEW_GOAL;
+
+  return {
+    mode: "frq",
+    count,
+    expectedReviews,
+    progressPct: expectedReviews > 0 ? Math.min(100, Math.round((count / expectedReviews) * 100)) : 0,
+    goalComplete: count >= expectedReviews,
+    lastActivityAt: reviews?.[0]?.submitted_at || null,
   };
 }
 
@@ -621,7 +652,7 @@ async function loadDemographicsSnapshot(cycleId) {
   };
 }
 
-async function getGraderDashboard(userId) {
+async function getGraderDashboard(userId, role) {
   const activeCycle = await getActiveCycleRow();
   const activeCycleId = activeCycle?.id || null;
   const cycleRounds = activeCycleId ? await getRoundsForCycle(activeCycleId) : [];
@@ -639,6 +670,10 @@ async function getGraderDashboard(userId) {
     );
   }
 
+  const personalFrq = canGradeFrq(role)
+    ? await loadPersonalFrqProgress(userId, activeCycleId)
+    : null;
+
   return {
     context: {
       cycle: activeCycle ? { id: activeCycle.id, name: activeCycle.name } : null,
@@ -651,6 +686,7 @@ async function getGraderDashboard(userId) {
       phaseLabel: buildPhaseLabel(activeCycle, activeRound, currentRound),
     },
     personal,
+    personalFrq,
   };
 }
 

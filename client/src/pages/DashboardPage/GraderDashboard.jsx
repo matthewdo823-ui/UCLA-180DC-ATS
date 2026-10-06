@@ -79,6 +79,17 @@ export default function GraderDashboard() {
       ? `${goal - count} more to go`
       : null;
 
+  const frq = data?.personalFrq;
+  const frqCount = frq?.count ?? 0;
+  const frqGoal = frq?.expectedReviews ?? 0;
+  const frqLastActivity = relativeLastActivity(frq?.lastActivityAt);
+  const frqGradingOpen = gradingOpen && !isInterview;
+  const frqStatus = frq?.goalComplete
+    ? "Goal complete — thank you!"
+    : frqGoal > frqCount
+      ? `${frqGoal - frqCount} more to go`
+      : null;
+
   const buttonLabel = isInterview
     ? `Open ${activeRound?.name || "Interviews"}`
     : "Start Grading Session";
@@ -168,6 +179,59 @@ export default function GraderDashboard() {
           ) : null}
         </div>
 
+        {frq ? (
+          <div style={{
+            background: css.cardWhite,
+            border: `1px solid ${css.borderLight}`,
+            borderRadius: 16,
+            padding: "28px 32px",
+            boxShadow: "0 4px 32px rgba(0,0,0,0.04)",
+            marginBottom: 24,
+          }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 18, gap: 16 }}>
+              <div>
+                <span style={{ fontSize: 13, color: css.textGray, fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span>⚖️</span>
+                  Your free-response goal
+                </span>
+                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>
+                  {loading ? "Loading…" : `Grade ${frqGoal} free response${frqGoal === 1 ? "" : "s"}`}
+                </div>
+                {!loading && frqStatus ? (
+                  <div style={{ fontSize: 13, color: frq.goalComplete ? css.green : css.textGray, marginTop: 6, fontWeight: 600 }}>
+                    {frqStatus}
+                  </div>
+                ) : null}
+                {!loading && frqLastActivity ? (
+                  <div style={{ fontSize: 12, color: css.textGray, marginTop: 4 }}>
+                    Last activity: {frqLastActivity}
+                  </div>
+                ) : null}
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 12, color: css.textGray, fontWeight: 500 }}>
+                  {frqCount} free response{frqCount === 1 ? "" : "s"} graded
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>
+                  {loading ? "—" : frqGoal > 0 ? `${frqCount}/${frqGoal}` : frqCount}
+                </div>
+              </div>
+            </div>
+
+            <ProgressBar pct={loading ? 0 : frq.progressPct ?? 0} />
+            {frqGradingOpen ? (
+              <div style={{ marginTop: 24 }}>
+                <PrimaryButton
+                  label="Grade Free Responses"
+                  disabled={loading}
+                  onClick={() => navigate(gradingPath, { state: { gradingMode: "frq" } })}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {isInterview && personal?.ratingMode === "coffee_chat" && personal?.breakdown && !loading ? (
           <Panel title="Your Coffee Chat grading">
             <CoffeeChatPersonalStats total={personal.expectedReviews} graded={personal.count} breakdown={personal.breakdown} />
@@ -191,6 +255,7 @@ export default function GraderDashboard() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
             {[
               { label: "Past resume reviews", path: gradingPath, icon: "📋", desc: "View and edit your resume reviews", state: { openPastQueue: true } },
+              ...(frq ? [{ label: "Past free-response reviews", path: gradingPath, icon: "⚖️", desc: "View and edit your free-response grades", state: { openPastQueue: true, gradingMode: "frq" } }] : []),
               { label: "Scoreboard", path: "/scoreboard", icon: "📊", desc: "See ranked candidates" },
               { label: "Demographics", path: "/demographics", icon: "📈", desc: "Pipeline diversity overview" },
             ].map((link) => (
