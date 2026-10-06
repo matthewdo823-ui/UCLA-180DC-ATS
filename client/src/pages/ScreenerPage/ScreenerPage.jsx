@@ -7,6 +7,7 @@ import { css } from "../../theme/colors";
 import { API } from "../../constants/config";
 import { invalidateAfterReview } from "../../lib/queryKeys";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
+import { useReviewClaimHeartbeat } from "../../hooks/useReviewClaimHeartbeat";
 import { FRQ_MAX_SCORE } from "../../constants/frq";
 import { formatReviewCount } from "../../utils/reviewCounts";
 
@@ -103,6 +104,7 @@ export default function ScreenerPage() {
   const [editingReviewId, setEditingReviewId] = useState(null);
   const [celebrationKey, setCelebrationKey] = useState(0);
   const [submittingAction, setSubmittingAction] = useState(null);
+  const [claimNotice, setClaimNotice] = useState("");
   const submittingRef = useRef(false);
   const panelRef = useRef(null);
 
@@ -324,6 +326,32 @@ export default function ScreenerPage() {
     if (!cycleLoading) fetchNext();
   }, [fetchNext, cycleLoading]);
 
+  const formTouched = isFrqMode
+    ? frqScore !== null || notes.trim().length > 0
+    : Object.keys(scores).length > 0 || notes.trim().length > 0;
+
+  // The served resume is held for this grader only while they are active. If
+  // they went idle long enough for another grader to be given it, swap in a
+  // fresh one — unless they had already started scoring, in which case let
+  // them finish (a second review is fine; losing their work is not).
+  useReviewClaimHeartbeat({
+    kind: isFrqMode ? "frq" : "resume",
+    resumeId: !loading && !editingReviewId ? resume?.id ?? null : null,
+    onLost: () => {
+      if (formTouched || submittingRef.current) return;
+      setClaimNotice(isFrqMode
+        ? "You were away long enough that another grader picked up that candidate, so here is a new one."
+        : "You were away long enough that another grader picked up that resume, so here is a new one.");
+      fetchNext();
+    },
+  });
+
+  useEffect(() => {
+    if (!claimNotice) return undefined;
+    const timeout = setTimeout(() => setClaimNotice(""), 8000);
+    return () => clearTimeout(timeout);
+  }, [claimNotice]);
+
   useEffect(() => {
     fetchMyReviews({ showLoading: false });
     if (canGradeFrq) fetchMyFrqReviews({ showLoading: false });
@@ -538,6 +566,23 @@ export default function ScreenerPage() {
             }}
           >
             {submitError}
+          </div>
+        ) : null}
+
+        {claimNotice ? (
+          <div
+            role="status"
+            style={{
+              padding: "10px 14px",
+              borderRadius: 9,
+              border: `1px solid ${css.borderLight}`,
+              background: css.cardWhite,
+              color: css.textGray,
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            {claimNotice}
           </div>
         ) : null}
 
