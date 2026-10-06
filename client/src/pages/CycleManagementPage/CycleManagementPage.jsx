@@ -392,6 +392,8 @@ function FormConfigPanel({ cycle, busy, authedFetch, onSaved }) {
 export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
   const [resumeGraderGoal, setResumeGraderGoal] = useState(String(cycle.resumeGraderGoal ?? 30));
   const [frqGraderGoal, setFrqGraderGoal] = useState(String(cycle.frqGraderGoal ?? 30));
+  const [resumeCoverage, setResumeCoverage] = useState(String(cycle.resumeReviewsPerApplicant ?? 2));
+  const [frqCoverage, setFrqCoverage] = useState(String(cycle.frqReviewsPerApplicant ?? 2));
   const [saving, setSaving] = useState(false);
   const [panelError, setPanelError] = useState("");
   const [panelMessage, setPanelMessage] = useState("");
@@ -399,8 +401,10 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
   useEffect(() => {
     setResumeGraderGoal(String(cycle.resumeGraderGoal ?? 30));
     setFrqGraderGoal(String(cycle.frqGraderGoal ?? 30));
+    setResumeCoverage(String(cycle.resumeReviewsPerApplicant ?? 2));
+    setFrqCoverage(String(cycle.frqReviewsPerApplicant ?? 2));
     setPanelError("");
-  }, [cycle.id, cycle.resumeGraderGoal, cycle.frqGraderGoal]);
+  }, [cycle.id, cycle.resumeGraderGoal, cycle.frqGraderGoal, cycle.resumeReviewsPerApplicant, cycle.frqReviewsPerApplicant]);
 
   function parseGoal(value, label) {
     const trimmed = String(value).trim();
@@ -419,6 +423,8 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
       const payload = {
         resumeGraderGoal: parseGoal(resumeGraderGoal, "Resume grader goal"),
         frqGraderGoal: parseGoal(frqGraderGoal, "Free-response grader goal"),
+        resumeReviewsPerApplicant: parseGoal(resumeCoverage, "Resume reviews per applicant"),
+        frqReviewsPerApplicant: parseGoal(frqCoverage, "FRQ reviews per applicant"),
       };
       const res = await authedFetch(`${API}/cycles/${cycle.id}`, {
         method: "PATCH",
@@ -486,6 +492,12 @@ export function GradingGoalsPanel({ cycle, busy, authedFetch, onSaved }) {
       </div>
 
 
+      <div style={{ marginBottom: 8, fontSize: 10, fontWeight: 800, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.06em" }}>Per-applicant coverage</div>
+      <p style={{ fontSize: 12, color: css.textGray }}>Total coverage goal = eligible applicants × reviews per applicant. Reporting only—these goals do not remove anyone from the pile.</p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
+        {field("Resume reviews per applicant", "Independent resume reviews wanted for each eligible applicant.", resumeCoverage, setResumeCoverage)}
+        {field("FRQ reviews per applicant", "Independent free-response reviews wanted for each eligible applicant.", frqCoverage, setFrqCoverage)}
+      </div>
       {panelError ? <p role="alert" style={{ margin: "10px 0 0", fontSize: 12, color: css.red }}>{panelError}</p> : null}
       {panelMessage ? <p style={{ margin: "10px 0 0", fontSize: 12, color: "#1D9E75" }}>{panelMessage}</p> : null}
     </div>

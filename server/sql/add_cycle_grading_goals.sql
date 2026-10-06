@@ -4,7 +4,19 @@
 
 ALTER TABLE cycles
   ADD COLUMN IF NOT EXISTS resume_grader_goal INTEGER,
-  ADD COLUMN IF NOT EXISTS frq_grader_goal INTEGER;
+  ADD COLUMN IF NOT EXISTS frq_grader_goal INTEGER,
+  ADD COLUMN IF NOT EXISTS resume_reviews_per_applicant INTEGER NOT NULL DEFAULT 2,
+  ADD COLUMN IF NOT EXISTS frq_reviews_per_applicant INTEGER NOT NULL DEFAULT 2;
+
+DO $$ BEGIN
+  ALTER TABLE cycles ADD CONSTRAINT cycles_resume_coverage_positive CHECK (resume_reviews_per_applicant > 0);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE cycles ADD CONSTRAINT cycles_frq_coverage_positive CHECK (frq_reviews_per_applicant > 0);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+COMMENT ON COLUMN cycles.resume_reviews_per_applicant IS 'Dashboard coverage goal only; does not remove candidates from grading queues.';
+COMMENT ON COLUMN cycles.frq_reviews_per_applicant IS 'Dashboard coverage goal only; does not remove candidates from grading queues.';
 
 DO $$ BEGIN
   ALTER TABLE cycles

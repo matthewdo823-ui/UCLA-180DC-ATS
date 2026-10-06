@@ -1,5 +1,6 @@
 const { ELIGIBLE_YEAR_FILTER } = require('../utils/screeningEligibility');
 const supabase = require("../config/supabase");
+const { summarizeReviewCoverage, loadCoverageReviews } = require('../utils/reviewCoverage');
 const {
   getActiveCycleRow,
   getResumeScreenRoundForCycle,
@@ -307,8 +308,13 @@ async function loadGraderSummary(cycleId, resumeRound, expectedReviews) {
   };
 }
 
-async function loadResumePipelineStats(cycleId, deliberationRound, resumeRound, cycleRounds) {
+async function loadResumePipelineStats(cycleId, deliberationRound, resumeRound, cycleRounds, goals) {
   const pool = await loadDeliberationPoolForRound(cycleId, deliberationRound, resumeRound, cycleRounds);
+  const [resumeReviews, frqReviews] = await Promise.all([
+    loadCoverageReviews(supabase, 'resume_reviews', cycleId, resumeRound.id),
+    loadCoverageReviews(supabase, 'frq_reviews', cycleId, resumeRound.id),
+  ]);
+  const coverage = summarizeReviewCoverage(pool, resumeReviews, frqReviews, goals);
   const decisionCounts = countDecisions(pool);
   const incompleteSummary = summarizeIncompleteDeliberation(pool);
   const undecidedCount = decisionCounts.pending + decisionCounts.hold;
@@ -318,6 +324,11 @@ async function loadResumePipelineStats(cycleId, deliberationRound, resumeRound, 
   return {
     mode: "resume",
     applicants: pool.length,
+    coverage,
+    resumeReviewed: coverage.resume.reviewedApplicants,
+    frqReviewed: coverage.frq.reviewedApplicants,
+    resumeReviewsRemaining: coverage.resume.remaining,
+    frqReviewsRemaining: coverage.frq.remaining,
     reviewed,
     awaitingReviews,
     advanced: decisionCounts.advance,
@@ -724,7 +735,8 @@ async function getAdminDashboard(_userId) {
       activeCycleId,
       deliberationRound,
       resumeRound,
-      cycleRounds
+      cycleRounds,
+      resolveCycleGradingGoals(activeCycle)
     );
   }
 

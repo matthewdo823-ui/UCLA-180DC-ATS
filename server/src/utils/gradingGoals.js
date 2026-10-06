@@ -2,6 +2,8 @@ const DEFAULT_GRADER_REVIEW_GOAL = 30;
 const MAX_GRADER_REVIEW_GOAL = 10000;
 
 const FIELD_CONFIG = [
+  { requestKey: "resumeReviewsPerApplicant", column: "resume_reviews_per_applicant", label: "Resume reviews per applicant", max: 10000 },
+  { requestKey: "frqReviewsPerApplicant", column: "frq_reviews_per_applicant", label: "FRQ reviews per applicant", max: 10000 },
   {
     requestKey: "resumeGraderGoal",
     column: "resume_grader_goal",
@@ -33,6 +35,8 @@ function resolveCycleGradingGoals(cycle, env = process.env) {
   return {
     resumeGraderGoal: positiveInteger(cycle?.resume_grader_goal) || defaults.resume,
     frqGraderGoal: positiveInteger(cycle?.frq_grader_goal) || defaults.frq,
+    resumeReviewsPerApplicant: positiveInteger(cycle?.resume_reviews_per_applicant) || 2,
+    frqReviewsPerApplicant: positiveInteger(cycle?.frq_reviews_per_applicant) || 2,
   };
 }
 
