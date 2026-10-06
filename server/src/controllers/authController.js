@@ -7,20 +7,15 @@ const { getJwtSecret } = require('../utils/auth');
 const { serializeUser } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
 const { isGmailConfigured, sendPlainTextEmail } = require('../services/emailService');
+const { resolvePasswordResetUrl } = require('../utils/clientOrigins');
 
 const LOGIN_USER_FIELDS = `${USER_FIELDS}, password_hash`;
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 const RESET_RESPONSE = 'If that email belongs to an account, a reset link has been sent.';
+const RESET_UNAVAILABLE = 'Password reset email is not set up yet. Ask a 180DC admin to reset your password.';
 
 function hashResetToken(token) {
     return crypto.createHash('sha256').update(token).digest('hex');
-}
-
-function getResetUrl(token) {
-    const baseUrl = String(process.env.PASSWORD_RESET_URL || process.env.CLIENT_URL || 'http://localhost:5173/reset-password').trim();
-    const url = new URL(baseUrl);
-    url.searchParams.set('token', token);
-    return url.toString();
 }
 
 function createToken(user) {
@@ -143,6 +138,13 @@ exports.register = async (req, res) => {
 exports.requestPasswordReset = async (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
     if (!email) return res.status(400).json({ error: 'Email is required' });
+    // Checked before the account lookup so the answer never reveals whether the
+    // email is registered. Answering "a link has been sent" here would be false
+    // for everyone, which is how this failed silently in production.
+    if (!isGmailConfigured()) {
+        console.error('[auth] Password reset requested but Gmail is not configured on the server.');
+        return res.status(503).json({ error: RESET_UNAVAILABLE });
+    }
 
     try {
         const { data: user, error } = await supabase
@@ -151,7 +153,7 @@ exports.requestPasswordReset = async (req, res) => {
             .eq('email', email)
             .maybeSingle();
         if (error) return respondWithServerError(res, error, 'requestPasswordReset lookup');
-        if (!user || !isGmailConfigured()) return res.json({ message: RESET_RESPONSE });
+        if (!user) return res.json({ message: RESET_RESPONSE });
 
         const token = crypto.randomBytes(32).toString('base64url');
         const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS).toISOString();
@@ -172,7 +174,7 @@ exports.requestPasswordReset = async (req, res) => {
         await sendPlainTextEmail({
             to: user.email,
             subject: 'Reset your 180DC ATS password',
-            body: `We received a request to reset your password. Use this link within 30 minutes:\n\n${getResetUrl(token)}\n\nIf you did not request this, you can ignore this email.`,
+            body: `We received a request to reset your password. Use this link within 30 minutes:\n\n${resolvePasswordResetUrl(token, req.get('origin'))}\n\nIf you did not request this, you can ignore this email.`,
         });
         return res.json({ message: RESET_RESPONSE });
     } catch (err) {

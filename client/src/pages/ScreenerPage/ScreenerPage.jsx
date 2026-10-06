@@ -112,14 +112,15 @@ export default function ScreenerPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Open the past-reviews queue when navigated here from the dashboard's "Past reviews" link.
+  // Dashboard links can open the past-reviews queue and/or a grading mode.
   useEffect(() => {
-    if (location.state?.openPastQueue) {
-      setDrawerOpen(true);
-      // Clear the flag so the drawer doesn't reopen on re-render or back navigation.
-      navigate(location.pathname, { replace: true, state: null });
-    }
-  }, [location.state, location.pathname, navigate]);
+    const { openPastQueue, gradingMode: requestedMode } = location.state || {};
+    if (!openPastQueue && !requestedMode) return;
+    if (requestedMode === GRADING_MODES.FRQ && canGradeFrq) setGradingMode(GRADING_MODES.FRQ);
+    if (openPastQueue) setDrawerOpen(true);
+    // Clear the flags so they don't reapply on re-render or back navigation.
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate, canGradeFrq]);
 
   const isFrqMode = gradingMode === GRADING_MODES.FRQ;
 
