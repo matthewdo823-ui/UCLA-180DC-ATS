@@ -173,7 +173,7 @@ export default function AdvanceEmailModal({
           width: "min(560px, calc(100vw - 32px))",
           maxHeight: "calc(100vh - 48px)",
           overflow: "auto",
-          background: "#FFF",
+          background: "var(--color-surface)",
           borderRadius: 12,
           border: `1px solid ${css.borderLight}`,
           boxShadow: "0 24px 64px rgba(0,0,0,0.18)",
@@ -208,10 +208,10 @@ export default function AdvanceEmailModal({
         </div>
 
         {!gmailConfigured ? (
-          <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: 8, background: "rgba(239,159,39,0.12)", border: "1px solid rgba(239,159,39,0.35)", fontSize: 12, color: "#92400E" }}>
+          <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: 8, background: "rgba(239,159,39,0.12)", border: "1px solid rgba(239,159,39,0.35)", fontSize: 12, color: "var(--color-warning-text)" }}>
             Gmail integration is not configured on the server. Contact an administrator to enable email dispatch.
             {import.meta.env.DEV && (
-              <span style={{ display: "block", marginTop: 4, fontSize: 11, color: "#78350F" }}>
+              <span style={{ display: "block", marginTop: 4, fontSize: 11, color: "var(--color-warning-text)" }}>
                 🛠 Local dev: see server/docs/gmail-setup.md
               </span>
             )}
@@ -286,7 +286,7 @@ export default function AdvanceEmailModal({
               padding: "8px 12px",
               borderRadius: 8,
               border: `1px solid ${css.borderLight}`,
-              background: "#FFF",
+              background: "var(--color-surface)",
               fontSize: 12,
               fontWeight: 600,
               cursor: "pointer",
@@ -302,7 +302,7 @@ export default function AdvanceEmailModal({
               padding: "8px 12px",
               borderRadius: 8,
               border: `1px solid ${css.borderLight}`,
-              background: "#FFF",
+              background: "var(--color-surface)",
               fontSize: 12,
               fontWeight: 600,
               cursor: busy || !gmailConfigured ? "not-allowed" : "pointer",
@@ -359,7 +359,7 @@ export default function AdvanceEmailModal({
                 borderRadius: 8,
                 border: `1px solid ${css.amber}`,
                 background: "rgba(239,159,39,0.15)",
-                color: "#92400E",
+                color: "var(--color-warning-text)",
                 fontSize: 12,
                 fontWeight: 700,
                 cursor: busy ? "not-allowed" : "pointer",

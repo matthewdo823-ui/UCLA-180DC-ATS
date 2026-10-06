@@ -40,7 +40,7 @@ export default function ResumeModal({ open, onClose, title, resumeId, fileUrl, a
           height: "min(88vh, 900px)",
           display: "flex",
           flexDirection: "column",
-          background: "#FFF",
+          background: "var(--color-surface)",
           borderRadius: 12,
           border: `1px solid ${css.borderLight}`,
           boxShadow: "0 24px 64px rgba(0,0,0,0.22)",
@@ -95,7 +95,7 @@ export default function ResumeModal({ open, onClose, title, resumeId, fileUrl, a
             </button>
           </div>
         </div>
-        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "#F8FAF6" }}>
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--color-surface-subtle)" }}>
           <PdfViewer
             resumeId={resumeId}
             fileUrl={fileUrl}

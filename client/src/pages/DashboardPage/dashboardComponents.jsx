@@ -411,7 +411,7 @@ export function RoundTimeline({ rounds, activeRound, currentRound, onManage }) {
                 padding: "24px 24px 22px",
                 boxShadow: isCurrent ? "0 9px 24px rgba(40, 98, 65, 0.22)" : "0 1px 3px rgba(0,0,0,0.03)",
                 cursor: isCurrent ? "pointer" : "default",
-                color: isCurrent ? "#FFF" : css.textDark,
+                color: isCurrent ? "var(--color-on-primary)" : css.textDark,
                 fontFamily: "'DM Sans', sans-serif",
               }}
             >
@@ -455,7 +455,7 @@ export function PrimaryButton({ label, onClick, disabled, icon }) {
         width: "100%",
         padding: "15px 16px",
         background: disabled ? "#9CA3AF" : css.greenDark,
-        color: "#FFF",
+        color: "var(--color-on-primary)",
         border: "none",
         borderRadius: 10,
         fontSize: 15,

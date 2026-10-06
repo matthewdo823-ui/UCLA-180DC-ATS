@@ -62,7 +62,7 @@ function BarTooltip({ segment, total, color, style }) {
         pointerEvents: "none",
         zIndex: 5,
         background: css.textDark,
-        color: "#FFF",
+        color: css.cardWhite,
         borderRadius: 8,
         padding: "8px 10px",
         fontSize: 12,
@@ -141,13 +141,13 @@ function StackedBar({ stageLabel, total, segments, categories }) {
             height: 28,
             display: "flex",
             overflow: "hidden",
-            background: "#EEF1EC",
+            background: "var(--color-track)",
             borderRadius: 6,
             cursor: total > 0 ? "crosshair" : "default",
           }}
         >
           {total === 0 ? (
-            <div style={{ width: "100%", height: "100%", background: "#EEF1EC" }} />
+            <div style={{ width: "100%", height: "100%", background: "var(--color-track)" }} />
           ) : (
             segments.map((entry, index) => (
               <Segment

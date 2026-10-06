@@ -204,8 +204,8 @@ export default function ReviewOverrideSection({
     ? { display: "flex", flexDirection: "column", gap: 12 }
     : {
         padding: "12px 18px 18px",
-        borderTop: "1px solid #EAEAEA",
-        background: "#FAFCF8",
+        borderTop: "1px solid var(--color-border)",
+        background: "var(--color-surface-subtle)",
       };
 
   if (loading) {
@@ -261,7 +261,7 @@ export default function ReviewOverrideSection({
               padding: "10px 12px",
               borderRadius: 8,
               border: `1px solid ${css.borderLight}`,
-              background: "#FFF",
+              background: "var(--color-surface)",
               fontSize: 13,
               color: css.textDark,
               cursor: "pointer",
@@ -279,7 +279,7 @@ export default function ReviewOverrideSection({
           padding: "12px 14px",
           borderRadius: 8,
           border: `1px solid ${isOverridden ? "rgba(226,75,74,0.35)" : css.borderLight}`,
-          background: isOverridden ? "#FFF8F8" : "#FFF",
+          background: isOverridden ? "var(--color-danger-bg)" : "var(--color-surface)",
         }}
         >
           <label
@@ -310,7 +310,7 @@ export default function ReviewOverrideSection({
                 padding: "10px 12px",
                 borderRadius: 8,
                 border: `1px solid ${isOverridden ? "rgba(226,75,74,0.35)" : css.borderLight}`,
-                background: "#FFF",
+                background: "var(--color-surface)",
                 fontSize: 16,
                 fontWeight: 700,
                 color: isOverridden ? "#E24B4A" : cardGreen,
@@ -361,7 +361,7 @@ export default function ReviewOverrideSection({
               padding: "10px 12px",
               borderRadius: 8,
               border: `1px solid ${css.borderLight}`,
-              background: "#FFF",
+              background: "var(--color-surface)",
               fontSize: 13,
               lineHeight: 1.5,
               color: css.textDark,

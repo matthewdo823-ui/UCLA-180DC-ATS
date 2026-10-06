@@ -116,7 +116,7 @@ function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave
         <span style={{ fontSize: 11, color: css.textGray }}>{candidate.coffeeChatEvaluationCount || 0}{Number.isFinite(expectedRatingCount) ? ` / ${expectedRatingCount}` : ""} rating{candidate.coffeeChatEvaluationCount === 1 ? "" : "s"} submitted</span>
         {showSave ? <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {saved ? <span style={{ fontSize: 11, color: css.greenDark, fontWeight: 700 }}>Saved</span> : null}
-          <button type="button" onClick={handleSave} disabled={busy || saving || (!rating && !persistedRating)} style={{ border: "none", borderRadius: 8, background: css.greenDark, color: "#FFF", padding: "9px 13px", fontSize: 12, fontWeight: 700, cursor: busy || saving || (!rating && !persistedRating) ? "not-allowed" : "pointer", opacity: busy || saving || (!rating && !persistedRating) ? 0.5 : 1 }}>
+          <button type="button" onClick={handleSave} disabled={busy || saving || (!rating && !persistedRating)} style={{ border: "none", borderRadius: 8, background: css.greenDark, color: "var(--color-on-primary)", padding: "9px 13px", fontSize: 12, fontWeight: 700, cursor: busy || saving || (!rating && !persistedRating) ? "not-allowed" : "pointer", opacity: busy || saving || (!rating && !persistedRating) ? 0.5 : 1 }}>
             {saving ? "Saving…" : !rating && persistedRating ? "Clear rating" : "Save rating"}
           </button>
         </div> : <span style={{ fontSize: 11, color: saved ? css.greenDark : css.textGray, fontWeight: 600 }}>{saving ? "Saving…" : autoSave ? (saved ? "Saved" : "Saves automatically") : "Submits with table"}</span>}
@@ -126,7 +126,7 @@ function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave
 }
 
 const DECISION_STYLE = {
-  pending: { bg: "rgba(107,114,128,0.12)", color: "#6B7280", bd: "rgba(107,114,128,0.28)" },
+  pending: { bg: "rgba(107,114,128,0.12)", color: "var(--color-text-muted)", bd: "rgba(107,114,128,0.28)" },
   pass: { bg: "rgba(29,158,117,0.12)", color: "#1D9E75", bd: "rgba(29,158,117,0.28)" },
   fail: { bg: "rgba(226,75,74,0.10)", color: "#E24B4A", bd: "rgba(226,75,74,0.28)" },
   hold: { bg: "rgba(239,159,39,0.12)", color: "#C47D12", bd: "rgba(239,159,39,0.28)" },
@@ -176,7 +176,7 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
     <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 12, padding: 20, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 14, minWidth: 0 }}>
-          <div style={{ width: 44, height: 44, borderRadius: "50%", background: css.greenDark, color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 14, flexShrink: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: "50%", background: css.greenDark, color: "var(--color-on-primary)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 14, flexShrink: 0 }}>
             {getInitials(candidate.name)}
           </div>
           <div style={{ minWidth: 0 }}>
@@ -219,7 +219,7 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
                   onClick={() => setDecision(d)}
                   style={{
                     border: `1px solid ${sel ? s.bd : css.borderLight}`,
-                    background: sel ? s.bg : "#FFF",
+                    background: sel ? s.bg : "var(--color-surface)",
                     color: sel ? s.color : css.textGray,
                     borderRadius: 8,
                     padding: "8px 10px",
@@ -256,7 +256,7 @@ function CandidateInterviewCard({ candidate, busy, onSave }) {
           style={{
             border: "none",
             background: css.greenDark,
-            color: "#FFF",
+            color: "var(--color-on-primary)",
             borderRadius: 8,
             padding: "10px 16px",
             fontSize: 13,
@@ -521,7 +521,7 @@ export default function InterviewManagementPage() {
                   {[{ id: "list", label: "Table view" }, { id: "scroll", label: "Scroll view" }].map((option) => {
                     const selected = coffeeView === option.id;
                     return (
-                      <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setCoffeeView(option.id); setTableSubmitError(null); setTableSubmitNotice(""); setInvalidCandidateIds(new Set()); }} style={{ border: `1px solid ${selected ? css.greenDark : css.borderLight}`, background: selected ? css.greenDark : css.cardWhite, color: selected ? "#FFF" : css.textDark, borderRadius: 8, padding: "8px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                      <button key={option.id} type="button" aria-pressed={selected} onClick={() => { setCoffeeView(option.id); setTableSubmitError(null); setTableSubmitNotice(""); setInvalidCandidateIds(new Set()); }} style={{ border: `1px solid ${selected ? css.greenDark : css.borderLight}`, background: selected ? css.greenDark : css.cardWhite, color: selected ? "var(--color-on-primary)" : css.textDark, borderRadius: 8, padding: "8px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                         {option.label}
                       </button>
                     );
@@ -557,8 +557,8 @@ export default function InterviewManagementPage() {
                     padding: "8px 14px",
                     borderRadius: 8,
                     border: `1px solid ${filter === id ? css.greenDark : css.borderLight}`,
-                    background: filter === id ? css.greenDark : "#FFF",
-                    color: filter === id ? "#FFF" : css.textDark,
+                    background: filter === id ? css.greenDark : "var(--color-surface)",
+                    color: filter === id ? "var(--color-on-primary)" : css.textDark,
                     fontSize: 12,
                     fontWeight: 700,
                     cursor: "pointer",
@@ -616,7 +616,7 @@ export default function InterviewManagementPage() {
                       </div>
                       {coffeeView === "list" ? (
                         <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${css.borderLight}`, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
-                          <button type="button" disabled={tableSubmitting || !candidates.length} onClick={() => submitCoffeeTable(number, candidates)} style={{ border: "none", borderRadius: 10, padding: "12px 20px", background: css.greenDark, color: "#FFF", fontSize: 14, fontWeight: 700, cursor: tableSubmitting || !candidates.length ? "not-allowed" : "pointer", opacity: tableSubmitting || !candidates.length ? 0.6 : 1 }}>
+                          <button type="button" disabled={tableSubmitting || !candidates.length} onClick={() => submitCoffeeTable(number, candidates)} style={{ border: "none", borderRadius: 10, padding: "12px 20px", background: css.greenDark, color: "var(--color-on-primary)", fontSize: 14, fontWeight: 700, cursor: tableSubmitting || !candidates.length ? "not-allowed" : "pointer", opacity: tableSubmitting || !candidates.length ? 0.6 : 1 }}>
                             {tableSubmitting ? "Submitting table…" : `Submit ${number ? `Table ${number}` : "table"} → ${nextGroupNumber ? `Table ${nextGroupNumber}` : "next"}`}
                           </button>
                         </div>

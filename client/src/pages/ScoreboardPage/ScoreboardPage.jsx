@@ -104,7 +104,7 @@ function DecisionReadonlyBadge({ status, dark, label }) {
 function DecisionButtons({ status, disabled, saving, onSelect, dark }) {
   const options = ["advance", "hold", "reject"];
   const shellBorder = dark ? "rgba(255,255,255,0.14)" : css.borderLight;
-  const shellBg = dark ? "#1C2A42" : "#F3F4F6";
+  const shellBg = dark ? "#1C2A42" : "var(--color-surface-muted)";
   const divider = dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)";
   const idleColor = dark ? "#8FA3B8" : css.textGray;
 
@@ -223,10 +223,10 @@ function buildActiveFilterPills(filters, deliberationMode) {
 
 function ReviewerStack({ reviews }) {
   const palette = [
-    { bg: "#E8F1FF", color: "#24529A" },
-    { bg: "#FFF2D8", color: "#9B5C00" },
-    { bg: "#FCE5E5", color: "#9A2B2B" },
-    { bg: "#E2F8EE", color: "#157253" },
+    { bg: "var(--color-info-bg)", color: "var(--color-info-text)" },
+    { bg: "var(--color-warning-bg)", color: "var(--color-warning-text)" },
+    { bg: "var(--color-danger-bg)", color: "var(--color-danger-text)" },
+    { bg: "var(--color-success-bg)", color: "var(--color-success-text)" },
   ];
 
   return (
@@ -283,7 +283,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4, equalized = false }) {
     <div style={{ marginBottom: 9 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
         <span style={{ fontSize: 12, color: css.textDark }}>{titleCase(metric)}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: cardGreen }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-card-ink)" }}>
           {equalized ? (
             <>{formatScore(pct)}%</>
           ) : (
@@ -293,7 +293,7 @@ function CategoryRow({ metric, value, maxPerCategory = 4, equalized = false }) {
           )}
         </span>
       </div>
-      <div style={{ height: 5, background: "#EEF1EC", borderRadius: 3, overflow: "hidden" }}>
+      <div style={{ height: 5, background: "var(--color-track)", borderRadius: 3, overflow: "hidden" }}>
         <div style={{ height: "100%", width: "100%", background: cardMint, transformOrigin: "left", transform: `scaleX(${Math.max(0, Math.min(100, pct)) / 100})`, transition: "transform 0.35s ease" }} />
       </div>
     </div>
@@ -367,8 +367,8 @@ function ScorecardModal({
             height: 34,
             borderRadius: "50%",
             border: "1px solid rgba(255,255,255,0.75)",
-            background: "#FFF",
-            color: cardGreen,
+            background: "var(--color-surface)",
+            color: "var(--color-card-ink)",
             cursor: "pointer",
             fontSize: 22,
             lineHeight: "30px",
@@ -383,7 +383,7 @@ function ScorecardModal({
           {roundBanner}
         </p>
 
-        <div className="scorecard-body" style={{ borderRadius: 16, border: `2px solid ${cardGreen}`, background: "#FFF", boxShadow: "0 24px 70px rgba(0,0,0,0.26)" }}>
+        <div className="scorecard-body" style={{ borderRadius: 16, border: `2px solid ${cardGreen}`, background: "var(--color-surface)", boxShadow: "0 24px 70px rgba(0,0,0,0.26)" }}>
           <div style={{ background: cardGreen, padding: "18px 18px 16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
               <span style={{ background: "#04342C", color: "#9FE1CB", fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 20, letterSpacing: "0.04em" }}>
@@ -435,32 +435,32 @@ function ScorecardModal({
             ) : null}
           </div>
 
-          <div style={{ background: cardPale, padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #DCE7D2" }}>
+          <div style={{ background: "var(--color-card-pale)", padding: "11px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border)" }}>
             <div>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>
+              <p style={{ fontSize: 10, color: "var(--color-card-pale-text)", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>
                 {equalized ? "BIAS-ADJUSTED" : "NORMALIZED"} SCORE
               </p>
-              <p style={{ fontSize: 30, fontWeight: 700, color: cardGreen, margin: 0, lineHeight: 1 }}>
-                {formatScore(headlineScore)}<span style={{ fontSize: 14, color: "#3B6D11" }}>%</span>
+              <p style={{ fontSize: 30, fontWeight: 700, color: "var(--color-card-ink)", margin: 0, lineHeight: 1 }}>
+                {formatScore(headlineScore)}<span style={{ fontSize: 14, color: "var(--color-card-pale-text)" }}>%</span>
               </p>
               {equalized && sourceNormalizedScore != null ? (
-                <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
+                <p style={{ fontSize: 11, color: "var(--color-card-pale-text)", margin: "4px 0 0" }}>
                   Unadjusted: {formatScore(sourceNormalizedScore)}%
                 </p>
               ) : hasNumericScore(headlineScore) ? (
-                <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0" }}>
+                <p style={{ fontSize: 11, color: "var(--color-card-pale-text)", margin: "4px 0 0" }}>
                   Average across submitted reviews
                   {candidate.frqPending ? " · FRQ pending" : ""}
                 </p>
               ) : null}
               {hasNumericScore(candidate.baseNormalizedScore) && Number(candidate.interestMultiplier) !== 1 ? (
-                <p style={{ fontSize: 11, color: "#3B6D11", margin: "4px 0 0", fontWeight: 600 }}>
+                <p style={{ fontSize: 11, color: "var(--color-card-pale-text)", margin: "4px 0 0", fontWeight: 600 }}>
                   {formatScore(candidate.baseNormalizedScore)}% × {Number(candidate.interestMultiplier).toFixed(3).replace(/0$/, "")} Demonstrated Interest
                 </p>
               ) : null}
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: 10, color: "#3B6D11", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>{displayMetrics.length} CATEGORIES</p>
+              <p style={{ fontSize: 10, color: "var(--color-card-pale-text)", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>{displayMetrics.length} CATEGORIES</p>
               <ScoreTiles score={headlineScore} maxScore={100} />
             </div>
           </div>
@@ -479,13 +479,13 @@ function ScorecardModal({
           </div>
 
           {latestNote && (
-            <div style={{ margin: "6px 18px 0", padding: "10px 12px", background: "#F8FAF6", border: "1px solid #E3E8DD", borderRadius: 8 }}>
+            <div style={{ margin: "6px 18px 0", padding: "10px 12px", background: "var(--color-surface-subtle)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
               <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.05em", margin: "0 0 5px", fontWeight: 700 }}>LATEST NOTE</p>
               <p style={{ fontSize: 12, lineHeight: 1.45, color: css.textDark, margin: 0 }}>{latestNote}</p>
             </div>
           )}
 
-          <div style={{ padding: "12px 18px 18px", borderTop: "1px solid #EAEAEA", marginTop: 12 }}>
+          <div style={{ padding: "12px 18px 18px", borderTop: "1px solid var(--color-border)", marginTop: 12 }}>
             <button
               onClick={() => setReviewersOpen(open => !open)}
               aria-expanded={reviewersOpen}
@@ -515,8 +515,8 @@ function ScorecardModal({
                   const displayScore = `${formatScore(Math.min(100, normalizedReviewScore))}%`;
 
                   return (
-                  <div key={review.id ?? index} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
-                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#E8F1FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#24529A", flexShrink: 0 }}>
+                  <div key={review.id ?? index} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid var(--color-border)" }}>
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-info-bg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "var(--color-info-text)", flexShrink: 0 }}>
                       {getReviewerInitials(review, index)}
                     </div>
                     <div style={{ minWidth: 0, flex: 1 }}>
@@ -539,8 +539,8 @@ function ScorecardModal({
                   const displayScore = `${formatScore(Math.min(100, normalizedReviewScore))}%`;
 
                   return (
-                    <div key={review.id ?? `frq-${index}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #EAEAEA" }}>
-                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#F3E8FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#6B21A8", flexShrink: 0 }}>
+                    <div key={review.id ?? `frq-${index}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid var(--color-border)" }}>
+                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-purple-bg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "var(--color-purple-text)", flexShrink: 0 }}>
                         {getReviewerInitials(review, index)}
                       </div>
                       <div style={{ minWidth: 0, flex: 1 }}>
@@ -557,7 +557,7 @@ function ScorecardModal({
                           </p>
                         ) : null}
                       </div>
-                      <div style={{ fontSize: 12, color: cardGreen, fontWeight: 700 }}>
+                      <div style={{ fontSize: 12, color: "var(--color-card-ink)", fontWeight: 700 }}>
                         {displayScore}
                       </div>
                     </div>
@@ -602,7 +602,7 @@ const selectStyle = {
   fontSize: 13,
   fontFamily: "'DM Sans', sans-serif",
   color: css.textDark,
-  background: "#FFF",
+  background: "var(--color-surface)",
   cursor: "pointer",
 };
 
@@ -647,7 +647,7 @@ function rowIconBtnStyle(theme, primary) {
     padding: 0,
     borderRadius: 6,
     background: primary ? theme.accent : theme.btnGhostBg,
-    color: primary ? "#FFFFFF" : theme.text,
+    color: primary ? "var(--color-on-primary)" : theme.text,
     border: primary ? "none" : `1px solid ${theme.border}`,
     cursor: "pointer",
     flexShrink: 0,
@@ -1489,7 +1489,7 @@ export default function ScoreboardPage() {
                     padding: "8px 14px",
                     borderRadius: 8,
                     background: equalizeActive ? t.accent : t.btnGhostBg,
-                    color: equalizeActive ? "#FFFFFF" : t.btnGhostText,
+                    color: equalizeActive ? "var(--color-on-primary)" : t.btnGhostText,
                     border: `1px solid ${equalizeActive ? t.accent : t.border}`,
                     fontSize: 12,
                     fontWeight: 600,
@@ -1614,7 +1614,7 @@ export default function ScoreboardPage() {
                 padding: "8px 14px",
                 borderRadius: 8,
                 background: canCloseRound ? t.accent : t.btnGhostBg,
-                color: canCloseRound ? "#FFFFFF" : t.textMuted,
+                color: canCloseRound ? "var(--color-on-primary)" : t.textMuted,
                 border: `1px solid ${canCloseRound ? t.accent : t.border}`,
                 fontSize: 12,
                 fontWeight: 700,
@@ -1640,7 +1640,7 @@ export default function ScoreboardPage() {
                 padding: "8px 14px",
                 borderRadius: 8,
                 background: showingLiveDeliberation ? "rgba(226,75,74,0.08)" : deliberationMode ? t.accent : t.btnGhostBg,
-                color: showingLiveDeliberation ? css.red : deliberationMode ? "#FFFFFF" : t.btnGhostText,
+                color: showingLiveDeliberation ? css.red : deliberationMode ? "var(--color-on-primary)" : t.btnGhostText,
                 border: `1px solid ${showingLiveDeliberation ? css.red : deliberationMode ? t.accent : t.border}`,
                 fontSize: 12,
                 fontWeight: showingLiveDeliberation ? 700 : 600,
@@ -1896,8 +1896,8 @@ export default function ScoreboardPage() {
       ) : null}
 
       {equalizeActive && !deliberationMode && !isCoffeeChatRanking ? (
-        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${deliberationMode ? t.infoBorder : css.greenDark}`, background: deliberationMode ? t.infoBg : css.greenDark, fontSize: 13, color: deliberationMode ? t.text : "#FFFFFF", lineHeight: 1.45 }}>
-          <strong style={{ color: deliberationMode ? t.accent : "#FFFFFF" }}>Bias-adjusted scores</strong> — each grader is normalized against their own scoring pattern, then mapped to the team distribution per rubric category. Toggle “Unadjusted scores” to compare.
+        <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${deliberationMode ? t.infoBorder : css.greenDark}`, background: deliberationMode ? t.infoBg : css.greenDark, fontSize: 13, color: deliberationMode ? t.text : "var(--color-on-primary)", lineHeight: 1.45 }}>
+          <strong style={{ color: deliberationMode ? t.accent : "var(--color-on-primary)" }}>Bias-adjusted scores</strong> — each grader is normalized against their own scoring pattern, then mapped to the team distribution per rubric category. Toggle “Unadjusted scores” to compare.
         </div>
       ) : null}
 
@@ -1944,7 +1944,7 @@ export default function ScoreboardPage() {
               <span>Decision progress</span>
               <span style={{ fontWeight: 600, color: t.text }}>{decidedCount} / {totalApplicants} decided ({decisionProgress}%)</span>
             </div>
-            <div style={{ height: 10, borderRadius: 999, background: "#E5E7EB", overflow: "hidden", display: "flex" }}>
+            <div style={{ height: 10, borderRadius: 999, background: "var(--color-track)", overflow: "hidden", display: "flex" }}>
               {decisionMix.map((segment) => (
                 <div
                   key={segment.label}

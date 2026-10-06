@@ -187,7 +187,7 @@ export default function FrqScoringPanel({
             width: "100%",
             height: 80,
             padding: "12px 14px",
-            background: "#F9FAFB",
+            background: "var(--color-surface-subtle)",
             border: `1px solid ${css.borderLight}`,
             borderRadius: 8,
             color: css.textDark,

@@ -57,7 +57,7 @@ export default function ApplicationSignalsSection({ signals }) {
             key={flag.id}
             icon="⚑"
             accent="#B45309"
-            accentBg="#FFFBF3"
+            accentBg="var(--color-warning-bg)"
             accentBorder="rgba(239,159,39,0.24)"
             label="Flag"
             note={flag.reason}

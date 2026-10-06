@@ -22,9 +22,9 @@ function roleBadgeStyle(role) {
     case "admin":
       return { background: "rgba(29,158,117,0.12)", color: css.greenDark, border: "1px solid rgba(29,158,117,0.28)" };
     case "board":
-      return { background: "rgba(155,89,182,0.12)", color: "#8E44AD", border: "1px solid rgba(155,89,182,0.28)" };
+      return { background: "rgba(155,89,182,0.12)", color: "var(--color-purple-text)", border: "1px solid rgba(155,89,182,0.28)" };
     case "member":
-      return { background: "rgba(91,163,224,0.12)", color: "#4A7FB8", border: "1px solid rgba(91,163,224,0.28)" };
+      return { background: "rgba(91,163,224,0.12)", color: "var(--color-info-text)", border: "1px solid rgba(91,163,224,0.28)" };
     default:
       return { background: "rgba(107,114,128,0.1)", color: css.textGray, border: `1px solid ${css.borderLight}` };
   }
@@ -195,7 +195,7 @@ export default function UserManagementPage() {
                   fontSize: 13,
                   fontWeight: 700,
                   cursor: "pointer",
-                  background: "#FFF",
+                  background: "var(--color-surface)",
                   color: css.textDark,
                 }}
               >
@@ -209,7 +209,7 @@ export default function UserManagementPage() {
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ borderBottom: `1px solid ${css.borderLight}`, background: "#FAFBFA" }}>
+                <tr style={{ borderBottom: `1px solid ${css.borderLight}`, background: "var(--color-surface-subtle)" }}>
                   <th style={thStyle}>Name</th>
                   <th style={thStyle}>Email</th>
                   <th style={thStyle}>Current role</th>
@@ -250,7 +250,7 @@ export default function UserManagementPage() {
                               padding: "8px 10px",
                               fontSize: 13,
                               color: css.textDark,
-                              background: "#FFF",
+                              background: "var(--color-surface)",
                               cursor: saving || pendingRemoval ? "not-allowed" : "pointer",
                               opacity: pendingRemoval ? 0.55 : 1,
                             }}
@@ -297,7 +297,7 @@ export default function UserManagementPage() {
             </table>
           )}
           {!loading && users.length > 0 ? (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, padding: "14px 18px", borderTop: `1px solid ${css.borderLight}`, background: "#FAFBFA" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, padding: "14px 18px", borderTop: `1px solid ${css.borderLight}`, background: "var(--color-surface-subtle)" }}>
               <span style={{ color: changedUsers.length ? css.textDark : css.textGray, fontSize: 12, fontWeight: 600 }}>
                 {changedUsers.length ? `${changedUsers.length} unsaved ${changedUsers.length === 1 ? "change" : "changes"}` : "No unsaved changes"}
               </span>
@@ -312,8 +312,8 @@ export default function UserManagementPage() {
                   fontSize: 13,
                   fontWeight: 700,
                   cursor: !changedUsers.length || saving ? "not-allowed" : "pointer",
-                  background: changedUsers.length ? css.greenDark : "#E5E7EB",
-                  color: changedUsers.length ? "#FFF" : css.textGray,
+                  background: changedUsers.length ? css.greenDark : "var(--color-track)",
+                  color: changedUsers.length ? "var(--color-on-primary)" : css.textGray,
                   opacity: saving ? 0.7 : 1,
                 }}
               >

@@ -100,7 +100,7 @@ export default function ScoringPanel({
           value={notes}
           onChange={e => onNotes(e.target.value.slice(0, 300))}
           placeholder="Add notes about this candidate — strengths, flags, notable context..."
-          style={{ width: "100%", height: 80, padding: "12px 14px", background: "#F9FAFB", border: `1px solid ${css.borderLight}`, borderRadius: 8, color: css.textDark, fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "none", outline: "none", boxSizing: "border-box" }}
+          style={{ width: "100%", height: 80, padding: "12px 14px", background: "var(--color-surface-subtle)", border: `1px solid ${css.borderLight}`, borderRadius: 8, color: css.textDark, fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "none", outline: "none", boxSizing: "border-box" }}
         />
       </div>
 

@@ -38,7 +38,7 @@ export default function CandidateSignalActions({
 
   const canAct = Boolean(candidateId || resumeId);
   const muted = dark ? "#8FA3B8" : css.textGray;
-  const panelBg = dark ? "#0B1628" : "#FFF";
+  const panelBg = dark ? "#0B1628" : "var(--color-surface)";
   const panelBorder = dark ? "rgba(255,255,255,0.12)" : css.borderLight;
   const panelText = dark ? "#E8EEF4" : css.textDark;
 
@@ -178,7 +178,7 @@ export default function CandidateSignalActions({
               padding: "8px 10px",
               borderRadius: 6,
               border: `1px solid ${panelBorder}`,
-              background: dark ? "#141F33" : "#F9FAFB",
+              background: dark ? "#141F33" : "var(--color-surface-subtle)",
               color: panelText,
               fontSize: 12,
               resize: "none",
@@ -221,7 +221,7 @@ export default function CandidateSignalActions({
                 borderRadius: 6,
                 border: "none",
                 background: open === "flag" ? css.amber : css.greenDark,
-                color: open === "flag" ? css.textDark : "#FFF",
+                color: open === "flag" ? css.textDark : "var(--color-on-primary)",
                 fontSize: 11,
                 fontWeight: 700,
                 cursor: busy || noteTooShort ? "not-allowed" : "pointer",
@@ -258,7 +258,7 @@ export function CandidateSignalBadges({ flagCount = 0, referralCount = 0, dark =
           style={{
             ...badgeBase,
             background: "rgba(239,159,39,0.12)",
-            color: dark ? "#F5C060" : "#B45309",
+            color: dark ? "#F5C060" : "var(--color-warning-text)",
             border: "1px solid rgba(239,159,39,0.28)",
           }}
           title={`${flagCount} open flag${flagCount === 1 ? "" : "s"}`}

@@ -51,7 +51,7 @@ function CandidateNameButton({ candidate, resumeId, onOpenProfile }) {
       disabled={!canOpen}
       onClick={() => canOpen && onOpenProfile(resumeId)}
       title={canOpen ? `Open ${candidate.name || "candidate"} profile` : "No linked resume profile"}
-      style={{ border: "none", background: "none", padding: 0, fontFamily: sansFont, fontSize: 16, color: "#111", margin: "0 0 4px", fontWeight: 500, textAlign: "left", cursor: canOpen ? "pointer" : "default", textDecoration: canOpen ? "underline" : "none", textDecorationColor: "rgba(40,98,65,0.35)", textUnderlineOffset: 3 }}
+      style={{ border: "none", background: "none", padding: 0, fontFamily: sansFont, fontSize: 16, color: "var(--color-text)", margin: "0 0 4px", fontWeight: 500, textAlign: "left", cursor: canOpen ? "pointer" : "default", textDecoration: canOpen ? "underline" : "none", textDecorationColor: "rgba(40,98,65,0.35)", textUnderlineOffset: 3 }}
     >
       {candidate.name || "Unknown candidate"}
     </button>
@@ -66,7 +66,7 @@ function FlagCard({ flag, onResolve, resolving, onOpenProfile }) {
     <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 20, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18 }}>
         <div style={{ display: "flex", gap: 14, minWidth: 0 }}>
-          <CandidateProfileButton resumeId={flag.resumeId || flag.resume?.id} candidateName={candidate.name} onOpen={onOpenProfile} style={{ width: 44, height: 44, borderRadius: "50%", background: css.greenDark, color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
+          <CandidateProfileButton resumeId={flag.resumeId || flag.resume?.id} candidateName={candidate.name} onOpen={onOpenProfile} style={{ width: 44, height: 44, borderRadius: "50%", background: css.greenDark, color: "var(--color-on-primary)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
             {getInitials(candidate.name)}
           </CandidateProfileButton>
           <div style={{ minWidth: 0 }}>
@@ -82,7 +82,7 @@ function FlagCard({ flag, onResolve, resolving, onOpenProfile }) {
         </span>
       </div>
 
-      <div style={{ marginTop: 18, padding: "14px 16px", background: "#FFFBF3", border: "1px solid rgba(239,159,39,0.24)", borderRadius: 10 }}>
+      <div style={{ marginTop: 18, padding: "14px 16px", background: "var(--color-warning-bg)", border: "1px solid rgba(239,159,39,0.24)", borderRadius: 10 }}>
         <p style={{ margin: "0 0 6px", fontSize: 10, color: css.amber, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
           Flag Reason
         </p>
@@ -121,7 +121,7 @@ function FlagCard({ flag, onResolve, resolving, onOpenProfile }) {
             type="button"
             onClick={() => onResolve(flag.id)}
             disabled={resolving}
-            style={{ ...buttonStyle, background: css.greenDark, color: "#FFF", border: "none", opacity: resolving ? 0.7 : 1 }}
+            style={{ ...buttonStyle, background: css.greenDark, color: "var(--color-on-primary)", border: "none", opacity: resolving ? 0.7 : 1 }}
           >
             {resolving ? "Resolving..." : "Resolve Flag"}
           </button>
@@ -140,7 +140,7 @@ function ReferralCard({ referral, onResolve, resolving, onOpenProfile }) {
     <div style={{ background: css.cardWhite, border: `1px solid ${css.borderLight}`, borderRadius: 10, padding: 20, boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18 }}>
         <div style={{ display: "flex", gap: 14, minWidth: 0 }}>
-          <CandidateProfileButton resumeId={referral.resumeId || referral.resume?.id} candidateName={candidate.name} onOpen={onOpenProfile} style={{ width: 44, height: 44, borderRadius: "50%", background: css.greenDark, color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
+          <CandidateProfileButton resumeId={referral.resumeId || referral.resume?.id} candidateName={candidate.name} onOpen={onOpenProfile} style={{ width: 44, height: 44, borderRadius: "50%", background: css.greenDark, color: "var(--color-on-primary)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 15, letterSpacing: "0.02em", flexShrink: 0 }}>
             {getInitials(candidate.name)}
           </CandidateProfileButton>
           <div style={{ minWidth: 0 }}>
@@ -156,7 +156,7 @@ function ReferralCard({ referral, onResolve, resolving, onOpenProfile }) {
         </span>
       </div>
 
-      <div style={{ marginTop: 18, padding: "14px 16px", background: "#F8FBF6", border: "1px solid rgba(40,98,65,0.18)", borderRadius: 10 }}>
+      <div style={{ marginTop: 18, padding: "14px 16px", background: "var(--color-surface-subtle)", border: "1px solid rgba(40,98,65,0.18)", borderRadius: 10 }}>
         <p style={{ margin: "0 0 6px", fontSize: 10, color: css.greenDark, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
           Referral Note
         </p>
@@ -196,7 +196,7 @@ function ReferralCard({ referral, onResolve, resolving, onOpenProfile }) {
             onClick={() => onResolve(referral.id)}
             disabled={resolving || !resolutionAvailable}
             title={resolutionAvailable ? "Resolve referral" : "Run server/sql/add_candidate_referral_resolution.sql first"}
-            style={{ ...buttonStyle, background: css.greenDark, color: "#FFF", border: "none", opacity: resolving || !resolutionAvailable ? 0.55 : 1, cursor: resolving || !resolutionAvailable ? "not-allowed" : "pointer" }}
+            style={{ ...buttonStyle, background: css.greenDark, color: "var(--color-on-primary)", border: "none", opacity: resolving || !resolutionAvailable ? 0.55 : 1, cursor: resolving || !resolutionAvailable ? "not-allowed" : "pointer" }}
           >
             {resolving ? "Resolving..." : resolutionAvailable ? "Resolve Referral" : "Migration needed"}
           </button>
@@ -300,7 +300,7 @@ export default function FlaggedCandidatesPage() {
                 padding: "9px 18px",
                 borderRadius: 8,
                 background: active ? css.greenDark : css.cardWhite,
-                color: active ? "#FFF" : css.textDark,
+                color: active ? "var(--color-on-primary)" : css.textDark,
                 border: `1px solid ${active ? css.greenDark : css.borderLight}`,
                 fontSize: 13,
                 fontWeight: 700,
@@ -421,7 +421,7 @@ export default function FlaggedCandidatesPage() {
 }
 
 const detailBoxStyle = {
-  background: "#F8FAF6",
+  background: "var(--color-surface-subtle)",
   border: `1px solid ${css.borderLight}`,
   borderRadius: 8,
   padding: "10px 12px",

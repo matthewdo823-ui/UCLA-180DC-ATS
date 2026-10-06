@@ -3,7 +3,7 @@ export const ROUND_DECISIONS = ["pending", "advance", "hold", "reject"];
 export const DECISION_STYLE = {
   pending: {
     bg: "rgba(107,114,128,0.10)",
-    color: "#6B7280",
+    color: "var(--color-text-muted)",
     bd: "rgba(107,114,128,0.24)",
     row: "transparent",
     label: "Pending",
