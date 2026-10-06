@@ -56,6 +56,7 @@ The table below documents the order and intent; it is kept in sync with
 | 34 | `add_board_role.sql` | Add the `board` database role (member access plus FRQ grading in the application) |
 | 35 | `fix_form_sync_legacy_why_defaults.sql` | Default retired `why_*` columns and replay open-cycle form responses skipped by the stale constraint |
 | 36 | `add_senior_transfer_year.sql` | Add the `Senior Transfer` standing to `year_enum` so intake and the screening filter can name it |
+| 38 | `ensure_frq_zero_score_support.sql` | Automatically repair legacy FRQ score constraints and save RPC to allow zero; #37 is reserved by the grading-goals PR |
 
 ## First-time setup on a new database
 

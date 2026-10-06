@@ -188,6 +188,11 @@
       "order": 36,
       "file": "add_senior_transfer_year.sql",
       "mode": "auto"
+    },
+    {
+      "order": 38,
+      "file": "ensure_frq_zero_score_support.sql",
+      "mode": "auto"
     }
   ]
 }
