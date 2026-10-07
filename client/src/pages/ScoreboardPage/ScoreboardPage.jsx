@@ -29,6 +29,7 @@ import {
   recomputeDecisionStats,
 } from "./decisionUtils";
 import { equalizeCandidateScores, recomputeEqualizedStats } from "./equalizeUtils";
+import { useBiasAdjustPreference } from "./useBiasAdjustPreference";
 import AdvanceEmailModal from "./AdvanceEmailModal";
 import ReviewOverrideSection from "../../components/ReviewOverride/ReviewOverrideSection";
 import CandidateSignalActions, { CandidateSignalBadges } from "../../components/CandidateSignalActions/CandidateSignalActions";
@@ -672,7 +673,7 @@ export default function ScoreboardPage() {
   const [sortBy, setSortBy] = useState("performance_desc");
   const [searchQuery, setSearchQuery] = useState("");
   const [deliberationMode, setDeliberationMode] = useState(false);
-  const [equalizeActive, setEqualizeActive] = useState(false);
+  const [equalizeActive, setEqualizeActive] = useBiasAdjustPreference();
   const [savingDecisionId, setSavingDecisionId] = useState(null);
   const [decisionError, setDecisionError] = useState("");
   const [decisionNotice, setDecisionNotice] = useState("");
