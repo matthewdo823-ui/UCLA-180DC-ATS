@@ -495,6 +495,7 @@ export function GraderProgressRows({ graders, expectedReviews, expectedFrqReview
           : 0;
         const showFrqProgress = (grader.role === "admin" || grader.role === "board") && expectedFrqReviews > 0;
         const coffeeChatMode = mode === "coffee_chat";
+        const showResumeProgress = coffeeChatMode || grader.role === "member";
         return (
           <div key={grader.id} style={{
             padding: "11px 0",
@@ -506,13 +507,13 @@ export function GraderProgressRows({ graders, expectedReviews, expectedFrqReview
               <span style={{ fontSize: 11, color: css.textGray }}>{coffeeChatMode ? `${resumeCount} Coffee Chat grade${resumeCount === 1 ? "" : "s"}` : formatReviewCountPair(resumeCount, frqCount)}</span>
             </div>
             <div style={{ display: "grid", gap: 8 }}>
-              <div>
+              {showResumeProgress && <div>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
                   <span style={{ color: css.textGray }}>{coffeeChatMode ? "Coffee Chat grades" : "Resume reviews"}</span>
                   <strong style={{ color: css.greenDark }}>{resumeCount} / {expectedReviews}</strong>
                 </div>
                 <ProgressBar pct={resumePct} />
-              </div>
+              </div>}
               {!coffeeChatMode && showFrqProgress ? (
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 11 }}>
