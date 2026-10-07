@@ -99,12 +99,14 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
   const applicants = pipeline.applicants || 0;
   const reviewed = pipeline.reviewed || 0;
   const reviewPct = applicants > 0 ? Math.round((reviewed / applicants) * 100) : 0;
-  const resumeReviewed = pipeline.resumeReviewed || 0;
-  const frqReviewed = pipeline.frqReviewed || 0;
-  const resumeLeft = pipeline.resumeReviewsRemaining || 0;
-  const frqLeft = pipeline.frqReviewsRemaining || 0;
-  const resumeReviewPct = applicants > 0 ? Math.round((resumeReviewed / applicants) * 100) : 0;
-  const frqReviewPct = applicants > 0 ? Math.round((frqReviewed / applicants) * 100) : 0;
+  const resumeCoverage = pipeline.coverage?.resume;
+  const frqCoverage = pipeline.coverage?.frq;
+  const resumeReviewed = resumeCoverage?.completed ?? 0;
+  const frqReviewed = frqCoverage?.completed ?? 0;
+  const resumeLeft = resumeCoverage?.remaining ?? 0;
+  const frqLeft = frqCoverage?.remaining ?? 0;
+  const resumeReviewPct = resumeCoverage?.percent ?? 0;
+  const frqReviewPct = frqCoverage?.percent ?? 0;
 
   const segments = isInterview
     ? pipeline.ratingMode === "coffee_chat"
@@ -151,24 +153,24 @@ export function PipelineBreakdown({ pipeline, isInterview }) {
           </div>
           <ProgressBar pct={reviewPct} />
         </div>
-      ) : (
+      ) : resumeCoverage && frqCoverage ? (
         <div style={{ display: "grid", gap: 14, marginBottom: 20 }}>
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Resume review coverage</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>{resumeReviewed} / {applicants} ({resumeReviewPct}%) · {resumeLeft} left</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: css.greenDark }}>{resumeReviewed} / {resumeCoverage.total} ({resumeReviewPct}%) · {resumeLeft} left</span>
             </div>
             <ProgressBar pct={resumeReviewPct} />
           </div>
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: css.textDark }}>Free response review coverage</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#1D9E75" }}>{frqReviewed} / {applicants} ({frqReviewPct}%) · {frqLeft} left</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#1D9E75" }}>{frqReviewed} / {frqCoverage.total} ({frqReviewPct}%) · {frqLeft} left</span>
             </div>
             <ProgressBar pct={frqReviewPct} color="#1D9E75" />
           </div>
         </div>
-      )}
+      ) : <p style={{ color: css.textGray }}>Review coverage unavailable.</p>}
 
       <div style={{ fontSize: 12, fontWeight: 700, color: css.textGray, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
         {breakdownTitle}
