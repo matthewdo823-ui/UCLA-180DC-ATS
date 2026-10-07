@@ -20,6 +20,8 @@ before(async () => {
       review_count int not null default 0, frq_review_count int not null default 0);
   `);
   await db.query(sql('add_review_claims.sql'));
+  // Renewal moved into migration #39; mirror the production migration order.
+  await db.query(sql('add_review_claim_renewal.sql'));
 });
 after(async () => { if (db) { await db.query('ROLLBACK'); await db.end(); } });
 beforeEach(async () => {
