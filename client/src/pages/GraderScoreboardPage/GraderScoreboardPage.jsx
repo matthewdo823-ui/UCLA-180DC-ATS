@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import GradingModeCards from "./GradingModeCards";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
@@ -357,6 +358,26 @@ export default function GraderScoreboardPage() {
   });
 
   const data = graderQuery.data ?? DEFAULT_SCOREBOARD_DATA;
+  const otherMode = SCOREBOARD_MODES.find(item => item.id === (mode === "frq" ? "resume" : "frq"));
+  const otherQuery = useQuery({
+    queryKey: otherMode.id === "resume" ? qk.graderScoreboard() : qk.frqGraderScoreboard(),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/${otherMode.endpoint}`);
+      return readJsonOrThrow(res, "loading grader totals");
+    },
+    enabled: !cycleLoading && !coffeeChatActive,
+    staleTime: STALE.dashboard,
+  });
+  const totals = {
+    [mode]: graderQuery.error ? null : graderQuery.data?.stats?.totalReviews,
+    [otherMode.id]: otherQuery.error ? null : otherQuery.data?.stats?.totalReviews,
+  };
+  const otherGraders = new Map((otherQuery.data?.graders || []).map(grader => [String(grader.id), grader.reviewCount]));
+  function countFor(grader, gradingMode) {
+    if (gradingMode === mode) return grader.reviewCount;
+    if (otherQuery.error || !otherQuery.data) return "—";
+    return otherGraders.get(String(grader.id)) ?? 0;
+  }
   const loading = cycleLoading || graderQuery.isPending;
 
   function handleModeChange(nextMode) {
@@ -414,35 +435,6 @@ export default function GraderScoreboardPage() {
       <Topbar phaseLabel={scoreboardLabel} activeLabel="Leaderboard" rightSlot={<></>} />
 
       <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", gap: 8 }}>
-        {availableModes.map(m => {
-          const active = m.id === mode;
-          return (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => handleModeChange(m.id)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                cursor: "pointer",
-                padding: "9px 18px",
-                borderRadius: 8,
-                background: active ? css.greenDark : css.cardWhite,
-                color: active ? "var(--color-on-primary)" : css.textDark,
-                border: `1px solid ${active ? css.greenDark : css.borderLight}`,
-                fontSize: 13,
-                fontWeight: 700,
-                fontFamily: "'DM Sans', sans-serif",
-                boxShadow: active ? "0 2px 12px rgba(40, 98, 65, 0.1)" : "0 1px 2px rgba(0,0,0,0.04)",
-                transition: "border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease",
-              }}
-            >
-              {m.label}
-            </button>
-          );
-        })}
-      </div>
       {graderQuery.error ? (
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%" }}>
           <ErrorBanner error={graderQuery.error} onRetry={() => graderQuery.refetch()} />
@@ -498,6 +490,8 @@ export default function GraderScoreboardPage() {
         </div>
       </div>
 
+      <GradingModeCards modes={availableModes} activeMode={mode} totals={totals} onChange={handleModeChange} />
+      {!coffeeChatActive && otherQuery.error && <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%" }}><ErrorBanner error={otherQuery.error} onRetry={() => otherQuery.refetch()} /></div>}
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", position: "relative" }}>
         <svg
           width="16"
@@ -621,6 +615,7 @@ export default function GraderScoreboardPage() {
                 <span style={{ fontSize: 13, color: "var(--color-text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textTransform: "capitalize" }}>
                   {[grader.role, grader.email].filter(Boolean).join(" · ")}
                 </span>
+                {!coffeeChatActive && <span style={{ fontSize: 12, color: css.textGray }}>Resumes: {countFor(grader, "resume")} · Free responses: {countFor(grader, "frq")}</span>}
               </div>
             </div>
 

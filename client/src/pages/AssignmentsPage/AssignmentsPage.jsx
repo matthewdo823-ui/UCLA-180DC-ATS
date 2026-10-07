@@ -14,6 +14,7 @@ import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import CandidateProfileButton from "../../components/CandidateProfileButton/CandidateProfileButton";
 import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle } from "../../theme/typography";
+import { sortCandidates } from "./candidateSort";
 
 const CANDIDATE_FILTERS = [
   { value: "all", label: "All" },
@@ -76,6 +77,7 @@ export default function AssignmentsPage() {
   const [tableMutationKey, setTableMutationKey] = useState("");
   const [search, setSearch] = useState("");
   const [candidateFilter, setCandidateFilter] = useState("all");
+  const [candidateSort, setCandidateSort] = useState("default");
 
   const candidateSelection = useSelection();
   const graderSelection = useSelection();
@@ -104,10 +106,10 @@ export default function AssignmentsPage() {
 
   const visibleCandidates = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return candidates.filter(
+    return sortCandidates(candidates.filter(
       (candidate) => matchesCandidateFilter(candidate, candidateFilter) && matchesSearch(candidate, term)
-    );
-  }, [candidates, candidateFilter, search]);
+    ), candidateSort);
+  }, [candidates, candidateFilter, search, candidateSort]);
 
   const selectedCandidateIds = useMemo(
     () => [...candidateSelection.selected],
@@ -315,6 +317,12 @@ export default function AssignmentsPage() {
                       fontFamily: "'DM Sans', sans-serif",
                     }}
                   />
+                  <select aria-label="Sort candidates" value={candidateSort} onChange={event => setCandidateSort(event.target.value)}
+                    style={{ border: `1px solid ${css.borderLight}`, borderRadius: 8, padding: "9px 12px", fontSize: 13, color: css.textDark, background: css.cardWhite }}>
+                    <option value="default">Default order</option>
+                    <option value="frq">Fewest FRQ reviews</option>
+                    <option value="resume">Fewest resume reviews</option>
+                  </select>
                   {CANDIDATE_FILTERS.map((filter) => (
                     <button
                       key={filter.value}
