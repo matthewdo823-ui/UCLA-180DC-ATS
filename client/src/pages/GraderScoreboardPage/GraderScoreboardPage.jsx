@@ -247,15 +247,15 @@ export function GraderModal({ grader, onClose, onReviewOpen, metrics = [], maxPe
             <div>
               <p style={{ fontSize: 10, color: "var(--color-card-pale-text)", margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.05em" }}>{gradedLabel}</p>
               <p style={{ fontSize: 30, fontWeight: 700, color: "var(--color-card-ink)", margin: 0, lineHeight: 1 }}>
-                {grader.reviewCount} <span style={{ fontSize: 14, color: "var(--color-card-pale-text)" }}>/ {grader.expectedReviews}</span>
+                {grader.reviewCount} {grader.expectedReviews > 0 && <span style={{ fontSize: 14, color: "var(--color-card-pale-text)" }}>/ {grader.expectedReviews}</span>}
               </p>
               <p style={{ fontSize: 10, color: "var(--color-card-pale-text)", margin: "4px 0 0", fontWeight: 600 }}>{formatReviewCount(grader.reviewCount, reviewType)}</p>
             </div>
             <div style={{ textAlign: "right" }}>
               <p style={{ fontSize: 10, color: "var(--color-card-pale-text)", margin: "0 0 6px", fontWeight: 700, letterSpacing: "0.05em" }}>
-                {grader.progressScore}% COMPLETE
+                {grader.expectedReviews > 0 ? `${grader.progressScore}% COMPLETE` : "NO QUOTA"}
               </p>
-              <ProgressTiles count={grader.reviewCount} expected={grader.expectedReviews} />
+              {grader.expectedReviews > 0 && <ProgressTiles count={grader.reviewCount} expected={grader.expectedReviews} />}
             </div>
           </div>
 
@@ -357,6 +357,22 @@ export default function GraderScoreboardPage() {
   });
 
   const data = graderQuery.data ?? DEFAULT_SCOREBOARD_DATA;
+  const otherMode = SCOREBOARD_MODES.find(item => item.id === (mode === "frq" ? "resume" : "frq"));
+  const otherQuery = useQuery({
+    queryKey: otherMode.id === "resume" ? qk.graderScoreboard() : qk.frqGraderScoreboard(),
+    queryFn: async () => {
+      const res = await authedFetch(`${API}/${otherMode.endpoint}`);
+      return readJsonOrThrow(res, "loading grader totals");
+    },
+    enabled: !cycleLoading && !coffeeChatActive,
+    staleTime: STALE.dashboard,
+  });
+  const otherGraders = new Map((otherQuery.data?.graders || []).map(grader => [String(grader.id), grader.reviewCount]));
+  function countFor(grader, gradingMode) {
+    if (gradingMode === mode) return grader.reviewCount;
+    if (otherQuery.error || !otherQuery.data) return "—";
+    return otherGraders.get(String(grader.id)) ?? 0;
+  }
   const loading = cycleLoading || graderQuery.isPending;
 
   function handleModeChange(nextMode) {
@@ -414,35 +430,6 @@ export default function GraderScoreboardPage() {
       <Topbar phaseLabel={scoreboardLabel} activeLabel="Leaderboard" rightSlot={<></>} />
 
       <div style={{ flex: 1, padding: "14px 22px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", gap: 8 }}>
-        {availableModes.map(m => {
-          const active = m.id === mode;
-          return (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => handleModeChange(m.id)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                cursor: "pointer",
-                padding: "9px 18px",
-                borderRadius: 8,
-                background: active ? css.greenDark : css.cardWhite,
-                color: active ? "var(--color-on-primary)" : css.textDark,
-                border: `1px solid ${active ? css.greenDark : css.borderLight}`,
-                fontSize: 13,
-                fontWeight: 700,
-                fontFamily: "'DM Sans', sans-serif",
-                boxShadow: active ? "0 2px 12px rgba(40, 98, 65, 0.1)" : "0 1px 2px rgba(0,0,0,0.04)",
-                transition: "border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease",
-              }}
-            >
-              {m.label}
-            </button>
-          );
-        })}
-      </div>
       {graderQuery.error ? (
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%" }}>
           <ErrorBanner error={graderQuery.error} onRetry={() => graderQuery.refetch()} />
@@ -498,6 +485,13 @@ export default function GraderScoreboardPage() {
         </div>
       </div>
 
+      <nav aria-label="Grading scoreboard" style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {availableModes.map(item => <button key={item.id} type="button" aria-pressed={item.id === mode} onClick={() => handleModeChange(item.id)}
+          style={{ padding: "10px 16px", borderRadius: 8, border: `1px solid ${item.id === mode ? css.greenDark : css.borderLight}`, background: item.id === mode ? css.greenDark : css.cardWhite, color: item.id === mode ? "var(--color-on-primary)" : css.textDark, font: "inherit", fontWeight: 700, cursor: "pointer" }}>
+          {item.label}
+        </button>)}
+      </nav>
+      {!coffeeChatActive && otherQuery.error && <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%" }}><ErrorBanner error={otherQuery.error} onRetry={() => otherQuery.refetch()} /></div>}
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", position: "relative" }}>
         <svg
           width="16"
@@ -621,15 +615,16 @@ export default function GraderScoreboardPage() {
                 <span style={{ fontSize: 13, color: "var(--color-text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textTransform: "capitalize" }}>
                   {[grader.role, grader.email].filter(Boolean).join(" · ")}
                 </span>
+                {!coffeeChatActive && <span style={{ fontSize: 12, color: css.textGray }}>Resumes: {countFor(grader, "resume")} · Free responses: {countFor(grader, "frq")}</span>}
               </div>
             </div>
 
             <div>
               <div style={{ color: progressColor(grader.progressScore), fontSize: 18, fontFamily: sansFont, fontWeight: 600 }}>
-                {grader.reviewCount} / {grader.expectedReviews}
+                {grader.reviewCount}{grader.expectedReviews > 0 ? ` / ${grader.expectedReviews}` : ""}
               </div>
               <div style={{ fontSize: 11, color: css.textGray }}>
-                {formatReviewCount(grader.reviewCount, activeMode.reviewType)} · {grader.progressScore}% complete{activeMode.id === "coffee" ? ` · starts at Table ${grader.startingGroupNumber || "—"}` : ` · avg ${formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%`}
+                {formatReviewCount(grader.reviewCount, activeMode.reviewType)} · {grader.expectedReviews > 0 ? `${grader.progressScore}% complete` : "No quota"}{activeMode.id === "coffee" ? ` · starts at Table ${grader.startingGroupNumber || "—"}` : ` · avg ${formatNumber(grader.averageNormalizedScore ?? grader.averageScore)}%`}
               </div>
             </div>
 

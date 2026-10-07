@@ -203,6 +203,11 @@
       "order": 39,
       "file": "add_review_claim_renewal.sql",
       "mode": "auto"
+    },
+    {
+      "order": 40,
+      "file": "add_cycle_grading_goals.sql",
+      "mode": "auto"
     }
   ]
 }

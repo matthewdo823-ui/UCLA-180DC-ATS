@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { withRoundCoverage } from './pipelineCoverage';
 import { useQuery } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
@@ -66,7 +67,7 @@ function mapScoreboardToPipeline(scoreboardData, interviewData) {
   };
 }
 
-function mapGraderScoreboard(graderData, frqGraderData) {
+export function mapGraderScoreboard(graderData, frqGraderData) {
   const stats = graderData?.stats || {};
   const frqByGraderId = new Map(
     (frqGraderData?.graders || []).map((grader) => [String(grader.id), grader.reviewCount || 0])
@@ -86,19 +87,21 @@ function mapGraderScoreboard(graderData, frqGraderData) {
     return String(a.name || "").localeCompare(String(b.name || ""));
   });
 
-  const behindGraders = graders
+  // Resume workload applies only to members; staff reviews still count in totals.
+  const resumeGraders = graders.filter((grader) => grader.role === "member");
+  const behindGraders = resumeGraders
     .filter((g) => (g.reviewCount || 0) > 0 && (g.reviewCount || 0) < expectedReviews)
     .sort((a, b) => (a.reviewCount || 0) - (b.reviewCount || 0))
     .slice(0, 5);
 
-  const behindCount = graders.filter(
+  const behindCount = resumeGraders.filter(
     (g) => (g.reviewCount || 0) > 0 && (g.reviewCount || 0) < expectedReviews
   ).length;
 
   return {
-    graders: stats.graders ?? graders.length,
-    activeGraders: stats.activeGraders ?? graders.filter((g) => (g.reviewCount || 0) > 0).length,
-    notStarted: graders.filter((g) => (g.reviewCount || 0) === 0).length,
+    graders: resumeGraders.length,
+    activeGraders: resumeGraders.filter((g) => (g.reviewCount || 0) > 0).length,
+    notStarted: resumeGraders.filter((g) => (g.reviewCount || 0) === 0).length,
     totalReviews: stats.totalReviews ?? graders.reduce((sum, g) => sum + (g.reviewCount || 0), 0),
     totalResumeGrades: stats.totalReviews ?? graders.reduce((sum, g) => sum + (g.resumeReviewCount || 0), 0),
     totalFrqGrades: frqGraderData?.stats?.totalReviews ?? graders.reduce((sum, g) => sum + (g.frqReviewCount || 0), 0),
@@ -108,7 +111,7 @@ function mapGraderScoreboard(graderData, frqGraderData) {
     graderProgress,
     behindGraders,
     behindCount,
-    completeCount: graders.filter((g) => (g.reviewCount || 0) >= expectedReviews).length,
+    completeCount: resumeGraders.filter((g) => (g.reviewCount || 0) >= expectedReviews).length,
   };
 }
 
@@ -226,7 +229,7 @@ export default function useAdminDashboard(enabled = true) {
     // Defaulted inside the memo so a fresh `{}` on each render doesn't defeat it.
     const adminData = rawAdminData ?? {};
 
-    const pipeline = mapScoreboardToPipeline(scoreboardData, interviewData);
+    const pipeline = withRoundCoverage(mapScoreboardToPipeline(scoreboardData, interviewData), adminData.pipeline?.coverage);
     const graderSummary = isCoffeeChat
       ? (coffeeGraderData ? mapCoffeeChatGraderScoreboard(coffeeGraderData) : null)
       : (graderData ? mapGraderScoreboard(graderData, frqGraderData) : null);

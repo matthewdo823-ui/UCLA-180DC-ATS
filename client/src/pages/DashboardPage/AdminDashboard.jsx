@@ -5,6 +5,8 @@ import PageLoader from "../../components/PageLoader";
 import { css } from "../../theme/colors";
 import { formatReviewCountPair } from "../../utils/reviewCounts";
 import useAdminDashboard from "./useAdminDashboard";
+import PersonalFrqProgress from "./PersonalFrqProgress";
+import CoverageProgress from "./CoverageProgress";
 import {
   pageStyle,
   Panel,
@@ -63,7 +65,7 @@ function getDashboardFocus({ context, pipeline, actionItems, isInterview }) {
       path: priorityAction.path,
     };
   }
-  if ((pipeline?.undecidedCount || 0) > 0 && (pipeline?.reviewed || 0) >= (pipeline?.applicants || 0)) {
+  if ((pipeline?.undecidedCount || 0) > 0 && (pipeline?.reviewed || 0) >= (pipeline?.applicants || 0) && (!pipeline.coverage || pipeline.coverage.resume.remaining + pipeline.coverage.frq.remaining === 0)) {
     return {
       eyebrow: "Decisions ready",
       title: `${pipeline.undecidedCount} candidate${pipeline.undecidedCount === 1 ? "" : "s"} need a decision`,
@@ -72,7 +74,7 @@ function getDashboardFocus({ context, pipeline, actionItems, isInterview }) {
       path: "/scoreboard",
     };
   }
-  if ((pipeline?.awaitingReviews || 0) > 0) {
+  if ((pipeline?.awaitingReviews || 0) > 0 || (pipeline?.resumeReviewsRemaining || 0) + (pipeline?.frqReviewsRemaining || 0) > 0) {
     const resumeLeft = pipeline.resumeReviewsRemaining || 0;
     const frqLeft = pipeline.frqReviewsRemaining || 0;
     return {
@@ -82,7 +84,7 @@ function getDashboardFocus({ context, pipeline, actionItems, isInterview }) {
         : `${formatReviewCountPair(resumeLeft, frqLeft)} left`,
       detail: isInterview
         ? `${pipeline.reviewed || 0} of ${pipeline.applicants || 0} evaluated.`
-        : `${pipeline.resumeReviewed || 0}/${pipeline.applicants || 0} candidates have a resume review; ${pipeline.frqReviewed || 0}/${pipeline.applicants || 0} have a free response review.`,
+        : "Complete the required reviews for each eligible applicant. Coverage goals are set in Cycle Management.",
       actionLabel: isInterview ? "Open interviews" : "Open review queue",
       path: isInterview ? "/interviews" : "/scoreboard",
     };
@@ -153,14 +155,13 @@ export default function AdminDashboard() {
   );
   const applicants = pipeline?.applicants || 0;
   const reviewPct = applicants ? Math.round(((pipeline?.reviewed || 0) / applicants) * 100) : 0;
-  const resumeReviewPct = applicants ? Math.round(((pipeline?.resumeReviewed || 0) / applicants) * 100) : 0;
-  const frqReviewPct = applicants ? Math.round(((pipeline?.frqReviewed || 0) / applicants) * 100) : 0;
 
   return (
     <div style={{ ...pageStyle, padding: 0 }}>
       <Topbar phaseLabel={phaseLabel} showActivePill={Boolean(context?.activeRound)} activeLabel="Admin" />
 
       <div style={{ padding: "24px 32px 40px", maxWidth: 1440, width: "100%", boxSizing: "border-box", margin: "0 auto" }}>
+        <PersonalFrqProgress />
         {error ? (
           <div style={{
             background: "rgba(226,75,74,0.08)",
@@ -218,16 +219,7 @@ export default function AdminDashboard() {
                     </div>
                   </>
                 ) : (
-                  <div style={{ margin: "7px 0 13px", display: "grid", gap: 5, minWidth: 190 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 14, fontSize: 12 }}>
-                      <span style={{ color: css.textGray }}>Resume</span>
-                      <strong style={{ color: css.greenDark }}>{pipeline?.resumeReviewed || 0}/{applicants} · {resumeReviewPct}%</strong>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 14, fontSize: 12 }}>
-                      <span style={{ color: css.textGray }}>Free response</span>
-                      <strong style={{ color: "#1D9E75" }}>{pipeline?.frqReviewed || 0}/{applicants} · {frqReviewPct}%</strong>
-                    </div>
-                  </div>
+                  <CoverageProgress coverage={pipeline?.coverage} />
                 )}
                 <button
                   type="button"

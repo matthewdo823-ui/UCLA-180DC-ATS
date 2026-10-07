@@ -59,6 +59,7 @@ The table below documents the order and intent; it is kept in sync with
 | 37 | `reapply_allow_frq_score_zero.sql` | Re-apply #24 automatically so FRQ grades of 0 are accepted where it was baselined but never run |
 | 38 | `add_review_claims.sql` | Reserve served resumes/FRQs per grader so each is graded once before any is graded twice |
 | 39 | `add_review_claim_renewal.sql` | `renew_review_claim()` heartbeat so active graders keep their claim on a short lease |
+| 40 | `add_cycle_grading_goals.sql` | Per-cycle resume/FRQ grader workload and reporting-only coverage goals |
 
 ## First-time setup on a new database
 

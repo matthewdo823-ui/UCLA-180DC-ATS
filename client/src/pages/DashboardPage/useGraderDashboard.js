@@ -15,6 +15,9 @@ export default function useGraderDashboard(enabled = true) {
     },
     enabled,
     staleTime: STALE.dashboard,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: 30000,
   });
 
   return {

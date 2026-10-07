@@ -28,6 +28,11 @@ const {
   formatRoundPhase,
   getUnclosedPhasesForQuery,
 } = require("../utils/roundPhases");
+const {
+  legacyGoalDefaults,
+  resolveCycleGradingGoals,
+  parseCycleGradingGoalUpdates,
+} = require("../utils/gradingGoals");
 
 const CYCLE_STATUSES = new Set(["draft", "active", "archived"]);
 
@@ -81,6 +86,7 @@ function mapCycle(row, extras = {}) {
     interestMultiplierSteps: Array.isArray(row.interest_multiplier_steps)
       ? row.interest_multiplier_steps
       : DEFAULT_MULTIPLIER_STEPS,
+    ...resolveCycleGradingGoals(row),
     ...extras,
   };
 }
@@ -284,10 +290,17 @@ exports.createCycle = async (req, res) => {
 
   try {
     const slug = await ensureUniqueSlug(slugify(name));
+    const defaultGoals = legacyGoalDefaults();
 
     const { data: cycle, error: cycleError } = await supabase
       .from("cycles")
-      .insert({ name, slug, status: "draft" })
+      .insert({
+        name,
+        slug,
+        status: "draft",
+        resume_grader_goal: defaultGoals.resume,
+        frq_grader_goal: defaultGoals.frq,
+      })
       .select("*")
       .single();
 
@@ -389,6 +402,12 @@ exports.patchCycle = async (req, res) => {
     }
     updates.interest_multiplier_steps = req.body.interestMultiplierSteps;
   }
+
+  const gradingGoalResult = parseCycleGradingGoalUpdates(req.body);
+  if (gradingGoalResult.error) {
+    return res.status(400).json({ error: gradingGoalResult.error });
+  }
+  Object.assign(updates, gradingGoalResult.updates);
 
   if (!Object.keys(updates).length) {
     return res.status(400).json({ error: "No valid fields to update" });

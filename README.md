@@ -75,8 +75,8 @@ cp server/.env.example server/.env
 | `DOC_SYNC_IDLE_POLL_MS` | No | Worker sleep when the queue is empty (default `30000`) |
 | `DOC_SYNC_LEASE_SECONDS` | No | Claim lease before a stalled row is reclaimed (default `300`) |
 | `DOC_SYNC_MAX_ATTEMPTS` | No | Attempts before a document is marked `failed` (default `5`) |
-| `GRADER_REVIEW_GOAL` | No | Resume-review target per grader (default `30`) |
-| `FRQ_REVIEW_GOAL` | No | FRQ-review target (defaults to `GRADER_REVIEW_GOAL`) |
+| `GRADER_REVIEW_GOAL` | No | Legacy resume-review default for cycles without a saved Cycle Management goal (default `30`) |
+| `FRQ_REVIEW_GOAL` | No | Legacy FRQ-review default for cycles without a saved Cycle Management goal (defaults to `GRADER_REVIEW_GOAL`) |
 | `PASSWORD_RESET_URL` | No | Frontend reset route (default `http://localhost:5173/reset-password`) |
 | `GEMINI_API_KEY` | For AI summaries | Enables candidate summaries; omit to hide them |
 | Gmail (advance emails) | Optional | See [server/docs/gmail-setup.md](server/docs/gmail-setup.md) — OAuth for personal Gmail or Workspace delegation |

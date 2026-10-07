@@ -86,16 +86,11 @@ const {
     applyCompositeScoringToCandidates,
     appendFrqMetric,
 } = require('../services/frqScoringService');
+const {
+    resolveCycleGradingGoals,
+} = require('../utils/gradingGoals');
 const { normalizeRequiredFrqNotes } = require('../utils/frqReview');
 const { claimNextReview, renewReviewClaim, releaseReviewClaim } = require('../services/reviewClaimService');
-const configuredGraderReviewGoal = Number(process.env.GRADER_REVIEW_GOAL);
-const GRADER_REVIEW_GOAL = Number.isFinite(configuredGraderReviewGoal) && configuredGraderReviewGoal > 0
-    ? configuredGraderReviewGoal
-    : 30;
-const configuredFrqReviewGoal = Number(process.env.FRQ_REVIEW_GOAL);
-const FRQ_REVIEW_GOAL = Number.isFinite(configuredFrqReviewGoal) && configuredFrqReviewGoal > 0
-    ? configuredFrqReviewGoal
-    : GRADER_REVIEW_GOAL;
 const VALID_REVIEW_DECISIONS = new Set(["pass", "flag", "reject"]);
 const MIN_SIGNAL_NOTE_LENGTH = 20;
 
@@ -751,10 +746,16 @@ exports.listMyReviews = async (req, res) => {
         return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const activeCycleId = await getActiveCycleId();
-    if (!activeCycleId) {
-        return res.json({ reviews: [], count: 0, expectedReviews: GRADER_REVIEW_GOAL });
+    const activeCycle = await getActiveCycleRow();
+    if (!activeCycle) {
+        return res.json({
+            reviews: [],
+            count: 0,
+            expectedReviews: req.user.role === 'member' ? resolveCycleGradingGoals(null).resumeGraderGoal : 0,
+        });
     }
+    const activeCycleId = activeCycle.id;
+    const resumeGraderGoal = resolveCycleGradingGoals(activeCycle).resumeGraderGoal;
 
     const resumeRound = await getResumeScreenRoundForCycle(activeCycleId);
     const rubricConfig = resumeRound?.rubric_config || null;
@@ -789,7 +790,7 @@ exports.listMyReviews = async (req, res) => {
     return res.json({
         reviews,
         count: reviews.length,
-        expectedReviews: GRADER_REVIEW_GOAL,
+        expectedReviews: req.user.role === 'member' ? resumeGraderGoal : 0,
     });
 };
 
@@ -3368,6 +3369,7 @@ exports.getGraderScoreboard = async (req, res) => {
     try {
         const activeCycle = await getActiveCycleRow();
         const activeCycleId = activeCycle?.id || null;
+        const resumeGraderGoal = resolveCycleGradingGoals(activeCycle).resumeGraderGoal;
         const resumeRound = activeCycleId
             ? await getResumeScreenRoundForCycle(activeCycleId)
             : null;
@@ -3492,8 +3494,8 @@ exports.getGraderScoreboard = async (req, res) => {
                 createdAt: grader.createdAt,
                 lastLogin: grader.lastLogin,
                 reviewCount: grader.reviewCount,
-                expectedReviews: GRADER_REVIEW_GOAL,
-                progressScore: Math.min(100, Math.round((grader.reviewCount / GRADER_REVIEW_GOAL) * 100)),
+                expectedReviews: grader.role === 'member' ? resumeGraderGoal : 0,
+                progressScore: grader.role === 'member' ? Math.min(100, Math.round((grader.reviewCount / resumeGraderGoal) * 100)) : 0,
                 averageScore: averageScore === null ? null : Number(averageScore.toFixed(1)),
                 averageNormalizedScore: averageNormalizedScore === null
                     ? null
@@ -3526,7 +3528,7 @@ exports.getGraderScoreboard = async (req, res) => {
                 activeGraders,
                 totalReviews,
                 avgReviews: graders.length ? Number((totalReviews / graders.length).toFixed(1)) : 0,
-                expectedReviews: GRADER_REVIEW_GOAL,
+                expectedReviews: resumeGraderGoal,
             },
             graders,
         });
@@ -3540,6 +3542,7 @@ exports.getFrqGraderScoreboard = async (req, res) => {
     try {
         const activeCycle = await getActiveCycleRow();
         const activeCycleId = activeCycle?.id || null;
+        const frqGraderGoal = resolveCycleGradingGoals(activeCycle).frqGraderGoal;
 
         const { data: users, error: userError } = await supabase
             .from('users')
@@ -3636,8 +3639,8 @@ exports.getFrqGraderScoreboard = async (req, res) => {
                 createdAt: grader.createdAt,
                 lastLogin: grader.lastLogin,
                 reviewCount: grader.reviewCount,
-                expectedReviews: FRQ_REVIEW_GOAL,
-                progressScore: Math.min(100, Math.round((grader.reviewCount / FRQ_REVIEW_GOAL) * 100)),
+                expectedReviews: frqGraderGoal,
+                progressScore: Math.min(100, Math.round((grader.reviewCount / frqGraderGoal) * 100)),
                 averageScore: averageScore === null ? null : Number(averageScore.toFixed(1)),
                 averageNormalizedScore: averageNormalizedScore === null
                     ? null
@@ -3670,7 +3673,7 @@ exports.getFrqGraderScoreboard = async (req, res) => {
                 activeGraders,
                 totalReviews,
                 avgReviews: graders.length ? Number((totalReviews / graders.length).toFixed(1)) : 0,
-                expectedReviews: FRQ_REVIEW_GOAL,
+                expectedReviews: frqGraderGoal,
             },
             graders,
         });
