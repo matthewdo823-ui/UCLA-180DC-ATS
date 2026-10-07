@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import GradingModeCards from "./GradingModeCards";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
@@ -368,10 +367,6 @@ export default function GraderScoreboardPage() {
     enabled: !cycleLoading && !coffeeChatActive,
     staleTime: STALE.dashboard,
   });
-  const totals = {
-    [mode]: graderQuery.error ? null : graderQuery.data?.stats?.totalReviews,
-    [otherMode.id]: otherQuery.error ? null : otherQuery.data?.stats?.totalReviews,
-  };
   const otherGraders = new Map((otherQuery.data?.graders || []).map(grader => [String(grader.id), grader.reviewCount]));
   function countFor(grader, gradingMode) {
     if (gradingMode === mode) return grader.reviewCount;
@@ -490,7 +485,12 @@ export default function GraderScoreboardPage() {
         </div>
       </div>
 
-      <GradingModeCards modes={availableModes} activeMode={mode} totals={totals} onChange={handleModeChange} />
+      <nav aria-label="Grading scoreboard" style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {availableModes.map(item => <button key={item.id} type="button" aria-pressed={item.id === mode} onClick={() => handleModeChange(item.id)}
+          style={{ padding: "10px 16px", borderRadius: 8, border: `1px solid ${item.id === mode ? css.greenDark : css.borderLight}`, background: item.id === mode ? css.greenDark : css.cardWhite, color: item.id === mode ? "var(--color-on-primary)" : css.textDark, font: "inherit", fontWeight: 700, cursor: "pointer" }}>
+          {item.label}
+        </button>)}
+      </nav>
       {!coffeeChatActive && otherQuery.error && <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%" }}><ErrorBanner error={otherQuery.error} onRetry={() => otherQuery.refetch()} /></div>}
       <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", position: "relative" }}>
         <svg
