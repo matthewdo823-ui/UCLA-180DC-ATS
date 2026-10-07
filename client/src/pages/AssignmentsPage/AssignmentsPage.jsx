@@ -15,6 +15,7 @@ import CandidateProfileButton from "../../components/CandidateProfileButton/Cand
 import { formatResponseError } from "../../utils/errors";
 import { pageTitleStyle } from "../../theme/typography";
 import { sortCandidates } from "./candidateSort";
+import { toggleCandidateFilter } from "./candidateFilters";
 
 const CANDIDATE_FILTERS = [
   { value: "all", label: "All" },
@@ -327,7 +328,8 @@ export default function AssignmentsPage() {
                     <button
                       key={filter.value}
                       type="button"
-                      onClick={() => setCandidateFilter(filter.value)}
+                      aria-pressed={candidateFilter === filter.value}
+                      onClick={() => setCandidateFilter(current => toggleCandidateFilter(current, filter.value))}
                       style={chipStyle(candidateFilter === filter.value)}
                     >
                       {filter.label}
