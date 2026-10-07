@@ -16,6 +16,7 @@ test('coverage counts zero grades, excludes ineligible applicants, and caps each
   assert.equal(coverage.frq.completed, 1);
   assert.equal(coverage.frq.total, 6);
   assert.equal(coverage.frq.remaining, 5);
+  assert.equal(coverage.fullyReviewedApplicants, 0);
   assert.equal(summarizeReviewCoverage([], [], [], goals).resume.percent, 0);
   assert.equal(summarizeReviewCoverage(pool, resumes, frqs, { ...goals, resumeReviewsPerApplicant: 1 }).resume.total, 2);
 });

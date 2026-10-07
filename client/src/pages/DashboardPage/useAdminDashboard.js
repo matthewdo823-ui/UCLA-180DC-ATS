@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { withRoundCoverage } from './pipelineCoverage';
 import { useQuery } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
@@ -226,7 +227,7 @@ export default function useAdminDashboard(enabled = true) {
     // Defaulted inside the memo so a fresh `{}` on each render doesn't defeat it.
     const adminData = rawAdminData ?? {};
 
-    const pipeline = mapScoreboardToPipeline(scoreboardData, interviewData);
+    const pipeline = withRoundCoverage(mapScoreboardToPipeline(scoreboardData, interviewData), adminData.pipeline?.coverage);
     const graderSummary = isCoffeeChat
       ? (coffeeGraderData ? mapCoffeeChatGraderScoreboard(coffeeGraderData) : null)
       : (graderData ? mapGraderScoreboard(graderData, frqGraderData) : null);

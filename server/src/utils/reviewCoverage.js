@@ -2,6 +2,7 @@ const { hasReviewScoreValues } = require('./rubric');
 
 function summarizeReviewCoverage(pool, resumeReviews, frqReviews, goals) {
   const eligible = pool.filter(candidate => !candidate.screeningExclusionReason);
+  const completedSets = [];
   function summarize(reviews, perApplicant, valid) {
     const counts = new Map(eligible.map(candidate => [candidate.id, 0]));
     for (const review of reviews) {
@@ -10,6 +11,7 @@ function summarizeReviewCoverage(pool, resumeReviews, frqReviews, goals) {
       }
     }
     const values = [...counts.values()];
+    completedSets.push(new Set([...counts].filter(([, count]) => count >= perApplicant).map(([id]) => id)));
     const completed = values.reduce((sum, count) => sum + Math.min(count, perApplicant), 0);
     const total = eligible.length * perApplicant;
     return {
@@ -20,10 +22,12 @@ function summarizeReviewCoverage(pool, resumeReviews, frqReviews, goals) {
       fullyReviewedApplicants: values.filter(count => count >= perApplicant).length,
     };
   }
-  return {
+  const result = {
     resume: summarize(resumeReviews, goals.resumeReviewsPerApplicant, hasReviewScoreValues),
     frq: summarize(frqReviews, goals.frqReviewsPerApplicant, review => Number.isInteger(review.score) && review.score >= 0 && review.score <= 4),
   };
+  result.fullyReviewedApplicants = eligible.filter(candidate => completedSets.every(set => set.has(candidate.id))).length;
+  return result;
 }
 
 async function loadCoverageReviews(db, table, cycleId, roundId) {
