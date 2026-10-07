@@ -5,10 +5,14 @@ import { GradingGoalsPanel } from '../CycleManagementPage/CycleManagementPage';
 
 afterEach(cleanup);
 
-it('shows applicants times per-applicant goals separately from completed coverage', () => {
+it('shows two progress bars with counts and percentages, without explanatory copy', () => {
   const progress = { applicants: 394, perApplicant: 2, total: 788, completed: 353, percent: 45, fullyReviewedApplicants: 80 };
   render(<CoverageProgress coverage={{ resume: progress, frq: { ...progress, completed: 279, percent: 35 } }} />);
-  expect(screen.getAllByText('394 applicants × 2 reviews = 788 required')).toHaveLength(2);
+  expect(screen.getAllByRole('progressbar')).toHaveLength(2);
+  expect(screen.getByRole('progressbar', { name: 'Resume coverage' }).getAttribute('aria-valuenow')).toBe('45');
+  expect(screen.getByRole('progressbar', { name: 'Free response coverage' }).getAttribute('aria-valuenow')).toBe('35');
+  expect(screen.queryByText(/applicants ×/)).toBeNull();
+  expect(screen.queryByText(/Extra reviews/)).toBeNull();
   expect(screen.getByText('353/788 · 45%')).toBeTruthy();
   expect(screen.getByText('279/788 · 35%')).toBeTruthy();
 });
