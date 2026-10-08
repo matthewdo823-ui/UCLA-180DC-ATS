@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import { readJsonOrThrow, STALE } from "../../lib/queryClient";
-import { qk } from "../../lib/queryKeys";
+import { invalidateAfterCoffeeChatEvaluation, qk } from "../../lib/queryKeys";
 import { useActiveCycle } from "../../hooks/useActiveCycle";
 import { API } from "../../constants/config";
 import { coffeeRatingColors, css } from "../../theme/colors";
@@ -32,7 +32,7 @@ function makeCoffeeDraft(candidate) {
   };
 }
 
-function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave, onOpenProfile, showSave = true, autoSave = false, validationError = false, expectedRatingCount = null }) {
+export function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave, onOpenProfile, showSave = true, autoSave = false, validationError = false }) {
   const rating = draft?.rating || "";
   const notes = draft?.notes || "";
   const persistedRating = candidate.evaluation?.rating || "";
@@ -112,14 +112,13 @@ function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange, onSave
 
       <textarea value={notes} onChange={(event) => { onDraftChange({ ...draft, notes: event.target.value.slice(0, 1000) }); setSaved(false); }} onBlur={handleNotesBlur} rows={5} placeholder="Coffee Chat notes…" style={{ width: "100%", boxSizing: "border-box", padding: "12px 13px", borderRadius: 9, border: `1px solid ${validationError ? css.red : css.borderLight}`, resize: "vertical", fontFamily: "'DM Sans', sans-serif", fontSize: 13, lineHeight: 1.5 }} />
       {validationError ? <p role="alert" style={{ margin: "8px 0 0", color: css.red, fontSize: 11, fontWeight: 700 }}>Choose a rating before submitting this table.</p> : null}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 10 }}>
-        <span style={{ fontSize: 11, color: css.textGray }}>{candidate.coffeeChatEvaluationCount || 0}{Number.isFinite(expectedRatingCount) ? ` / ${expectedRatingCount}` : ""} rating{candidate.coffeeChatEvaluationCount === 1 ? "" : "s"} submitted</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, marginTop: 10, minHeight: 34 }}>
         {showSave ? <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {saved ? <span style={{ fontSize: 11, color: css.greenDark, fontWeight: 700 }}>Saved</span> : null}
+          {saved ? <span role="status" style={{ fontSize: 11, color: css.greenDark, fontWeight: 700 }}>Saved</span> : null}
           <button type="button" onClick={handleSave} disabled={busy || saving || (!rating && !persistedRating)} style={{ border: "none", borderRadius: 8, background: css.greenDark, color: "var(--color-on-primary)", padding: "9px 13px", fontSize: 12, fontWeight: 700, cursor: busy || saving || (!rating && !persistedRating) ? "not-allowed" : "pointer", opacity: busy || saving || (!rating && !persistedRating) ? 0.5 : 1 }}>
             {saving ? "Saving…" : !rating && persistedRating ? "Clear rating" : "Save rating"}
           </button>
-        </div> : <span style={{ fontSize: 11, color: saved ? css.greenDark : css.textGray, fontWeight: 600 }}>{saving ? "Saving…" : autoSave ? (saved ? "Saved" : "Saves automatically") : "Submits with table"}</span>}
+        </div> : saving || saved ? <span role="status" style={{ fontSize: 11, color: saved ? css.greenDark : css.textGray, fontWeight: 700 }}>{saving ? "Saving…" : "Saved"}</span> : null}
       </div>
     </article>
   );
@@ -319,12 +318,10 @@ export default function InterviewManagementPage() {
     return res.json().catch(() => ({}));
   }, [authedFetch]);
 
-  const refreshEvaluationData = useCallback(() => Promise.all([
-    queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() }),
-    queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() }),
-    queryClient.invalidateQueries({ queryKey: qk.coffeeChatGraderScoreboard() }),
-    queryClient.invalidateQueries({ queryKey: qk.assignments() }),
-  ]), [queryClient]);
+  const refreshEvaluationData = useCallback(
+    () => invalidateAfterCoffeeChatEvaluation(queryClient),
+    [queryClient]
+  );
 
   const saveEvaluation = useCallback(async (payload) => {
     const result = await persistEvaluation(payload);
@@ -607,7 +604,6 @@ export default function InterviewManagementPage() {
                             showSave={false}
                             autoSave={coffeeView === "scroll"}
                             validationError={invalidCandidateIds.has(candidate.id)}
-                            expectedRatingCount={Number.isFinite(data.context?.assignedMemberCount) ? data.context.assignedMemberCount : null}
                             onDraftChange={(draft) => updateCoffeeDraft(candidate.id, draft)}
                             onSave={saveEvaluation}
                             onOpenProfile={() => navigate(`/candidates/${candidate.resumeId}`, { state: { returnTo: `${location.pathname}${location.search}`, returnLabel: "Coffee Chat grading", resumeScreenRank: candidate.resumeScreenRank, coffeeChatScore: candidate.coffeeChatScore, coffeeChatEvaluationCount: candidate.coffeeChatEvaluationCount } })}
