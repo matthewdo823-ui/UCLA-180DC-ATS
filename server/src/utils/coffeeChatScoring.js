@@ -11,7 +11,12 @@ function isScoredCoffeeChatEvaluation(evaluation) {
   return expectedScore != null && Number(evaluation.weighted_score) === expectedScore;
 }
 
+function getScoreboardCoffeeChatEvaluations(evaluations = []) {
+  return evaluations.filter(isScoredCoffeeChatEvaluation);
+}
+
 module.exports = {
   COFFEE_CHAT_SCORES,
+  getScoreboardCoffeeChatEvaluations,
   isScoredCoffeeChatEvaluation,
 };

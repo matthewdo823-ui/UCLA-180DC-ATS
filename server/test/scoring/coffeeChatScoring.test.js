@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  getScoreboardCoffeeChatEvaluations,
   isScoredCoffeeChatEvaluation,
 } = require('../../src/utils/coffeeChatScoring');
 
@@ -21,4 +22,16 @@ test('notes and malformed rating rows are not scoreable', () => {
 
   assert.equal(isScoredCoffeeChatEvaluation(evaluations[0]), false);
   assert.equal(isScoredCoffeeChatEvaluation(evaluations[1]), false);
+});
+
+test('candidate scoreboard selection includes valid ratings without an assignment gate', () => {
+  const assigned = { id: 'assigned', evaluated_by: 11, rating: 'yes', weighted_score: 1 };
+  const unassigned = { id: 'unassigned', evaluated_by: 22, rating: 'strong_no', weighted_score: -2 };
+  const commentOnly = { id: 'comment', evaluated_by: 33, rating: null, weighted_score: null, notes: 'Helpful note' };
+  const mismatched = { id: 'mismatched', evaluated_by: 44, rating: 'strong_yes', weighted_score: 1 };
+
+  assert.deepEqual(
+    getScoreboardCoffeeChatEvaluations([assigned, unassigned, commentOnly, mismatched]),
+    [assigned, unassigned]
+  );
 });

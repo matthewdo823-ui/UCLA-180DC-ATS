@@ -47,7 +47,7 @@ const {
     summarizeIncompleteDeliberation,
 } = require('../utils/roundDecisions');
 const { ROUND_TYPES, getRoundByType, isInterviewRoundType, isResumeScreenType, normalizeRoundType } = require('../utils/rounds');
-const { isScoredCoffeeChatEvaluation } = require('../utils/coffeeChatScoring');
+const { getScoreboardCoffeeChatEvaluations, isScoredCoffeeChatEvaluation } = require('../utils/coffeeChatScoring');
 const {
     buildCandidateLinkLookups,
     resolveCandidateLink,
@@ -2255,8 +2255,7 @@ exports.getScoreboard = async (req, res) => {
         const assignedCoffeeMemberIds = new Set((coffeeMemberAssignmentError ? [] : coffeeMemberAssignments || []).map((row) => row.user_id));
         // Table assignments control rotation and expected coverage, but a valid
         // saved rating is still part of the candidate's scoreboard total.
-        const coffeeChatEvaluationRowsForScoring = (interviewEvaluationRows || [])
-            .filter(isScoredCoffeeChatEvaluation);
+        const coffeeChatEvaluationRowsForScoring = getScoreboardCoffeeChatEvaluations(interviewEvaluationRows || []);
         const coffeeChatEvaluationsByCandidate = {};
         (interviewEvaluationError ? [] : coffeeChatEvaluationRowsForScoring).forEach((row) => {
             if (!Number.isFinite(Number(row.weighted_score))) return;
