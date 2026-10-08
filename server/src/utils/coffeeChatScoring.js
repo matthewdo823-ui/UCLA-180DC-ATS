@@ -15,8 +15,18 @@ function getScoreboardCoffeeChatEvaluations(evaluations = []) {
   return evaluations.filter(isScoredCoffeeChatEvaluation);
 }
 
+function shouldIncludeCoffeeChatEvaluationInProfile(
+  evaluation,
+  { assignedMemberIds = new Set(), assignmentLookupFailed = false } = {}
+) {
+  return assignmentLookupFailed
+    || assignedMemberIds.has(evaluation?.evaluated_by)
+    || isScoredCoffeeChatEvaluation(evaluation);
+}
+
 module.exports = {
   COFFEE_CHAT_SCORES,
   getScoreboardCoffeeChatEvaluations,
   isScoredCoffeeChatEvaluation,
+  shouldIncludeCoffeeChatEvaluationInProfile,
 };

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const {
   getScoreboardCoffeeChatEvaluations,
   isScoredCoffeeChatEvaluation,
+  shouldIncludeCoffeeChatEvaluationInProfile,
 } = require('../../src/utils/coffeeChatScoring');
 
 test('a valid rating is scoreable without consulting table assignments', () => {
@@ -34,4 +35,26 @@ test('candidate scoreboard selection includes valid ratings without an assignmen
     getScoreboardCoffeeChatEvaluations([assigned, unassigned, commentOnly, mismatched]),
     [assigned, unassigned]
   );
+});
+
+test('candidate profile preserves assigned notes while adding valid unassigned ratings', () => {
+  const assignedMemberIds = new Set([11]);
+  const options = { assignedMemberIds };
+
+  assert.equal(shouldIncludeCoffeeChatEvaluationInProfile(
+    { evaluated_by: 11, rating: null, weighted_score: null, notes: 'Assigned note' },
+    options
+  ), true);
+  assert.equal(shouldIncludeCoffeeChatEvaluationInProfile(
+    { evaluated_by: 22, rating: 'yes', weighted_score: 1 },
+    options
+  ), true);
+  assert.equal(shouldIncludeCoffeeChatEvaluationInProfile(
+    { evaluated_by: 22, rating: null, weighted_score: null, notes: 'Unassigned note' },
+    options
+  ), false);
+  assert.equal(shouldIncludeCoffeeChatEvaluationInProfile(
+    { evaluated_by: 22, rating: null, weighted_score: null },
+    { assignedMemberIds, assignmentLookupFailed: true }
+  ), true);
 });

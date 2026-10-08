@@ -47,7 +47,10 @@ const {
     summarizeIncompleteDeliberation,
 } = require('../utils/roundDecisions');
 const { ROUND_TYPES, getRoundByType, isInterviewRoundType, isResumeScreenType, normalizeRoundType } = require('../utils/rounds');
-const { getScoreboardCoffeeChatEvaluations, isScoredCoffeeChatEvaluation } = require('../utils/coffeeChatScoring');
+const {
+    getScoreboardCoffeeChatEvaluations,
+    shouldIncludeCoffeeChatEvaluationInProfile,
+} = require('../utils/coffeeChatScoring');
 const {
     buildCandidateLinkLookups,
     resolveCandidateLink,
@@ -2699,10 +2702,13 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
 
     const roundById = new Map(interviewRounds.map((round) => [round.id, round]));
     const assignedCoffeeMemberIds = new Set((coffeeMemberAssignmentError ? [] : coffeeMemberAssignments || []).map((row) => row.user_id));
-    const interviewRowsForScoring = (interviewEvaluationError ? [] : interviewEvaluationRows || []).filter((row) => {
+    const interviewRowsForProfile = (interviewEvaluationError ? [] : interviewEvaluationRows || []).filter((row) => {
         const round = roundById.get(row.round_id);
         if (normalizeRoundType(round?.type) !== ROUND_TYPES.COFFEE_CHAT) return true;
-        return isScoredCoffeeChatEvaluation(row);
+        return shouldIncludeCoffeeChatEvaluationInProfile(row, {
+            assignedMemberIds: assignedCoffeeMemberIds,
+            assignmentLookupFailed: Boolean(coffeeMemberAssignmentError),
+        });
     });
 
     // Resume and FRQ grader identities come from the same users table, and the
@@ -2711,7 +2717,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     const graderIds = [
         ...(reviews || []).map((review) => review.graded_by),
         ...(frqRows || []).map((row) => row.graded_by),
-        ...interviewRowsForScoring.map((row) => row.evaluated_by),
+        ...interviewRowsForProfile.map((row) => row.evaluated_by),
     ];
     const [gradedByUserLookup, reviewOverrideLookup] = await Promise.all([
         getGradedByUserLookup(graderIds),
@@ -2796,7 +2802,7 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
     );
 
     const frqReviews = (frqRows || []).map((row) => mapFrqReviewRow(row, gradedByUserLookup));
-    const interviewEvaluations = interviewRowsForScoring.map((row) => ({
+    const interviewEvaluations = interviewRowsForProfile.map((row) => ({
         id: row.id,
         roundId: row.round_id,
         roundName: roundById.get(row.round_id)?.name || 'Interview round',
