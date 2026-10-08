@@ -30,6 +30,7 @@ import {
 } from "./decisionUtils";
 import { equalizeCandidateScores, recomputeEqualizedStats } from "./equalizeUtils";
 import { useBiasAdjustPreference } from "./useBiasAdjustPreference";
+import { useScoreboardViewPreference } from "./useScoreboardViewPreference";
 import AdvanceEmailModal from "./AdvanceEmailModal";
 import ReviewOverrideSection from "../../components/ReviewOverride/ReviewOverrideSection";
 import CandidateSignalActions, { CandidateSignalBadges } from "../../components/CandidateSignalActions/CandidateSignalActions";
@@ -669,8 +670,7 @@ export default function ScoreboardPage() {
   const queryClient = useQueryClient();
   const isAdmin = isAdminRole(user?.role);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
-  const [filters, setFilters] = useState(() => ({ ...defaultFilters }));
-  const [sortBy, setSortBy] = useState("performance_desc");
+  const [filters, setFilters, sortBy, setSortBy] = useScoreboardViewPreference(cycleId || "active");
   const [searchQuery, setSearchQuery] = useState("");
   const [deliberationMode, setDeliberationMode] = useState(false);
   const [equalizeActive, setEqualizeActive] = useBiasAdjustPreference();
