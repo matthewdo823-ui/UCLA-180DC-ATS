@@ -53,3 +53,15 @@ export function invalidateAfterReview(queryClient) {
   queryClient.invalidateQueries({ queryKey: qk.graderScoreboard() });
   queryClient.invalidateQueries({ queryKey: qk.frqGraderScoreboard() });
 }
+
+/** Everything made stale by saving or clearing a Coffee Chat rating. */
+export function invalidateAfterCoffeeChatEvaluation(queryClient) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() }),
+    queryClient.invalidateQueries({ queryKey: qk.scoreboardRoot() }),
+    queryClient.invalidateQueries({ queryKey: qk.candidateApplicationsRoot() }),
+    queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() }),
+    queryClient.invalidateQueries({ queryKey: qk.coffeeChatGraderScoreboard() }),
+    queryClient.invalidateQueries({ queryKey: qk.assignments() }),
+  ]);
+}

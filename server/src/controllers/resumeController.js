@@ -47,6 +47,7 @@ const {
     summarizeIncompleteDeliberation,
 } = require('../utils/roundDecisions');
 const { ROUND_TYPES, getRoundByType, isInterviewRoundType, isResumeScreenType, normalizeRoundType } = require('../utils/rounds');
+const { isScoredCoffeeChatEvaluation } = require('../utils/coffeeChatScoring');
 const {
     buildCandidateLinkLookups,
     resolveCandidateLink,
@@ -2252,9 +2253,10 @@ exports.getScoreboard = async (req, res) => {
         });
 
         const assignedCoffeeMemberIds = new Set((coffeeMemberAssignmentError ? [] : coffeeMemberAssignments || []).map((row) => row.user_id));
-        const coffeeChatEvaluationRowsForScoring = coffeeMemberAssignmentError
-            ? interviewEvaluationRows || []
-            : (interviewEvaluationRows || []).filter((row) => assignedCoffeeMemberIds.has(row.evaluated_by));
+        // Table assignments control rotation and expected coverage, but a valid
+        // saved rating is still part of the candidate's scoreboard total.
+        const coffeeChatEvaluationRowsForScoring = (interviewEvaluationRows || [])
+            .filter(isScoredCoffeeChatEvaluation);
         const coffeeChatEvaluationsByCandidate = {};
         (interviewEvaluationError ? [] : coffeeChatEvaluationRowsForScoring).forEach((row) => {
             if (!Number.isFinite(Number(row.weighted_score))) return;
@@ -2696,12 +2698,12 @@ async function fetchScoreboardApplicationPayload(resumeId, requestedCycleId = nu
         throw err;
     }
 
-    const assignedCoffeeMemberIds = new Set((coffeeMemberAssignmentError ? [] : coffeeMemberAssignments || []).map((row) => row.user_id));
     const roundById = new Map(interviewRounds.map((round) => [round.id, round]));
+    const assignedCoffeeMemberIds = new Set((coffeeMemberAssignmentError ? [] : coffeeMemberAssignments || []).map((row) => row.user_id));
     const interviewRowsForScoring = (interviewEvaluationError ? [] : interviewEvaluationRows || []).filter((row) => {
         const round = roundById.get(row.round_id);
         if (normalizeRoundType(round?.type) !== ROUND_TYPES.COFFEE_CHAT) return true;
-        return coffeeMemberAssignmentError || assignedCoffeeMemberIds.has(row.evaluated_by);
+        return isScoredCoffeeChatEvaluation(row);
     });
 
     // Resume and FRQ grader identities come from the same users table, and the
