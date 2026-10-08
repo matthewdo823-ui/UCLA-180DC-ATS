@@ -296,10 +296,11 @@ export default function ApplicationRoundsSection({ scoring, roundDecision }) {
             </div>
             {evaluations.length ? (
               <>
-                <p style={{ margin: "0 0 2px", fontSize: 13, color: css.textGray }}>
-                  {roundIndex === 0 ? `${formatScore(scoring.coffeeChatScore || 0)} points from ` : ""}{evaluations.length}
-                  {roundIndex === 0 && Number.isFinite(scoring.coffeeChatExpectedEvaluationCount) ? ` / ${scoring.coffeeChatExpectedEvaluationCount}` : ""} {evaluations.length === 1 ? "rating" : "ratings"}
-                </p>
+                {roundIndex !== 0 ? (
+                  <p style={{ margin: "0 0 2px", fontSize: 13, color: css.textGray }}>
+                    {evaluations.length} {evaluations.length === 1 ? "rating" : "ratings"}
+                  </p>
+                ) : null}
                 <div>
                   {evaluations.map((evaluation, index) => (
                     <InterviewEvaluationRow key={evaluation.id} evaluation={evaluation} isFirst={index === 0} round={roundGrade} />
