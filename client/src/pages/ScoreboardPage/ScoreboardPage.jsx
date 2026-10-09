@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
@@ -685,7 +686,10 @@ export default function ScoreboardPage() {
   const [focusedCandidateId, setFocusedCandidateId] = useState(location.state?.selectedCandidateId ?? null);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const adminMenuRef = useRef(null);
-  const rowRefs = useRef({});
+  // The list is window-scrolled, so the virtualizer needs the list's distance
+  // from the top of the document (its scrollMargin) to place rows correctly.
+  const listRef = useRef(null);
+  const [listOffset, setListOffset] = useState(0);
   const pendingDecisionIdsRef = useRef(new Set());
 
   const scoreboardKey = useMemo(() => qk.scoreboard(viewingRoundId, cycleId), [cycleId, viewingRoundId]);
@@ -808,11 +812,9 @@ export default function ScoreboardPage() {
     };
   }, [adminMenuOpen]);
 
-  useEffect(() => {
-    if (!focusedCandidateId) return;
-    const el = rowRefs.current[focusedCandidateId];
-    if (el) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [focusedCandidateId]);
+  // Keeping the focused candidate in view is handled by a virtualizer-aware
+  // effect declared after `rowVirtualizer` (a row may be unmounted when it is
+  // off-screen, so we scroll by index rather than by a cached DOM ref).
 
   const equalizedCandidates = useMemo(() => (
     equalizeCandidateScores(data.candidates ?? [], {
@@ -876,6 +878,48 @@ export default function ScoreboardPage() {
     const filtered = filterCandidates(candidates, effectiveFilters, searchQuery, scoreCutoffs);
     return [...filtered].sort((a, b) => compareCandidates(a, b, sortBy));
   }, [candidates, filters, searchQuery, sortBy, deliberationMode, isCoffeeChatRanking, scoreCutoffs]);
+
+  // Only the on-screen candidate rows are mounted; the rest of the cycle exists
+  // purely as reserved height. This is the Tier 2 render win — a 500-row
+  // scoreboard mounts ~15 rows instead of 500. Rows vary in height
+  // (deliberation padding, wrapping interest chips), so heights are measured
+  // dynamically via measureElement rather than assumed from estimateSize.
+  const rowVirtualizer = useWindowVirtualizer({
+    count: filteredCandidates.length,
+    estimateSize: () => 72,
+    overscan: 8,
+    scrollMargin: listOffset,
+    getItemKey: (index) => filteredCandidates[index]?.id ?? index,
+  });
+
+  // The list sits below a variable-height header (filter pills wrap, the
+  // deliberation progress bar appears and disappears), so re-measure its
+  // document offset whenever that layout can change, and on window resize.
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (!listRef.current) return;
+      const rect = listRef.current.getBoundingClientRect();
+      setListOffset(rect.top + window.scrollY);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [deliberationMode, isCoffeeChatRanking, loading, filteredCandidates.length]);
+
+  // Keep the focused candidate (arrow-key navigation, deep-linked selection) in
+  // view. An off-screen row is unmounted, so there is no DOM node to
+  // scrollIntoView — we scroll by index through the virtualizer instead.
+  useEffect(() => {
+    if (focusedCandidateId == null) return;
+    const index = filteredCandidates.findIndex(
+      (c) => String(c.id) === String(focusedCandidateId)
+    );
+    if (index < 0) return;
+    // "auto" only scrolls when the row is outside the viewport: arrow-key steps
+    // to an already-visible neighbor stay put, while a deep-linked candidate far
+    // off-screen is brought into view.
+    rowVirtualizer.scrollToIndex(index, { align: "auto" });
+  }, [focusedCandidateId, filteredCandidates, rowVirtualizer]);
 
   useEffect(() => {
     if (!isCoffeeChatRanking) return;
@@ -2008,7 +2052,11 @@ export default function ScoreboardPage() {
           <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>No candidates yet.</div>
         )}
 
-        {!loading && filteredCandidates.map((c, index) => {
+        {!loading && filteredCandidates.length > 0 && (
+        <div ref={listRef} style={{ position: "relative", width: "100%", height: `${rowVirtualizer.getTotalSize()}px` }}>
+        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+          const c = filteredCandidates[virtualRow.index];
+          const index = virtualRow.index;
           const decisionStatus = getCandidateDecisionStatus(c);
           const isHistoricalCut = viewingFinalizedRound && decisionStatus !== "advance";
           const displayDecisionStatus = isHistoricalCut ? "reject" : decisionStatus;
@@ -2026,8 +2074,9 @@ export default function ScoreboardPage() {
           <div
             key={c.id}
             data-candidate-id={c.id}
+            data-index={virtualRow.index}
             aria-current={isFocused ? "true" : undefined}
-            ref={el => { rowRefs.current[c.id] = el; }}
+            ref={rowVirtualizer.measureElement}
             onMouseEnter={() => prefetchCandidateApplication(c.id)}
             onFocusCapture={() => { setFocusedCandidateId(c.id); prefetchCandidateApplication(c.id); }}
             onClick={() => {
@@ -2043,6 +2092,12 @@ export default function ScoreboardPage() {
               outline: isFocused ? `1px solid ${t.border}` : "none",
               outlineOffset: -2,
               transition: "background 0.15s ease",
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              boxSizing: "border-box",
+              transform: `translateY(${virtualRow.start - rowVirtualizer.options.scrollMargin}px)`,
             }}
           >
             {deliberationMode ? (
@@ -2169,6 +2224,8 @@ export default function ScoreboardPage() {
           </div>
           );
         })}
+        </div>
+        )}
         </div>
         </div>
       </div>
