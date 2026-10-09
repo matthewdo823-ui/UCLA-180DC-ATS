@@ -25,7 +25,9 @@ export const qk = {
   graderScoreboard: () => ["grader-scoreboard"],
   frqGraderScoreboard: () => ["frq-grader-scoreboard"],
   coffeeChatGraderScoreboard: () => ["coffee-chat-grader-scoreboard"],
-  interviewCandidates: () => ["interviews", "candidates"],
+  interviewCandidates: (roundId = null, cycleId = null) => roundId || cycleId
+    ? ["interviews", "candidates", cycleId ?? "active-cycle", roundId ?? "active-round"]
+    : ["interviews", "candidates"],
   demographics: () => ["demographics"],
   users: () => ["users"],
 
@@ -55,9 +57,11 @@ export function invalidateAfterReview(queryClient) {
 }
 
 /** Everything made stale by saving or clearing a Coffee Chat rating. */
-export function invalidateAfterCoffeeChatEvaluation(queryClient) {
+export function invalidateAfterCoffeeChatEvaluation(queryClient, { includeInterviewCandidates = true } = {}) {
   return Promise.all([
-    queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() }),
+    ...(includeInterviewCandidates
+      ? [queryClient.invalidateQueries({ queryKey: qk.interviewCandidates() })]
+      : []),
     queryClient.invalidateQueries({ queryKey: qk.scoreboardRoot() }),
     queryClient.invalidateQueries({ queryKey: qk.candidateApplicationsRoot() }),
     queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() }),

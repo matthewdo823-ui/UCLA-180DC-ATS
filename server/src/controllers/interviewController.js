@@ -27,6 +27,7 @@ const {
 const { TABLE_PHASES } = require("../utils/roundPhases");
 const { isNoShowGroup } = require("../utils/interviewGroups");
 const { mapCoffeeChatGraderReview } = require("../utils/adminWorkflowViews");
+const { fetchAllRows } = require("../utils/supabasePagination");
 
 const VALID_DECISIONS = new Set(["pending", "pass", "fail", "hold"]);
 const COFFEE_CHAT_SCORES = Object.freeze({ strong_yes: 2, yes: 1, no: -1, strong_no: -2 });
@@ -78,13 +79,12 @@ async function loadPriorRoundGate(cycleId, activeRound) {
     return { priorRound, gateStarted: committeeGateStarted, eligibleCandidateIds };
   }
 
-  const { data: priorEvaluations, error } = await supabase
+  const priorEvaluations = await fetchAllRows(() => supabase
     .from("interview_evaluations")
     .select("candidate_id, decision")
     .eq("cycle_id", cycleId)
-    .eq("round_id", priorRound.id);
-
-  if (error) throw error;
+    .eq("round_id", priorRound.id)
+    .order("id", { ascending: true }));
 
   const gateStarted = (priorEvaluations || []).some(
     (row) => String(row.decision || "pending").trim().toLowerCase() !== "pending"
@@ -170,19 +170,21 @@ exports.listInterviewCandidates = async (req, res) => {
 
     if (reviewError) return respondWithServerError(res, reviewError, "listInterviewCandidates reviews");
 
-    const [evaluationResult, groupResult, memberGroupResult] = await Promise.all([
-      supabase.from("interview_evaluations").select("*").eq("round_id", ctx.round.id),
+    const [evaluations, groupResult, memberGroupResult] = await Promise.all([
+      fetchAllRows(() => supabase
+        .from("interview_evaluations")
+        .select("*")
+        .eq("round_id", ctx.round.id)
+        .order("id", { ascending: true })),
       supabase.from("interview_group_assignments").select("candidate_id, group_number").eq("round_id", ctx.round.id),
       supabase
         .from("interview_group_member_assignments")
         .select("user_id, group_number")
         .eq("round_id", ctx.round.id),
     ]);
-    const { data: evaluations, error: evalError } = evaluationResult;
     const { data: groupAssignments, error: groupError } = groupResult;
     const { data: memberGroups, error: memberGroupError } = memberGroupResult;
 
-    if (evalError) return respondWithServerError(res, evalError, "listInterviewCandidates evaluations");
     if (groupError && !isMissingSchemaError(groupError)) return respondWithServerError(res, groupError, "listInterviewCandidates groups");
     if (memberGroupError && !isMissingSchemaError(memberGroupError)) return respondWithServerError(res, memberGroupError, "listInterviewCandidates member group");
     const memberGroup = (memberGroupError ? [] : memberGroups || [])
@@ -348,6 +350,12 @@ exports.upsertInterviewEvaluation = async (req, res) => {
     if (ctx.error) {
       return res.status(ctx.status).json({ error: ctx.error });
     }
+    const requestedRoundId = String(req.body?.round_id || "").trim();
+    if (requestedRoundId && requestedRoundId !== ctx.round.id) {
+      return res.status(409).json({
+        error: `This page is showing a different round. Refresh before saving ${ctx.round.name}.`,
+      });
+    }
 
     const { data: candidate, error: candError } = await supabase
       .from("candidates")
@@ -409,7 +417,7 @@ exports.upsertInterviewEvaluation = async (req, res) => {
 
     if (error) {
       if (isMissingSchemaError(error)) {
-        return res.status(503).json({ error: "Coffee Chat scoring requires database migration #22." });
+        return res.status(503).json({ error: "Coffee Chat scoring requires database migration #26." });
       }
       return respondWithServerError(res, error, "upsertInterviewEvaluation upsert");
     }
@@ -417,6 +425,114 @@ exports.upsertInterviewEvaluation = async (req, res) => {
     return res.json({ evaluation: mapEvaluation(data) });
   } catch (err) {
     return respondWithServerError(res, err, "upsertInterviewEvaluation");
+  }
+};
+
+exports.upsertCoffeeChatTableEvaluations = async (req, res) => {
+  const requestedRoundId = String(req.body?.round_id || "").trim();
+  const submissions = Array.isArray(req.body?.evaluations) ? req.body.evaluations : null;
+  const evaluatedBy = req.user?.user_id;
+
+  if (!requestedRoundId) {
+    return res.status(400).json({ error: "round_id is required" });
+  }
+  if (!submissions?.length || submissions.length > 100) {
+    return res.status(400).json({ error: "evaluations must contain between 1 and 100 candidates" });
+  }
+
+  const normalized = submissions.map((submission) => ({
+    candidateId: String(submission?.candidate_id || "").trim(),
+    rating: String(submission?.rating || "").trim().toLowerCase(),
+    notes: typeof submission?.notes === "string" ? submission.notes.slice(0, 1000) : "",
+  }));
+  const candidateIds = normalized.map((submission) => submission.candidateId);
+
+  if (candidateIds.some((candidateId) => !candidateId)) {
+    return res.status(400).json({ error: "Every evaluation requires candidate_id" });
+  }
+  if (new Set(candidateIds).size !== candidateIds.length) {
+    return res.status(400).json({ error: "A table submission cannot contain the same candidate twice" });
+  }
+  if (normalized.some((submission) => !Object.prototype.hasOwnProperty.call(COFFEE_CHAT_SCORES, submission.rating))) {
+    return res.status(400).json({ error: "Every evaluation requires Strong Yes, Yes, No, or Strong No" });
+  }
+
+  try {
+    const ctx = await requireInterviewGradingPhase();
+    if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
+    if (requestedRoundId !== ctx.round.id) {
+      return res.status(409).json({
+        error: `This page is showing a different round. Refresh before saving ${ctx.round.name}.`,
+      });
+    }
+    if (normalizeRoundType(ctx.round.type) !== ROUND_TYPES.COFFEE_CHAT) {
+      return res.status(400).json({ error: "Table submissions are only available during Coffee Chats" });
+    }
+
+    const { data: candidates, error: candidateError } = await supabase
+      .from("candidates")
+      .select("id, cycle_id, year")
+      .eq("cycle_id", ctx.cycle.id)
+      .in("id", candidateIds);
+    if (candidateError) return respondWithServerError(res, candidateError, "upsertCoffeeChatTableEvaluations candidates");
+
+    const candidateById = new Map((candidates || []).map((candidate) => [candidate.id, candidate]));
+    const missingCandidateId = candidateIds.find((candidateId) => !candidateById.has(candidateId));
+    if (missingCandidateId) {
+      return res.status(400).json({ error: "Every submitted candidate must belong to the active cycle" });
+    }
+
+    const priorGate = await loadPriorRoundGate(ctx.cycle.id, ctx.round);
+    for (const candidateId of candidateIds) {
+      const exclusion = screeningAccessError(candidateById.get(candidateId));
+      if (exclusion) return res.status(exclusion.status).json({ error: exclusion.error });
+      if (!candidatePassesPriorRoundGate(candidateId, priorGate)) {
+        const priorLabel = priorGate.priorRound?.name || "the previous round";
+        return res.status(400).json({
+          error: `Only candidates who advanced from ${priorLabel} can be evaluated in this round.`,
+        });
+      }
+    }
+
+    const updatedAt = new Date().toISOString();
+    const rows = normalized.map((submission) => ({
+      candidate_id: submission.candidateId,
+      cycle_id: ctx.cycle.id,
+      round_id: ctx.round.id,
+      decision: "pending",
+      notes: submission.notes,
+      scheduled_at: null,
+      evaluated_by: evaluatedBy,
+      updated_at: updatedAt,
+      rating: submission.rating,
+      weighted_score: COFFEE_CHAT_SCORES[submission.rating],
+    }));
+
+    // A multi-row upsert is one database statement: either the whole table is
+    // accepted or none of it is, avoiding partially submitted table rotations.
+    const { data, error } = await supabase
+      .from("interview_evaluations")
+      .upsert(rows, { onConflict: "candidate_id,round_id,evaluated_by" })
+      .select("*");
+
+    if (error) {
+      if (isMissingSchemaError(error)) {
+        return res.status(503).json({ error: "Coffee Chat scoring requires database migration #26." });
+      }
+      return respondWithServerError(res, error, "upsertCoffeeChatTableEvaluations upsert");
+    }
+
+    const savedByCandidate = new Map((data || []).map((row) => [row.candidate_id, row]));
+    if (savedByCandidate.size !== rows.length || candidateIds.some((candidateId) => !savedByCandidate.has(candidateId))) {
+      return res.status(500).json({ error: "The database did not confirm every table evaluation" });
+    }
+
+    return res.json({
+      roundId: ctx.round.id,
+      evaluations: candidateIds.map((candidateId) => mapEvaluation(savedByCandidate.get(candidateId))),
+    });
+  } catch (err) {
+    return respondWithServerError(res, err, "upsertCoffeeChatTableEvaluations");
   }
 };
 
@@ -536,7 +652,7 @@ exports.assignInterviewGroups = async (req, res) => {
     return res.json({ groupCount, candidateCount: eligibleIds.length, groupSizes: sizes });
   } catch (err) {
     if (isMissingSchemaError(err)) {
-      return res.status(503).json({ error: "Coffee Chat scoring requires database migration #22." });
+      return res.status(503).json({ error: "Coffee Chat scoring requires database migration #26." });
     }
     return respondWithServerError(res, err, "assignInterviewGroups");
   }
@@ -549,14 +665,11 @@ exports.getInterviewStats = async (req, res) => {
       return res.json({ evaluated: 0, total: 0, pending: 0 });
     }
 
-    const { data: evaluations, error } = await supabase
+    const rows = await fetchAllRows(() => supabase
       .from("interview_evaluations")
       .select("*")
-      .eq("round_id", activeRound.id);
-
-    if (error) return respondWithServerError(res, error, "getInterviewStats");
-
-    const rows = evaluations || [];
+      .eq("round_id", activeRound.id)
+      .order("id", { ascending: true }));
     if (normalizeRoundType(activeRound.type) === ROUND_TYPES.COFFEE_CHAT) {
       const evaluatedCandidates = new Set(rows.filter((row) => COFFEE_CHAT_SCORES[row.rating] != null).map((row) => row.candidate_id));
       return res.json({ evaluated: evaluatedCandidates.size, totalRatings: rows.filter((row) => COFFEE_CHAT_SCORES[row.rating] != null).length, pending: 0 });
@@ -599,7 +712,7 @@ exports.setMyCoffeeChatStartingTable = async (req, res) => {
 
     if (error) {
       if (isMissingSchemaError(error)) {
-        return res.status(503).json({ error: "Starting-table selection requires database migration #23." });
+        return res.status(503).json({ error: "Starting-table selection requires database migration #27." });
       }
       throw error;
     }
@@ -630,7 +743,7 @@ exports.getCoffeeChatGraderScoreboard = async (req, res) => {
 
     if (memberAssignmentRes.error) {
       if (isMissingSchemaError(memberAssignmentRes.error)) {
-        return res.status(503).json({ error: "Coffee Chat grader progress requires participant assignment migration #23." });
+        return res.status(503).json({ error: "Coffee Chat grader progress requires participant assignment migration #27." });
       }
       throw memberAssignmentRes.error;
     }
@@ -643,7 +756,7 @@ exports.getCoffeeChatGraderScoreboard = async (req, res) => {
       .map((row) => row.candidate_id)
       .filter(Boolean))];
 
-    const [userRes, candidateRes, evaluationRes] = await Promise.all([
+    const [userRes, candidateRes, evaluations] = await Promise.all([
       memberIds.length
         ? supabase
           .from("users")
@@ -658,23 +771,23 @@ exports.getCoffeeChatGraderScoreboard = async (req, res) => {
           .in("id", candidateIds)
         : { data: [], error: null },
       memberIds.length
-        ? supabase
+        ? fetchAllRows(() => supabase
           .from("interview_evaluations")
           .select("id, candidate_id, evaluated_by, rating, weighted_score, notes, submitted_at, updated_at")
           .eq("round_id", ctx.round.id)
           .in("evaluated_by", memberIds)
           .not("rating", "is", null)
-        : { data: [], error: null },
+          .order("id", { ascending: true }))
+        : [],
     ]);
 
     if (userRes.error) throw userRes.error;
     if (candidateRes.error) throw candidateRes.error;
-    if (evaluationRes.error) throw evaluationRes.error;
 
     const assignmentByUser = Object.fromEntries(memberAssignments.map((row) => [row.user_id, row]));
     const candidateById = Object.fromEntries((candidateRes.data || []).map((candidate) => [candidate.id, candidate]));
     const evaluationsByUser = {};
-    (evaluationRes.data || []).forEach((evaluation) => {
+    (evaluations || []).forEach((evaluation) => {
       if (!evaluationsByUser[evaluation.evaluated_by]) evaluationsByUser[evaluation.evaluated_by] = [];
       evaluationsByUser[evaluation.evaluated_by].push(evaluation);
     });

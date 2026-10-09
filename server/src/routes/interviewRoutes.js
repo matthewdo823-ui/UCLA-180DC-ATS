@@ -10,6 +10,7 @@ router.get("/interviews/stats", interviewController.getInterviewStats);
 router.get("/coffee-chat-grader-scoreboard", requireRoles("admin"), interviewController.getCoffeeChatGraderScoreboard);
 router.post("/interviews/groups", requireRoles("admin"), interviewController.assignInterviewGroups);
 router.put("/interviews/coffee-chat/starting-table", interviewController.setMyCoffeeChatStartingTable);
+router.post("/interviews/coffee-chat/table-evaluations", interviewController.upsertCoffeeChatTableEvaluations);
 router.post("/interviews/evaluations", interviewController.upsertInterviewEvaluation);
 
 module.exports = router;
