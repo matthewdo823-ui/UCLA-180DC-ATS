@@ -4,10 +4,13 @@ import { getInitials, hasNumericScore } from "../../utils/format";
 import { formatRoundKind } from "../../constants/rounds";
 import { passesDecisionFilter } from "./decisionUtils";
 import { getResumeReviewCount } from "../../utils/reviewCounts";
+import { compareDeliberationVotes } from "./deliberationVoteUtils";
 
 export const defaultFilters = { major: "all", year: "all", reviews: "all", scoreBand: "all", decision: "all", signals: "all" };
 export const SORT_TABS = [
   { id: "performance_desc", label: "Score · high to low" }, { id: "performance_asc", label: "Score · low to high" },
+  { id: "vote_desc", label: "Vote net · high to low", deliberationOnly: true },
+  { id: "vote_asc", label: "Vote net · low to high", deliberationOnly: true },
   { id: "referrals_desc", label: "Referrals · most" }, { id: "last_review_desc", label: "Last grade · newest" },
   { id: "last_review_asc", label: "Last grade · oldest" }, { id: "name_asc", label: "Name · A–Z" },
   { id: "name_desc", label: "Name · Z–A" }, { id: "reviews_desc", label: "Resume reviews · most" },
@@ -100,6 +103,7 @@ export function compareCandidates(a, b, sortBy) {
   else if (sortBy === "created_desc") value = compareNullable(time(a.createdAt), time(b.createdAt), true);
   else if (sortBy === "created_asc") value = compareNullable(time(a.createdAt), time(b.createdAt), false);
   else if (sortBy === "referrals_desc") value = (b.referralCount || 0) - (a.referralCount || 0);
+  else if (sortBy === "vote_desc" || sortBy === "vote_asc") value = compareDeliberationVotes(a, b, sortBy === "vote_desc");
   else if (sortBy === "reviews_desc") value = getNumReviews(b) - getNumReviews(a);
   else if (sortBy === "reviews_asc") value = getNumReviews(a) - getNumReviews(b);
   else if (sortBy === "name_desc") value = name(b, a);

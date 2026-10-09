@@ -66,3 +66,22 @@ export function confirmsDeliberationVoteReload(scoreboard, resumeId, requestedRa
   const actualRating = candidate.deliberationVote?.myRating || "";
   return actualRating === (requestedRating || "");
 }
+
+function voteSortValue(candidate) {
+  const count = Number(candidate?.deliberationVote?.count);
+  const net = Number(candidate?.deliberationVote?.net);
+  if (!Number.isFinite(count) || count <= 0 || !Number.isFinite(net)) return null;
+  return { count, net };
+}
+
+export function compareDeliberationVotes(a, b, descending = true) {
+  const first = voteSortValue(a);
+  const second = voteSortValue(b);
+  if (!first && !second) return 0;
+  if (!first) return 1;
+  if (!second) return -1;
+  if (first.net !== second.net) {
+    return descending ? second.net - first.net : first.net - second.net;
+  }
+  return second.count - first.count;
+}
