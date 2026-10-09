@@ -59,3 +59,10 @@ export function patchScoreboardWithDeliberationVote(scoreboard, resumeId, vote) 
     )),
   };
 }
+
+export function confirmsDeliberationVoteReload(scoreboard, resumeId, requestedRating) {
+  const candidate = scoreboard?.candidates?.find((row) => String(row.id) === String(resumeId));
+  if (!candidate) return false;
+  const actualRating = candidate.deliberationVote?.myRating || "";
+  return actualRating === (requestedRating || "");
+}

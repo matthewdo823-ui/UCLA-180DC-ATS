@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   applyOptimisticDeliberationVote,
+  confirmsDeliberationVoteReload,
   patchScoreboardWithDeliberationVote,
 } from "../src/pages/ScoreboardPage/deliberationVoteUtils.js";
 
@@ -53,4 +54,18 @@ test("rejects an unknown optimistic vote instead of silently clearing it", () =>
     () => applyOptimisticDeliberationVote({ myRating: "yes" }, "maybe"),
     /Unknown deliberation vote/
   );
+});
+
+test("requires a fresh scoreboard read to contain the recast or cleared vote", () => {
+  const scoreboard = {
+    candidates: [
+      { id: "resume-1", deliberationVote: { myRating: "strong_yes" } },
+      { id: "resume-2", deliberationVote: { myRating: null } },
+    ],
+  };
+
+  assert.equal(confirmsDeliberationVoteReload(scoreboard, "resume-1", "strong_yes"), true);
+  assert.equal(confirmsDeliberationVoteReload(scoreboard, "resume-1", "yes"), false);
+  assert.equal(confirmsDeliberationVoteReload(scoreboard, "resume-2", ""), true);
+  assert.equal(confirmsDeliberationVoteReload(scoreboard, "missing", ""), false);
 });

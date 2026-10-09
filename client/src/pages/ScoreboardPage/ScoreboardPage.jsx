@@ -35,6 +35,7 @@ import { equalizeCandidateScores, recomputeEqualizedStats } from "./equalizeUtil
 import { useBiasAdjustPreference } from "./useBiasAdjustPreference";
 import {
   applyOptimisticDeliberationVote,
+  confirmsDeliberationVoteReload,
   patchScoreboardWithDeliberationVote,
 } from "./deliberationVoteUtils";
 import AdvanceEmailModal from "./AdvanceEmailModal";
@@ -207,9 +208,9 @@ function DeliberationVotePanel({ vote, canVote, votingAvailable, saving, onSelec
                 <button
                   key={option.id}
                   type="button"
-                  disabled={!canVote || saving}
+                  disabled={!canVote}
                   aria-pressed={selected}
-                  title={!canVote ? "Voting opens once this round reaches Deliberation" : selected ? `Clear ${option.label}` : option.label}
+                  title={!canVote ? "Voting opens once this round reaches Deliberation" : selected ? `Clear ${option.label}` : `Change vote to ${option.label}`}
                   onClick={() => onSelect(selected ? "" : option.id)}
                   style={{
                     display: "flex", justifyContent: "center", alignItems: "center", minHeight: 40,
@@ -218,8 +219,8 @@ function DeliberationVotePanel({ vote, canVote, votingAvailable, saving, onSelec
                     background: selected ? option.bg : "#FFF",
                     color: selected ? option.color : css.textGray,
                     fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
-                    cursor: !canVote || saving ? "not-allowed" : "pointer",
-                    opacity: !canVote || saving ? 0.6 : 1,
+                    cursor: !canVote ? "not-allowed" : "pointer",
+                    opacity: !canVote ? 0.6 : 1,
                   }}
                 >
                   {option.label}
@@ -227,6 +228,14 @@ function DeliberationVotePanel({ vote, canVote, votingAvailable, saving, onSelec
               );
             })}
           </div>
+
+          <p aria-live="polite" style={{ margin: "10px 0 12px", fontSize: 11, color: css.textGray }}>
+            {saving
+              ? "Saving your vote… You can change it again while this saves."
+              : myRating
+                ? "Saved automatically. Choose another option to recast, or click your selection to clear it."
+                : "Choose an option to vote. Your selection saves automatically."}
+          </p>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {DELIBERATION_VOTE_OPTIONS.map((option) => {
@@ -829,7 +838,7 @@ export default function ScoreboardPage() {
   const [deliberationMode, setDeliberationMode] = useState(false);
   const [equalizeActive, setEqualizeActive] = useBiasAdjustPreference();
   const [savingDecisionIds, setSavingDecisionIds] = useState(() => new Set());
-  const [votingCandidateId, setVotingCandidateId] = useState(null);
+  const [savingVoteIds, setSavingVoteIds] = useState(() => new Set());
   const [decisionError, setDecisionError] = useState("");
   const [decisionNotice, setDecisionNotice] = useState("");
   const [exportBusy, setExportBusy] = useState(false);
@@ -846,6 +855,8 @@ export default function ScoreboardPage() {
   const listRef = useRef(null);
   const [listOffset, setListOffset] = useState(0);
   const pendingDecisionIdsRef = useRef(new Set());
+  const voteSaveQueuesRef = useRef(new Map());
+  const latestOptimisticVotesRef = useRef(new Map());
 
   const scoreboardKey = useMemo(() => qk.scoreboard(viewingRoundId, cycleId), [cycleId, viewingRoundId]);
 
@@ -1103,7 +1114,7 @@ export default function ScoreboardPage() {
     ));
   }, [isCoffeeChatRanking]);
 
-  const loadDecisionVerificationSnapshot = useCallback(async () => {
+  const loadScoreboardVerificationSnapshot = useCallback(async () => {
     const params = new URLSearchParams();
     if (viewingRoundId) params.set("roundId", viewingRoundId);
     if (cycleId) params.set("cycleId", cycleId);
@@ -1112,7 +1123,7 @@ export default function ScoreboardPage() {
     if (!res.ok) {
       throw await formatResponseError(
         res,
-        "verifying the saved candidate decision",
+        "verifying the saved scoreboard update",
         "Check GET /scoreboard in server/src/routes/resumeRoutes.js"
       );
     }
@@ -1164,7 +1175,7 @@ export default function ScoreboardPage() {
         throw new Error("The server did not confirm the exact candidate, round, and decision that were submitted.");
       }
 
-      const snapshot = await loadDecisionVerificationSnapshot();
+      const snapshot = await loadScoreboardVerificationSnapshot();
       if (!confirmsDecisionReload(snapshot, expected)) {
         throw new Error("The saved decision could not be verified in a fresh scoreboard read.");
       }
@@ -1195,19 +1206,21 @@ export default function ScoreboardPage() {
         return next;
       });
     }
-  }, [activeRound?.id, authedFetch, canEditDeliberations, data.context?.cycle?.id, deliberationMode, fetchScoreboard, loadDecisionVerificationSnapshot, mergeWithCached, setData]);
+  }, [activeRound?.id, authedFetch, canEditDeliberations, data.context?.cycle?.id, deliberationMode, fetchScoreboard, loadScoreboardVerificationSnapshot, mergeWithCached, setData]);
 
-  const saveVote = useCallback(async (candidate, rating) => {
-    if (!canVote || pendingVoteIdsRef.current.has(candidate.id)) return;
+  const saveVote = useCallback((candidate, rating) => {
+    if (!canVote) return;
 
-    const previousVote = candidate.deliberationVote || null;
-    const optimisticVote = applyOptimisticDeliberationVote(previousVote, rating);
     const requestedRating = rating || "";
+    const previousOptimisticVote = latestOptimisticVotesRef.current.get(candidate.id)
+      ?? candidate.deliberationVote
+      ?? null;
+    const optimisticVote = applyOptimisticDeliberationVote(previousOptimisticVote, requestedRating);
+    latestOptimisticVotesRef.current.set(candidate.id, optimisticVote);
     pendingVoteIdsRef.current.add(candidate.id);
 
-    // Highlight the choice and update the tally immediately. The fresh GET below
-    // remains authoritative, while this makes the interaction independent of
-    // network and full-scoreboard reload latency.
+    // Every click updates immediately. Requests for the same candidate are then
+    // serialized so a slow earlier response can never overwrite a newer recast.
     setData(prev => patchScoreboardWithDeliberationVote(prev, candidate.id, optimisticVote));
     setSelectedCandidate(prev => (
       prev?.id === candidate.id
@@ -1219,10 +1232,11 @@ export default function ScoreboardPage() {
         ? { ...prev, deliberationVote: optimisticVote }
         : prev
     ));
-    setVotingCandidateId(candidate.id);
+    setSavingVoteIds(prev => new Set(prev).add(candidate.id));
     setDecisionError("");
 
-    try {
+    const previousSave = voteSaveQueuesRef.current.get(candidate.id) || Promise.resolve();
+    const currentSave = previousSave.catch(() => {}).then(async () => {
       const res = await authedFetch(`${API}/scoreboard/deliberation-votes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1245,20 +1259,48 @@ export default function ScoreboardPage() {
       if (acknowledgedRating !== requestedRating) {
         throw new Error("The server did not confirm the selected deliberation vote.");
       }
-      // Pull the fresh committee tally (net/breakdown/count) for everyone.
-      await fetchScoreboard({ silent: true });
-    } catch (err) {
-      setData(prev => patchScoreboardWithDeliberationVote(prev, candidate.id, previousVote));
-      setVoteCandidate(prev => (
-        prev?.id === candidate.id ? { ...prev, deliberationVote: previousVote } : prev
-      ));
-      setDecisionError(err);
-      await fetchScoreboard({ silent: true });
-    } finally {
+
+      // If another choice is already queued, let that final request perform the
+      // authoritative reload. This keeps rapid recasts responsive and ordered.
+      if (voteSaveQueuesRef.current.get(candidate.id) !== currentSave) return null;
+      const snapshot = await loadScoreboardVerificationSnapshot();
+      if (!confirmsDeliberationVoteReload(snapshot, candidate.id, requestedRating)) {
+        throw new Error("Your saved vote could not be verified in a fresh scoreboard read.");
+      }
+      return snapshot;
+    });
+
+    voteSaveQueuesRef.current.set(candidate.id, currentSave);
+    void currentSave.then((snapshot) => {
+      if (voteSaveQueuesRef.current.get(candidate.id) !== currentSave) return;
+      voteSaveQueuesRef.current.delete(candidate.id);
+      latestOptimisticVotesRef.current.delete(candidate.id);
       pendingVoteIdsRef.current.delete(candidate.id);
-      setVotingCandidateId(null);
-    }
-  }, [authedFetch, canVote, fetchScoreboard, setData]);
+      if (snapshot) setData(mergeWithCached(snapshot));
+      setSavingVoteIds(prev => {
+        const next = new Set(prev);
+        next.delete(candidate.id);
+        return next;
+      });
+    }).catch(async (err) => {
+      if (voteSaveQueuesRef.current.get(candidate.id) !== currentSave) return;
+      voteSaveQueuesRef.current.delete(candidate.id);
+      latestOptimisticVotesRef.current.delete(candidate.id);
+      pendingVoteIdsRef.current.delete(candidate.id);
+      setDecisionError(err);
+      setSavingVoteIds(prev => {
+        const next = new Set(prev);
+        next.delete(candidate.id);
+        return next;
+      });
+      try {
+        await fetchScoreboard({ silent: true });
+      } catch {
+        // Keep the original save/verification error visible. The normal live
+        // poll will reconcile the vote if this recovery refresh also fails.
+      }
+    });
+  }, [authedFetch, canVote, fetchScoreboard, loadScoreboardVerificationSnapshot, mergeWithCached, setData]);
 
   const automaticDecisionPlan = useMemo(() => {
     const advancePercent = Number(activeRound?.autoAdvancePercent) || 0;
@@ -1567,7 +1609,7 @@ export default function ScoreboardPage() {
   }
 
   function toggleDeliberationMode() {
-    if (viewingHistorical) return;
+    if (viewingHistorical || !isAdmin) return;
     setDeliberationMode(on => {
       if (on) {
         setFilters(f => ({ ...f, decision: "all" }));
@@ -2543,7 +2585,7 @@ export default function ScoreboardPage() {
           candidate={candidates.find(c => c.id === voteCandidate.id) ?? voteCandidate}
           canVote={canVote}
           votingAvailable={deliberationVotingAvailable}
-          saving={votingCandidateId === voteCandidate.id}
+          saving={savingVoteIds.has(voteCandidate.id)}
           onSelect={(rating) => saveVote(candidates.find(c => c.id === voteCandidate.id) ?? voteCandidate, rating)}
           onClose={() => setVoteCandidate(null)}
         />
