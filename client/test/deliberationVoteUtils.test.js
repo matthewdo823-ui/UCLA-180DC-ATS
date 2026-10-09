@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   applyOptimisticDeliberationVote,
+  compareDeliberationVotes,
   confirmsDeliberationVoteReload,
   patchScoreboardWithDeliberationVote,
 } from "../src/pages/ScoreboardPage/deliberationVoteUtils.js";
@@ -68,4 +69,17 @@ test("requires a fresh scoreboard read to contain the recast or cleared vote", (
   assert.equal(confirmsDeliberationVoteReload(scoreboard, "resume-1", "yes"), false);
   assert.equal(confirmsDeliberationVoteReload(scoreboard, "resume-2", ""), true);
   assert.equal(confirmsDeliberationVoteReload(scoreboard, "missing", ""), false);
+});
+
+test("sorts committee votes by net, then participation, with unvoted candidates last", () => {
+  const strongSupport = { deliberationVote: { net: 5, count: 3 } };
+  const weakerSupport = { deliberationVote: { net: 2, count: 4 } };
+  const sameNetMoreVotes = { deliberationVote: { net: 5, count: 6 } };
+  const noVotes = { deliberationVote: { net: 0, count: 0 } };
+
+  assert.ok(compareDeliberationVotes(strongSupport, weakerSupport, true) < 0);
+  assert.ok(compareDeliberationVotes(strongSupport, weakerSupport, false) > 0);
+  assert.ok(compareDeliberationVotes(sameNetMoreVotes, strongSupport, true) < 0);
+  assert.ok(compareDeliberationVotes(noVotes, weakerSupport, true) > 0);
+  assert.ok(compareDeliberationVotes(noVotes, weakerSupport, false) > 0);
 });

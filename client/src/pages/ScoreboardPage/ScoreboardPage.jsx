@@ -1032,6 +1032,12 @@ export default function ScoreboardPage() {
   // When the round itself is in Deliberation, expose voting from the default
   // scoreboard too; staff should not have to discover a second page-mode toggle.
   const showDeliberationVoting = (deliberationMode || canDeliberate) && !viewingHistorical;
+  const availableSortTabs = SORT_TABS.filter((tab) => !tab.deliberationOnly || showDeliberationVoting);
+  useEffect(() => {
+    if (!showDeliberationVoting && (sortBy === "vote_desc" || sortBy === "vote_asc")) {
+      setSortBy("performance_desc");
+    }
+  }, [showDeliberationVoting, sortBy]);
   const canCloseRound = data.context?.canCloseRound === true;
   const undecidedCount = data.context?.undecidedCount ?? 0;
   const advanceNotification = data.context?.notification;
@@ -2199,7 +2205,7 @@ export default function ScoreboardPage() {
         ) : null}
         <FilterField label="Sort" theme={t} fillRow={deliberationMode}>
           <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={filterSelectStyle}>
-            {SORT_TABS.map(tab => (
+            {availableSortTabs.map(tab => (
               <option key={tab.id} value={tab.id}>{tab.label}</option>
             ))}
           </select>
