@@ -77,6 +77,29 @@ export function patchScoreboardWithDecision(scoreboardData, candidateId, decisio
   };
 }
 
+export function confirmsDecisionSave(response, expected) {
+  if (!response || !expected) return false;
+  if (String(response.resumeId || "") !== String(expected.resumeId || "")) return false;
+  if (String(response.roundId || "") !== String(expected.roundId || "")) return false;
+  if (String(response.cycleId || "") !== String(expected.cycleId || "")) return false;
+  if (expected.candidateId && String(response.candidateId || "") !== String(expected.candidateId)) return false;
+  return normalizeDecisionStatus(response.decision?.status) === normalizeDecisionStatus(expected.status)
+    && String(response.decision?.notes || "") === String(expected.notes || "");
+}
+
+export function confirmsDecisionReload(scoreboardData, expected) {
+  if (!scoreboardData || !expected) return false;
+  if (String(scoreboardData.context?.cycle?.id || "") !== String(expected.cycleId || "")) return false;
+  if (String(scoreboardData.context?.round?.id || "") !== String(expected.roundId || "")) return false;
+  const candidate = (scoreboardData.candidates || []).find(
+    (row) => String(row.id) === String(expected.resumeId)
+  );
+  if (!candidate) return false;
+  if (expected.candidateId && String(candidate.candidateId || "") !== String(expected.candidateId)) return false;
+  return normalizeDecisionStatus(candidate.decision?.status) === normalizeDecisionStatus(expected.status)
+    && String(candidate.decision?.notes || "") === String(expected.notes || "");
+}
+
 /** Whether admin can record a committee decision for this row. */
 export function canRecordCommitteeDecision(candidate) {
   if (!candidate?.id || candidate.screeningExclusionReason) return false;
