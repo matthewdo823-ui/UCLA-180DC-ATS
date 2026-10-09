@@ -817,7 +817,7 @@ export default function ScoreboardPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const cycleId = searchParams.get("cycleId") || null;
-  const { user, isStaff } = useAuth();
+  const { user, isStaff, token } = useAuth();
   const authedFetch = useAuthedFetch();
   const queryClient = useQueryClient();
   const isAdmin = isAdminRole(user?.role);
@@ -881,10 +881,17 @@ export default function ScoreboardPage() {
 
   const scoreboardQuery = useQuery({
     ...scoreboardQueryOptions(authedFetch, { roundId: viewingRoundId, cycleId, mergeWithCached }),
+    // Never fire without a token. authedFetch omits the Authorization header when
+    // the token is gone, so an ungated request lands as "Missing bearer token" —
+    // and the deliberation poll below would keep re-sending it. When the token is
+    // cleared (e.g. a 401 triggers logout), stop sending and let ProtectedRoute
+    // redirect to /login instead.
+    enabled: Boolean(token),
     // Deliberation is live committee activity — everyone needs to see decisions
     // and votes as they land, even from the default scoreboard view.
     // A closed historical round can't change, so there's nothing to poll for.
     refetchInterval: (query) => {
+      if (!token) return false;
       const context = query.state.data?.context;
       if ((!deliberationMode && context?.canDeliberate !== true) || !isStaff) return false;
       if (context?.viewingHistorical === true) return false;
