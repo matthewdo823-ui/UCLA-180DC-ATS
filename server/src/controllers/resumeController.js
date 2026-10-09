@@ -2395,9 +2395,13 @@ exports.getScoreboard = async (req, res) => {
 exports.upsertRoundDecision = async (req, res) => {
     const candidateIdInput = String(req.body?.candidate_id || "").trim();
     const resumeIdInput = String(req.body?.resume_id || "").trim();
-    const decision = normalizeRoundDecision(req.body?.decision);
+    const decision = String(req.body?.decision || "").trim().toLowerCase();
     const notes = typeof req.body?.notes === "string" ? req.body.notes.slice(0, 1000) : "";
     const decidedBy = req.user?.user_id;
+
+    if (!["pending", "advance", "hold", "reject"].includes(decision)) {
+        return res.status(400).json({ error: "decision must be Pending, Advance, Hold, or Reject" });
+    }
 
     try {
         const activeCycle = await getActiveCycleRow();
@@ -2474,6 +2478,10 @@ exports.upsertRoundDecision = async (req, res) => {
         if (error) return respondWithServerError(res, error, "upsertRoundDecision upsert");
 
         return res.json({
+            candidateId,
+            resumeId: linkedResumeId,
+            cycleId: activeCycle.id,
+            roundId: activeRound.id,
             decision: mapRoundDecision(data, { provisional: isOpenPhase(getRoundPhase(activeRound)) }),
         });
     } catch (err) {

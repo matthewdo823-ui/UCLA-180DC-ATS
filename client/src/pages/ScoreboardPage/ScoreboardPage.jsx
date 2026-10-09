@@ -22,6 +22,8 @@ import { FRQ_METRIC, FRQ_MAX_SCORE } from "../../constants/frq";
 import {
   buildDecisionPayload,
   canRecordCommitteeDecision,
+  confirmsDecisionReload,
+  confirmsDecisionSave,
   DECISION_STYLE,
   exportCandidatesDecisionCsv,
   getCandidateDecisionStatus,
@@ -31,6 +33,10 @@ import {
 } from "./decisionUtils";
 import { equalizeCandidateScores, recomputeEqualizedStats } from "./equalizeUtils";
 import { useBiasAdjustPreference } from "./useBiasAdjustPreference";
+import {
+  applyOptimisticDeliberationVote,
+  patchScoreboardWithDeliberationVote,
+} from "./deliberationVoteUtils";
 import AdvanceEmailModal from "./AdvanceEmailModal";
 import ReviewOverrideSection from "../../components/ReviewOverride/ReviewOverrideSection";
 import CandidateSignalActions, { CandidateSignalBadges } from "../../components/CandidateSignalActions/CandidateSignalActions";
@@ -177,7 +183,7 @@ function DeliberationVotePanel({ vote, canVote, votingAvailable, saving, onSelec
   const netColor = net > 0 ? coffeeRatingColors.strong_yes : net < 0 ? coffeeRatingColors.strong_no : css.textGray;
 
   return (
-    <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "16px 18px", background: "#FAFBFA" }}>
+    <div style={{ padding: "18px", background: "#FAFBFA" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
         <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: css.textGray }}>
           Committee vote
@@ -238,6 +244,68 @@ function DeliberationVotePanel({ vote, canVote, votingAvailable, saving, onSelec
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function DeliberationVoteModal({ candidate, canVote, votingAvailable, saving, onSelect, onClose }) {
+  useEffect(() => {
+    function onKeyDown(event) {
+      if (event.key === "Escape") onClose();
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  if (!candidate) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Vote on ${candidate.name}`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 40,
+        background: "rgba(17, 24, 39, 0.58)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <div style={{ width: "min(420px, 100%)", overflow: "hidden", borderRadius: 14, border: `1px solid ${css.borderLight}`, background: "#FAFBFA", boxShadow: "0 24px 70px rgba(0,0,0,0.26)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "16px 18px", borderBottom: `1px solid ${css.borderLight}`, background: "#FFF" }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ margin: "0 0 3px", color: css.textGray, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              Cast your vote
+            </p>
+            <h2 style={{ margin: 0, color: css.textDark, fontFamily: sansFont, fontSize: 19, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {candidate.name}
+            </h2>
+          </div>
+          <button
+            type="button"
+            aria-label="Close voting popup"
+            onClick={onClose}
+            style={{ width: 32, height: 32, flexShrink: 0, borderRadius: "50%", border: `1px solid ${css.borderLight}`, background: "#FFF", color: css.textDark, cursor: "pointer", fontSize: 20, lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </div>
+        <DeliberationVotePanel
+          vote={candidate.deliberationVote}
+          canVote={canVote}
+          votingAvailable={votingAvailable}
+          saving={saving}
+          onSelect={onSelect}
+        />
+      </div>
     </div>
   );
 }
@@ -395,11 +463,6 @@ function ScorecardModal({
   maxPerCategory = 4,
   equalized = false,
   isAdmin = false,
-  showVoting = false,
-  canVote = false,
-  votingAvailable = true,
-  voteSaving = false,
-  onVote,
   onOverrideSaved,
 }) {
   const [reviewersOpen, setReviewersOpen] = useState(false);
@@ -555,16 +618,6 @@ function ScorecardModal({
               <ScoreTiles score={headlineScore} maxScore={100} />
             </div>
           </div>
-
-          {showVoting ? (
-            <DeliberationVotePanel
-              vote={candidate.deliberationVote}
-              canVote={canVote}
-              votingAvailable={votingAvailable}
-              saving={voteSaving}
-              onSelect={(rating) => onVote?.(rating)}
-            />
-          ) : null}
 
           <div style={{ padding: "14px 18px 4px" }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 700 }}>CATEGORY BREAKDOWN</p>
@@ -769,12 +822,13 @@ export default function ScoreboardPage() {
   const queryClient = useQueryClient();
   const isAdmin = isAdminRole(user?.role);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [voteCandidate, setVoteCandidate] = useState(null);
   const [filters, setFilters] = useState(() => ({ ...defaultFilters }));
   const [sortBy, setSortBy] = useState("performance_desc");
   const [searchQuery, setSearchQuery] = useState("");
   const [deliberationMode, setDeliberationMode] = useState(false);
   const [equalizeActive, setEqualizeActive] = useBiasAdjustPreference();
-  const [savingDecisionId, setSavingDecisionId] = useState(null);
+  const [savingDecisionIds, setSavingDecisionIds] = useState(() => new Set());
   const [votingCandidateId, setVotingCandidateId] = useState(null);
   const [decisionError, setDecisionError] = useState("");
   const [decisionNotice, setDecisionNotice] = useState("");
@@ -786,6 +840,7 @@ export default function ScoreboardPage() {
   const [focusedCandidateId, setFocusedCandidateId] = useState(location.state?.selectedCandidateId ?? null);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const adminMenuRef = useRef(null);
+  const pendingVoteIdsRef = useRef(new Set());
   // The list is window-scrolled, so the virtualizer needs the list's distance
   // from the top of the document (its scrollMargin) to place rows correctly.
   const listRef = useRef(null);
@@ -794,16 +849,21 @@ export default function ScoreboardPage() {
 
   const scoreboardKey = useMemo(() => qk.scoreboard(viewingRoundId, cycleId), [cycleId, viewingRoundId]);
 
-  // A background refresh can land while a decision is still saving. Without this,
-  // the server's not-yet-updated row would overwrite the optimistic one and the
-  // button would visibly snap back. Anything still in flight keeps its local value.
+  // A background refresh can land while a decision or vote is still saving.
+  // Preserve the optimistic fields until their own requests finish so controls
+  // never snap backward to the server's not-yet-updated row.
   const mergeWithCached = useCallback((json) => {
-    if (pendingDecisionIdsRef.current.size === 0) return json;
+    if (pendingDecisionIdsRef.current.size === 0 && pendingVoteIdsRef.current.size === 0) return json;
     const prev = queryClient.getQueryData(scoreboardKey);
+    const localById = new Map((prev?.candidates || []).map((candidate) => [candidate.id, candidate]));
     const mergedCandidates = (json.candidates || []).map(c => {
-      if (!pendingDecisionIdsRef.current.has(c.id)) return c;
-      const local = (prev?.candidates || []).find(row => row.id === c.id);
-      return local ? { ...c, decision: local.decision } : c;
+      const local = localById.get(c.id);
+      if (!local) return c;
+      return {
+        ...c,
+        ...(pendingDecisionIdsRef.current.has(c.id) ? { decision: local.decision } : {}),
+        ...(pendingVoteIdsRef.current.has(c.id) ? { deliberationVote: local.deliberationVote } : {}),
+      };
     });
     const counts = recomputeDecisionStats(mergedCandidates);
     return {
@@ -821,12 +881,13 @@ export default function ScoreboardPage() {
 
   const scoreboardQuery = useQuery({
     ...scoreboardQueryOptions(authedFetch, { roundId: viewingRoundId, cycleId, mergeWithCached }),
-    // Deliberation is a live, multi-admin activity — everyone needs to see
-    // decisions as they land. Outside that mode the normal staleTime applies.
+    // Deliberation is live committee activity — everyone needs to see decisions
+    // and votes as they land, even from the default scoreboard view.
     // A closed historical round can't change, so there's nothing to poll for.
     refetchInterval: (query) => {
-      if (!deliberationMode || !isStaff) return false;
-      if (query.state.data?.context?.viewingHistorical === true) return false;
+      const context = query.state.data?.context;
+      if ((!deliberationMode && context?.canDeliberate !== true) || !isStaff) return false;
+      if (context?.viewingHistorical === true) return false;
       return 5000;
     },
   });
@@ -950,6 +1011,9 @@ export default function ScoreboardPage() {
   // it shares that window with decisions but not the admin-only gate.
   const deliberationVotingAvailable = data.context?.deliberationVotingAvailable !== false;
   const canVote = isStaff && canDeliberate && !viewingHistorical && deliberationVotingAvailable;
+  // When the round itself is in Deliberation, expose voting from the default
+  // scoreboard too; staff should not have to discover a second page-mode toggle.
+  const showDeliberationVoting = (deliberationMode || canDeliberate) && !viewingHistorical;
   const canCloseRound = data.context?.canCloseRound === true;
   const undecidedCount = data.context?.undecidedCount ?? 0;
   const advanceNotification = data.context?.notification;
@@ -1032,16 +1096,41 @@ export default function ScoreboardPage() {
     ));
   }, [isCoffeeChatRanking]);
 
+  const loadDecisionVerificationSnapshot = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (viewingRoundId) params.set("roundId", viewingRoundId);
+    if (cycleId) params.set("cycleId", cycleId);
+    const query = params.size ? `?${params.toString()}` : "";
+    const res = await authedFetch(`${API}/scoreboard${query}`);
+    if (!res.ok) {
+      throw await formatResponseError(
+        res,
+        "verifying the saved candidate decision",
+        "Check GET /scoreboard in server/src/routes/resumeRoutes.js"
+      );
+    }
+    return res.json();
+  }, [authedFetch, cycleId, viewingRoundId]);
+
   const saveDecision = useCallback(async (candidate, decision) => {
-    if (!canEditDeliberations || !deliberationMode) return;
+    if (!canEditDeliberations || !deliberationMode || pendingDecisionIdsRef.current.has(candidate.id)) return;
 
     const previousDecision = candidate.decision;
-    const optimisticDecision = buildDecisionPayload(decision, candidate.decision?.notes || "");
+    const requestedNotes = String(candidate.decision?.notes || "").slice(0, 1000);
+    const optimisticDecision = buildDecisionPayload(decision, requestedNotes);
+    const expected = {
+      resumeId: candidate.id,
+      candidateId: candidate.candidateId || null,
+      cycleId: data.context?.cycle?.id,
+      roundId: activeRound?.id,
+      status: decision,
+      notes: requestedNotes,
+    };
 
     pendingDecisionIdsRef.current.add(candidate.id);
     setData(prev => patchScoreboardWithDecision(prev, candidate.id, optimisticDecision));
     setSelectedCandidate(prev => (prev?.id === candidate.id ? { ...prev, decision: optimisticDecision } : prev));
-    setSavingDecisionId(candidate.id);
+    setSavingDecisionIds(prev => new Set(prev).add(candidate.id));
     setDecisionError("");
     setDecisionNotice("");
 
@@ -1053,7 +1142,7 @@ export default function ScoreboardPage() {
           resume_id: candidate.id,
           candidate_id: candidate.candidateId || undefined,
           decision,
-          notes: candidate.decision?.notes || "",
+          notes: requestedNotes,
         }),
       });
       if (!res.ok) {
@@ -1063,30 +1152,64 @@ export default function ScoreboardPage() {
           "Check POST /scoreboard/decisions endpoint in server/src/routes/dashboardRoutes.js"
         );
       }
-      const { decision: savedDecision } = await res.json();
-      const confirmed = { ...savedDecision, provisional: true };
-      setData(prev => patchScoreboardWithDecision(prev, candidate.id, confirmed));
+      const body = await res.json();
+      if (!confirmsDecisionSave(body, expected)) {
+        throw new Error("The server did not confirm the exact candidate, round, and decision that were submitted.");
+      }
+
+      const snapshot = await loadDecisionVerificationSnapshot();
+      if (!confirmsDecisionReload(snapshot, expected)) {
+        throw new Error("The saved decision could not be verified in a fresh scoreboard read.");
+      }
+
+      pendingDecisionIdsRef.current.delete(candidate.id);
+      setData(mergeWithCached(snapshot));
+      const confirmed = snapshot.candidates.find(row => row.id === candidate.id)?.decision || body.decision;
       setSelectedCandidate(prev => (prev?.id === candidate.id ? { ...prev, decision: confirmed } : prev));
+      setDecisionNotice(`${candidate.name} is saved as ${DECISION_STYLE[decision]?.label || decision}.`);
     } catch (err) {
+      pendingDecisionIdsRef.current.delete(candidate.id);
       setData(prev => patchScoreboardWithDecision(prev, candidate.id, previousDecision || buildDecisionPayload("pending")));
       setSelectedCandidate(prev => (
         prev?.id === candidate.id ? { ...prev, decision: previousDecision || buildDecisionPayload("pending") } : prev
       ));
       setDecisionError(err);
+      try {
+        await fetchScoreboard({ silent: true });
+      } catch {
+        // Keep the original save/verification error visible. The next live poll
+        // will reconcile the scoreboard if this recovery refresh also fails.
+      }
     } finally {
       pendingDecisionIdsRef.current.delete(candidate.id);
-      setSavingDecisionId(null);
+      setSavingDecisionIds(prev => {
+        const next = new Set(prev);
+        next.delete(candidate.id);
+        return next;
+      });
     }
-  }, [authedFetch, canEditDeliberations, deliberationMode, setData]);
+  }, [activeRound?.id, authedFetch, canEditDeliberations, data.context?.cycle?.id, deliberationMode, fetchScoreboard, loadDecisionVerificationSnapshot, mergeWithCached, setData]);
 
   const saveVote = useCallback(async (candidate, rating) => {
-    if (!canVote) return;
+    if (!canVote || pendingVoteIdsRef.current.has(candidate.id)) return;
 
-    // Optimistically flip the voter's own pick so the button responds instantly;
-    // the shared tally is authoritative and re-read from the server below.
+    const previousVote = candidate.deliberationVote || null;
+    const optimisticVote = applyOptimisticDeliberationVote(previousVote, rating);
+    const requestedRating = rating || "";
+    pendingVoteIdsRef.current.add(candidate.id);
+
+    // Highlight the choice and update the tally immediately. The fresh GET below
+    // remains authoritative, while this makes the interaction independent of
+    // network and full-scoreboard reload latency.
+    setData(prev => patchScoreboardWithDeliberationVote(prev, candidate.id, optimisticVote));
     setSelectedCandidate(prev => (
       prev?.id === candidate.id
-        ? { ...prev, deliberationVote: { ...(prev.deliberationVote || {}), myRating: rating || null } }
+        ? { ...prev, deliberationVote: optimisticVote }
+        : prev
+    ));
+    setVoteCandidate(prev => (
+      prev?.id === candidate.id
+        ? { ...prev, deliberationVote: optimisticVote }
         : prev
     ));
     setVotingCandidateId(candidate.id);
@@ -1099,7 +1222,7 @@ export default function ScoreboardPage() {
         body: JSON.stringify({
           resume_id: candidate.id,
           candidate_id: candidate.candidateId || undefined,
-          rating,
+          rating: requestedRating,
           notes: "",
         }),
       });
@@ -1110,15 +1233,25 @@ export default function ScoreboardPage() {
           "Check POST /scoreboard/deliberation-votes endpoint in server/src/routes/resumeRoutes.js"
         );
       }
+      const body = await res.json();
+      const acknowledgedRating = body?.vote?.rating || "";
+      if (acknowledgedRating !== requestedRating) {
+        throw new Error("The server did not confirm the selected deliberation vote.");
+      }
       // Pull the fresh committee tally (net/breakdown/count) for everyone.
       await fetchScoreboard({ silent: true });
     } catch (err) {
+      setData(prev => patchScoreboardWithDeliberationVote(prev, candidate.id, previousVote));
+      setVoteCandidate(prev => (
+        prev?.id === candidate.id ? { ...prev, deliberationVote: previousVote } : prev
+      ));
       setDecisionError(err);
       await fetchScoreboard({ silent: true });
     } finally {
+      pendingVoteIdsRef.current.delete(candidate.id);
       setVotingCandidateId(null);
     }
-  }, [authedFetch, canVote, fetchScoreboard]);
+  }, [authedFetch, canVote, fetchScoreboard, setData]);
 
   const automaticDecisionPlan = useMemo(() => {
     const advancePercent = Number(activeRound?.autoAdvancePercent) || 0;
@@ -2207,7 +2340,7 @@ export default function ScoreboardPage() {
           const displayDecisionStatus = isHistoricalCut ? "reject" : decisionStatus;
           const decisionStyle = DECISION_STYLE[displayDecisionStatus];
           const isFocused = focusedCandidateId != null && String(focusedCandidateId) === String(c.id);
-          const rowSaving = savingDecisionId === c.id;
+          const rowSaving = savingDecisionIds.has(c.id);
           const headlineScore = getHeadlineScore(c);
           const rowBg = isFocused
             ? t.rowFocus
@@ -2355,15 +2488,23 @@ export default function ScoreboardPage() {
               />
               <button
                 type="button"
-                title="View candidate scorecard"
-                aria-label={`View scorecard for ${c.name}`}
+                title={showDeliberationVoting ? "Open scorecard and vote" : "View candidate scorecard"}
+                aria-label={showDeliberationVoting ? `Vote on ${c.name}` : `View scorecard for ${c.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedCandidate(c);
+                  if (showDeliberationVoting) {
+                    setVoteCandidate(c);
+                  } else {
+                    setSelectedCandidate(c);
+                  }
                 }}
                 style={rowIconBtnStyle(t, true)}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                {showDeliberationVoting ? (
+                  <span aria-hidden="true" style={{ fontSize: 16, lineHeight: 1 }}>🗳️</span>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                )}
               </button>
             </div>
           </div>
@@ -2384,14 +2525,20 @@ export default function ScoreboardPage() {
           maxPerCategory={maxPerCategory}
           equalized={equalizeActive}
           isAdmin={isAdmin}
-          showVoting={deliberationMode && !viewingHistorical}
-          canVote={canVote}
-          votingAvailable={deliberationVotingAvailable}
-          voteSaving={votingCandidateId === (candidates.find(c => c.id === selectedCandidate.id) ?? selectedCandidate)?.id}
-          onVote={(rating) => saveVote(candidates.find(c => c.id === selectedCandidate.id) ?? selectedCandidate, rating)}
           onOverrideSaved={() => fetchScoreboard({ silent: true })}
           onOpenProfile={() => openCandidateWorkspace(selectedCandidate)}
           onClose={() => setSelectedCandidate(null)}
+        />
+      )}
+
+      {voteCandidate && (
+        <DeliberationVoteModal
+          candidate={candidates.find(c => c.id === voteCandidate.id) ?? voteCandidate}
+          canVote={canVote}
+          votingAvailable={deliberationVotingAvailable}
+          saving={votingCandidateId === voteCandidate.id}
+          onSelect={(rating) => saveVote(candidates.find(c => c.id === voteCandidate.id) ?? voteCandidate, rating)}
+          onClose={() => setVoteCandidate(null)}
         />
       )}
 
