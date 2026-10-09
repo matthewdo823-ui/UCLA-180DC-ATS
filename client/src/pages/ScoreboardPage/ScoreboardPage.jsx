@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, useAuthedFetch } from "../../auth/AuthContext";
 import { API } from "../../constants/config";
 import { qk } from "../../lib/queryKeys";
 import { scoreboardQueryOptions } from "../../lib/scoreboardQuery";
 import { candidateProfileQueryOptions } from "../../lib/candidateApplicationQuery";
-import { css } from "../../theme/colors";
+import { css, coffeeRatingColors } from "../../theme/colors";
 import CandidateAvatar from "../../components/CandidateAvatar/CandidateAvatar";
 import CandidateProfileButton from "../../components/CandidateProfileButton/CandidateProfileButton";
 import Topbar from "../../components/Topbar/Topbar";
@@ -153,6 +154,90 @@ function DecisionButtons({ status, disabled, saving, onSelect, dark }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// Same scale as Coffee Chat grading, laid out worst → best left to right.
+const DELIBERATION_VOTE_OPTIONS = [
+  { id: "strong_no", label: "Strong no", color: coffeeRatingColors.strong_no, bg: "rgba(226,75,74,0.10)" },
+  { id: "no", label: "No", color: coffeeRatingColors.no, bg: "rgba(239,159,39,0.12)" },
+  { id: "yes", label: "Yes", color: coffeeRatingColors.yes, bg: "rgba(83,164,125,0.12)" },
+  { id: "strong_yes", label: "Strong yes", color: coffeeRatingColors.strong_yes, bg: "rgba(6,78,59,0.16)" },
+];
+
+// Open, live committee vote shown to everyone during deliberation. The voter's
+// own pick highlights; the tally underneath reflects the whole committee.
+function DeliberationVotePanel({ vote, canVote, votingAvailable, saving, onSelect }) {
+  const breakdown = vote?.breakdown || { strong_yes: 0, yes: 0, no: 0, strong_no: 0 };
+  const count = vote?.count || 0;
+  const net = vote?.net || 0;
+  const myRating = vote?.myRating || null;
+  const maxCount = Math.max(1, ...DELIBERATION_VOTE_OPTIONS.map((option) => breakdown[option.id] || 0));
+  const netColor = net > 0 ? coffeeRatingColors.strong_yes : net < 0 ? coffeeRatingColors.strong_no : css.textGray;
+
+  return (
+    <div style={{ borderTop: `1px solid ${css.borderLight}`, padding: "16px 18px", background: "#FAFBFA" }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: css.textGray }}>
+          Committee vote
+        </p>
+        <span style={{ fontSize: 12, color: css.textGray }}>
+          <strong style={{ color: netColor, fontSize: 14 }}>{net > 0 ? `+${net}` : net}</strong>
+          {" · "}{count} vote{count === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      {votingAvailable === false ? (
+        <p style={{ margin: 0, fontSize: 12, color: css.textGray }}>
+          Voting needs database migration #41 before it can open.
+        </p>
+      ) : (
+        <>
+          <div role="group" aria-label="Your deliberation vote" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6, marginBottom: 12 }}>
+            {DELIBERATION_VOTE_OPTIONS.map((option) => {
+              const selected = myRating === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  disabled={!canVote || saving}
+                  aria-pressed={selected}
+                  title={!canVote ? "Voting opens once this round reaches Deliberation" : selected ? `Clear ${option.label}` : option.label}
+                  onClick={() => onSelect(selected ? "" : option.id)}
+                  style={{
+                    display: "flex", justifyContent: "center", alignItems: "center", minHeight: 40,
+                    border: `1px solid ${selected ? option.color : css.borderLight}`,
+                    borderRadius: 8, padding: "9px 6px",
+                    background: selected ? option.bg : "#FFF",
+                    color: selected ? option.color : css.textGray,
+                    fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
+                    cursor: !canVote || saving ? "not-allowed" : "pointer",
+                    opacity: !canVote || saving ? 0.6 : 1,
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {DELIBERATION_VOTE_OPTIONS.map((option) => {
+              const optionCount = breakdown[option.id] || 0;
+              return (
+                <div key={option.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 72, flexShrink: 0, fontSize: 11, color: css.textGray }}>{option.label}</span>
+                  <div style={{ flex: 1, height: 10, borderRadius: 6, background: "#ECEEEC", overflow: "hidden" }}>
+                    <div style={{ width: "100%", height: "100%", borderRadius: 6, background: option.color, transformOrigin: "left", transform: `scaleX(${optionCount / maxCount})`, transition: "transform 0.2s ease" }} />
+                  </div>
+                  <span style={{ width: 18, flexShrink: 0, textAlign: "right", fontSize: 11, fontWeight: 700, color: css.greenDark }}>{optionCount}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -310,6 +395,11 @@ function ScorecardModal({
   maxPerCategory = 4,
   equalized = false,
   isAdmin = false,
+  showVoting = false,
+  canVote = false,
+  votingAvailable = true,
+  voteSaving = false,
+  onVote,
   onOverrideSaved,
 }) {
   const [reviewersOpen, setReviewersOpen] = useState(false);
@@ -465,6 +555,16 @@ function ScorecardModal({
               <ScoreTiles score={headlineScore} maxScore={100} />
             </div>
           </div>
+
+          {showVoting ? (
+            <DeliberationVotePanel
+              vote={candidate.deliberationVote}
+              canVote={canVote}
+              votingAvailable={votingAvailable}
+              saving={voteSaving}
+              onSelect={(rating) => onVote?.(rating)}
+            />
+          ) : null}
 
           <div style={{ padding: "14px 18px 4px" }}>
             <p style={{ fontSize: 10, color: css.textGray, letterSpacing: "0.06em", margin: "0 0 10px", fontWeight: 700 }}>CATEGORY BREAKDOWN</p>
@@ -675,6 +775,7 @@ export default function ScoreboardPage() {
   const [deliberationMode, setDeliberationMode] = useState(false);
   const [equalizeActive, setEqualizeActive] = useBiasAdjustPreference();
   const [savingDecisionId, setSavingDecisionId] = useState(null);
+  const [votingCandidateId, setVotingCandidateId] = useState(null);
   const [decisionError, setDecisionError] = useState("");
   const [decisionNotice, setDecisionNotice] = useState("");
   const [exportBusy, setExportBusy] = useState(false);
@@ -685,7 +786,10 @@ export default function ScoreboardPage() {
   const [focusedCandidateId, setFocusedCandidateId] = useState(location.state?.selectedCandidateId ?? null);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const adminMenuRef = useRef(null);
-  const rowRefs = useRef({});
+  // The list is window-scrolled, so the virtualizer needs the list's distance
+  // from the top of the document (its scrollMargin) to place rows correctly.
+  const listRef = useRef(null);
+  const [listOffset, setListOffset] = useState(0);
   const pendingDecisionIdsRef = useRef(new Set());
 
   const scoreboardKey = useMemo(() => qk.scoreboard(viewingRoundId, cycleId), [cycleId, viewingRoundId]);
@@ -808,11 +912,9 @@ export default function ScoreboardPage() {
     };
   }, [adminMenuOpen]);
 
-  useEffect(() => {
-    if (!focusedCandidateId) return;
-    const el = rowRefs.current[focusedCandidateId];
-    if (el) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [focusedCandidateId]);
+  // Keeping the focused candidate in view is handled by a virtualizer-aware
+  // effect declared after `rowVirtualizer` (a row may be unmounted when it is
+  // off-screen, so we scroll by index rather than by a cached DOM ref).
 
   const equalizedCandidates = useMemo(() => (
     equalizeCandidateScores(data.candidates ?? [], {
@@ -844,6 +946,10 @@ export default function ScoreboardPage() {
   const allRounds = data.context?.allRounds ?? [];
   const canDeliberate = data.context?.canDeliberate === true;
   const canEditDeliberations = isAdmin && canDeliberate && !viewingHistorical;
+  // Voting is open to every staff role while the round sits in Deliberation —
+  // it shares that window with decisions but not the admin-only gate.
+  const deliberationVotingAvailable = data.context?.deliberationVotingAvailable !== false;
+  const canVote = isStaff && canDeliberate && !viewingHistorical && deliberationVotingAvailable;
   const canCloseRound = data.context?.canCloseRound === true;
   const undecidedCount = data.context?.undecidedCount ?? 0;
   const advanceNotification = data.context?.notification;
@@ -876,6 +982,48 @@ export default function ScoreboardPage() {
     const filtered = filterCandidates(candidates, effectiveFilters, searchQuery, scoreCutoffs);
     return [...filtered].sort((a, b) => compareCandidates(a, b, sortBy));
   }, [candidates, filters, searchQuery, sortBy, deliberationMode, isCoffeeChatRanking, scoreCutoffs]);
+
+  // Only the on-screen candidate rows are mounted; the rest of the cycle exists
+  // purely as reserved height. This is the Tier 2 render win — a 500-row
+  // scoreboard mounts ~15 rows instead of 500. Rows vary in height
+  // (deliberation padding, wrapping interest chips), so heights are measured
+  // dynamically via measureElement rather than assumed from estimateSize.
+  const rowVirtualizer = useWindowVirtualizer({
+    count: filteredCandidates.length,
+    estimateSize: () => 72,
+    overscan: 8,
+    scrollMargin: listOffset,
+    getItemKey: (index) => filteredCandidates[index]?.id ?? index,
+  });
+
+  // The list sits below a variable-height header (filter pills wrap, the
+  // deliberation progress bar appears and disappears), so re-measure its
+  // document offset whenever that layout can change, and on window resize.
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (!listRef.current) return;
+      const rect = listRef.current.getBoundingClientRect();
+      setListOffset(rect.top + window.scrollY);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [deliberationMode, isCoffeeChatRanking, loading, filteredCandidates.length]);
+
+  // Keep the focused candidate (arrow-key navigation, deep-linked selection) in
+  // view. An off-screen row is unmounted, so there is no DOM node to
+  // scrollIntoView — we scroll by index through the virtualizer instead.
+  useEffect(() => {
+    if (focusedCandidateId == null) return;
+    const index = filteredCandidates.findIndex(
+      (c) => String(c.id) === String(focusedCandidateId)
+    );
+    if (index < 0) return;
+    // "auto" only scrolls when the row is outside the viewport: arrow-key steps
+    // to an already-visible neighbor stay put, while a deep-linked candidate far
+    // off-screen is brought into view.
+    rowVirtualizer.scrollToIndex(index, { align: "auto" });
+  }, [focusedCandidateId, filteredCandidates, rowVirtualizer]);
 
   useEffect(() => {
     if (!isCoffeeChatRanking) return;
@@ -930,6 +1078,47 @@ export default function ScoreboardPage() {
       setSavingDecisionId(null);
     }
   }, [authedFetch, canEditDeliberations, deliberationMode, setData]);
+
+  const saveVote = useCallback(async (candidate, rating) => {
+    if (!canVote) return;
+
+    // Optimistically flip the voter's own pick so the button responds instantly;
+    // the shared tally is authoritative and re-read from the server below.
+    setSelectedCandidate(prev => (
+      prev?.id === candidate.id
+        ? { ...prev, deliberationVote: { ...(prev.deliberationVote || {}), myRating: rating || null } }
+        : prev
+    ));
+    setVotingCandidateId(candidate.id);
+    setDecisionError("");
+
+    try {
+      const res = await authedFetch(`${API}/scoreboard/deliberation-votes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resume_id: candidate.id,
+          candidate_id: candidate.candidateId || undefined,
+          rating,
+          notes: "",
+        }),
+      });
+      if (!res.ok) {
+        throw await formatResponseError(
+          res,
+          "saving your deliberation vote",
+          "Check POST /scoreboard/deliberation-votes endpoint in server/src/routes/resumeRoutes.js"
+        );
+      }
+      // Pull the fresh committee tally (net/breakdown/count) for everyone.
+      await fetchScoreboard({ silent: true });
+    } catch (err) {
+      setDecisionError(err);
+      await fetchScoreboard({ silent: true });
+    } finally {
+      setVotingCandidateId(null);
+    }
+  }, [authedFetch, canVote, fetchScoreboard]);
 
   const automaticDecisionPlan = useMemo(() => {
     const advancePercent = Number(activeRound?.autoAdvancePercent) || 0;
@@ -2008,7 +2197,11 @@ export default function ScoreboardPage() {
           <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>No candidates yet.</div>
         )}
 
-        {!loading && filteredCandidates.map((c, index) => {
+        {!loading && filteredCandidates.length > 0 && (
+        <div ref={listRef} style={{ position: "relative", width: "100%", height: `${rowVirtualizer.getTotalSize()}px` }}>
+        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+          const c = filteredCandidates[virtualRow.index];
+          const index = virtualRow.index;
           const decisionStatus = getCandidateDecisionStatus(c);
           const isHistoricalCut = viewingFinalizedRound && decisionStatus !== "advance";
           const displayDecisionStatus = isHistoricalCut ? "reject" : decisionStatus;
@@ -2026,8 +2219,9 @@ export default function ScoreboardPage() {
           <div
             key={c.id}
             data-candidate-id={c.id}
+            data-index={virtualRow.index}
             aria-current={isFocused ? "true" : undefined}
-            ref={el => { rowRefs.current[c.id] = el; }}
+            ref={rowVirtualizer.measureElement}
             onMouseEnter={() => prefetchCandidateApplication(c.id)}
             onFocusCapture={() => { setFocusedCandidateId(c.id); prefetchCandidateApplication(c.id); }}
             onClick={() => {
@@ -2043,6 +2237,12 @@ export default function ScoreboardPage() {
               outline: isFocused ? `1px solid ${t.border}` : "none",
               outlineOffset: -2,
               transition: "background 0.15s ease",
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              boxSizing: "border-box",
+              transform: `translateY(${virtualRow.start - rowVirtualizer.options.scrollMargin}px)`,
             }}
           >
             {deliberationMode ? (
@@ -2170,6 +2370,8 @@ export default function ScoreboardPage() {
           );
         })}
         </div>
+        )}
+        </div>
         </div>
       </div>
       </div>
@@ -2182,6 +2384,11 @@ export default function ScoreboardPage() {
           maxPerCategory={maxPerCategory}
           equalized={equalizeActive}
           isAdmin={isAdmin}
+          showVoting={deliberationMode && !viewingHistorical}
+          canVote={canVote}
+          votingAvailable={deliberationVotingAvailable}
+          voteSaving={votingCandidateId === (candidates.find(c => c.id === selectedCandidate.id) ?? selectedCandidate)?.id}
+          onVote={(rating) => saveVote(candidates.find(c => c.id === selectedCandidate.id) ?? selectedCandidate, rating)}
           onOverrideSaved={() => fetchScoreboard({ silent: true })}
           onOpenProfile={() => openCandidateWorkspace(selectedCandidate)}
           onClose={() => setSelectedCandidate(null)}

@@ -208,6 +208,11 @@
       "order": 40,
       "file": "add_cycle_grading_goals.sql",
       "mode": "auto"
+    },
+    {
+      "order": 41,
+      "file": "add_deliberation_votes.sql",
+      "mode": "auto"
     }
   ]
 }

@@ -114,6 +114,9 @@ database that has application tables but no migration history.
   `add_interview_group_member_assignments.sql` (#27). Until it is applied,
   admins can still view and rearrange candidate tables, but member starting
   tables remain disabled.
+- **Required for deliberation voting:** run `add_deliberation_votes.sql` (#41).
+  Until it is applied, the scoreboard still loads but casting a deliberation
+  vote returns a 503 asking for the migration, and no tally is shown.
 - **Required on the configured existing Supabase project:** run
   `add_candidate_referral_resolution.sql` (#25). The current project has the
   referrals table but does not yet have its `status` and `resolved_at` columns.

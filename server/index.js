@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const helmet = require('helmet');
 
@@ -8,7 +9,28 @@ const { isAllowedClientOrigin } = require('./src/utils/clientOrigins');
 
 const app = express();
 
+// gzip every response large enough to be worth it. The scoreboard payload is
+// repetitive JSON (field names, per-candidate rubric arrays) that compresses
+// ~80-90%, which is also the cheapest lever on Render's outbound-byte billing.
+// Registered before helmet/cors/routes so it wraps every response, including the
+// routes mounted later inside app.listen.
+function compressionOptions() {
+  return {
+    // Responses under ~1 KB (e.g. /health) cost more CPU to compress than they
+    // save, so skip them. This matches the library default; stated explicitly.
+    threshold: 1024,
+    filter(req, res) {
+      // Explicit per-request opt-out, handy for debugging raw payload sizes.
+      if (req.headers['x-no-compression']) return false;
+      // Otherwise defer to the built-in content-type heuristic, which already
+      // compresses application/json and skips already-compressed bodies.
+      return compression.filter(req, res);
+    },
+  };
+}
+
 app.set('trust proxy', 1);
+app.use(compression(compressionOptions()));
 app.use(helmet({ contentSecurityPolicy: false }));
 
 app.use(express.json());
