@@ -32,6 +32,7 @@ const {
     canRecordDecisions,
 } = require('../utils/roundPhases');
 const { firstRel } = require('../utils/supabaseHelpers');
+const { fetchAllRowsResult } = require('../utils/supabasePagination');
 const { getUserName } = require('../utils/userDisplay');
 const { respondWithServerError } = require('../utils/httpErrors');
 const { isMissingSchemaError } = require('../utils/schemaCompatibility');
@@ -2005,11 +2006,12 @@ exports.getScoreboard = async (req, res) => {
                 .eq("cycle_id", activeCycleId)
                 .eq("round_id", resumeRound.id),
             normalizeRoundType(deliberationRound.type) === ROUND_TYPES.COFFEE_CHAT
-                ? supabase
+                ? fetchAllRowsResult(() => supabase
                     .from("interview_evaluations")
                     .select("candidate_id, rating, weighted_score, evaluated_by, notes, submitted_at")
                     .eq("cycle_id", activeCycleId)
                     .eq("round_id", deliberationRound.id)
+                    .order("id", { ascending: true }))
                 : Promise.resolve({ data: [], error: null }),
             normalizeRoundType(deliberationRound.type) === ROUND_TYPES.COFFEE_CHAT
                 ? supabase

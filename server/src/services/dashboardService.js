@@ -26,6 +26,7 @@ const {
 } = require("../utils/roundPhases");
 const { hasReviewScoreValues } = require("../utils/rubric");
 const { isMissingSchemaError } = require("../utils/schemaCompatibility");
+const { fetchAllRows, fetchAllRowsResult } = require("../utils/supabasePagination");
 const {
   DEFAULT_GRADER_REVIEW_GOAL,
   resolveCycleGradingGoals,
@@ -97,13 +98,12 @@ async function loadPriorRoundGate(cycleId, activeRound) {
     return { gateStarted: committeeGateStarted, eligibleCandidateIds };
   }
 
-  const { data: priorEvaluations, error } = await supabase
+  const priorEvaluations = await fetchAllRows(() => supabase
     .from("interview_evaluations")
     .select("candidate_id, decision")
     .eq("cycle_id", cycleId)
-    .eq("round_id", priorRound.id);
-
-  if (error) throw error;
+    .eq("round_id", priorRound.id)
+    .order("id", { ascending: true }));
 
   const gateStarted = (priorEvaluations || []).some(
     (row) => String(row.decision || "pending").trim().toLowerCase() !== "pending"
@@ -190,21 +190,23 @@ async function loadPersonalInterviewProgress(userId, cycleId, activeRound) {
   const isCoffeeChat = normalizeRoundType(activeRound.type) === ROUND_TYPES.COFFEE_CHAT;
   let [poolTotal, evaluationsResult] = await Promise.all([
     countInterviewPool(cycleId, roundId),
-    supabase
+    fetchAllRowsResult(() => supabase
       .from("interview_evaluations")
       .select("decision, rating, weighted_score, updated_at, evaluated_by")
       .eq("round_id", roundId)
-      .eq("evaluated_by", userId),
+      .eq("evaluated_by", userId)
+      .order("id", { ascending: true })),
   ]);
 
   let coffeeSchemaAvailable = true;
   if (evaluationsResult.error && isMissingSchemaError(evaluationsResult.error)) {
     coffeeSchemaAvailable = false;
-    evaluationsResult = await supabase
+    evaluationsResult = await fetchAllRowsResult(() => supabase
       .from("interview_evaluations")
       .select("decision, updated_at, evaluated_by")
       .eq("round_id", roundId)
-      .eq("evaluated_by", userId);
+      .eq("evaluated_by", userId)
+      .order("id", { ascending: true }));
   }
 
   if (evaluationsResult.error) throw evaluationsResult.error;
@@ -346,18 +348,20 @@ async function loadInterviewPipelineStats(cycleId, activeRound) {
   const isCoffeeChat = normalizeRoundType(activeRound.type) === ROUND_TYPES.COFFEE_CHAT;
   const poolTotal = await countInterviewPool(cycleId, roundId);
 
-  let evaluationResult = await supabase
+  let evaluationResult = await fetchAllRowsResult(() => supabase
     .from("interview_evaluations")
     .select("candidate_id, decision, rating, weighted_score")
-    .eq("round_id", roundId);
+    .eq("round_id", roundId)
+    .order("id", { ascending: true }));
 
   let coffeeSchemaAvailable = true;
   if (evaluationResult.error && isMissingSchemaError(evaluationResult.error)) {
     coffeeSchemaAvailable = false;
-    evaluationResult = await supabase
+    evaluationResult = await fetchAllRowsResult(() => supabase
       .from("interview_evaluations")
       .select("candidate_id, decision")
-      .eq("round_id", roundId);
+      .eq("round_id", roundId)
+      .order("id", { ascending: true }));
   }
 
   const { data: evaluations, error } = evaluationResult;

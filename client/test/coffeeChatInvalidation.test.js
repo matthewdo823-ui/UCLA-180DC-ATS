@@ -23,3 +23,19 @@ test('Coffee Chat saves invalidate candidate scores and every dependent view', a
     qk.assignments(),
   ]);
 });
+
+test('a caller that already reloaded candidates can invalidate only dependent views', async () => {
+  const invalidated = [];
+  const queryClient = {
+    invalidateQueries(options) {
+      invalidated.push(options.queryKey);
+      return Promise.resolve();
+    },
+  };
+
+  await invalidateAfterCoffeeChatEvaluation(queryClient, { includeInterviewCandidates: false });
+
+  assert.equal(invalidated.some((queryKey) => queryKey[0] === 'interviews'), false);
+  assert.equal(invalidated.some((queryKey) => queryKey[0] === 'scoreboard'), true);
+  assert.equal(invalidated.some((queryKey) => queryKey[0] === 'candidate-application'), true);
+});

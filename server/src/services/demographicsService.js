@@ -1,6 +1,7 @@
 const supabase = require("../config/supabase");
 const { getActiveCycleRow, getRoundsForCycle } = require("../utils/cycleContext");
 const { normalizeRoundDecision } = require("../utils/roundDecisions");
+const { fetchAllRowsResult } = require("../utils/supabasePagination");
 const {
   isResumeScreenType,
   isInterviewRoundType,
@@ -286,10 +287,11 @@ async function getDemographicsSnapshot() {
       .from("round_decisions")
       .select("candidate_id, round_id, decision")
       .eq("cycle_id", cycle.id),
-    supabase
+    fetchAllRowsResult(() => supabase
       .from("interview_evaluations")
       .select("candidate_id, round_id, decision")
-      .eq("cycle_id", cycle.id),
+      .eq("cycle_id", cycle.id)
+      .order("id", { ascending: true })),
   ]);
 
   if (candidatesError) throw candidatesError;

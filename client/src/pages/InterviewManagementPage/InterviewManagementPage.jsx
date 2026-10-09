@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthedFetch } from "../../auth/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -17,6 +17,12 @@ import { pageTitleStyle, sansFont } from "../../theme/typography";
 import { getInitials } from "../../utils/format";
 import { formatReviewCount } from "../../utils/reviewCounts";
 import { ROUND_TYPES, normalizeRoundType } from "../../constants/rounds";
+import {
+  buildCoffeeChatTablePayload,
+  draftFromEvaluation,
+  verifyCoffeeChatReload,
+  verifyCoffeeChatSaveResponse,
+} from "./coffeeChatPersistence";
 
 const COFFEE_RATINGS = [
   { id: "strong_no", label: "Strong no", color: coffeeRatingColors.strong_no, bg: "rgba(226,75,74,0.10)" },
@@ -38,21 +44,43 @@ export function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange,
   const persistedRating = candidate.evaluation?.rating || "";
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const saveChainRef = useRef(Promise.resolve());
+  const pendingSaveCountRef = useRef(0);
+  const latestSaveIdRef = useRef(0);
 
   useEffect(() => {
     setSaved(false);
+    setSaveError("");
   }, [candidate.id, candidate.evaluation?.rating, candidate.evaluation?.notes]);
+
+  async function queueSave(payload) {
+    const saveId = ++latestSaveIdRef.current;
+    pendingSaveCountRef.current += 1;
+    setSaving(true);
+    setSaved(false);
+    setSaveError("");
+
+    const request = saveChainRef.current.catch(() => {}).then(() => onSave(payload));
+    saveChainRef.current = request;
+    try {
+      const result = await request;
+      if (saveId === latestSaveIdRef.current) setSaved(true);
+      return result;
+    } catch (error) {
+      if (saveId === latestSaveIdRef.current) {
+        setSaveError(error?.message || "Could not save this Coffee Chat evaluation.");
+      }
+      return null;
+    } finally {
+      pendingSaveCountRef.current = Math.max(0, pendingSaveCountRef.current - 1);
+      if (pendingSaveCountRef.current === 0) setSaving(false);
+    }
+  }
 
   async function handleSave() {
     if (!rating && !persistedRating) return;
-    setSaving(true);
-    setSaved(false);
-    try {
-      await onSave({ candidate_id: candidate.id, rating, notes });
-      setSaved(true);
-    } finally {
-      setSaving(false);
-    }
+    await queueSave({ candidate_id: candidate.id, rating, notes });
   }
 
   async function handleRatingChange(nextRating) {
@@ -60,25 +88,12 @@ export function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange,
     onDraftChange(nextDraft);
     setSaved(false);
     if (!autoSave) return;
-    setSaving(true);
-    try {
-      await onSave({ candidate_id: candidate.id, rating: nextRating, notes: nextDraft.notes || "" });
-      setSaved(true);
-    } finally {
-      setSaving(false);
-    }
+    await queueSave({ candidate_id: candidate.id, rating: nextRating, notes: nextDraft.notes || "" });
   }
 
   async function handleNotesBlur() {
-    if (!autoSave || !rating || saving) return;
-    setSaving(true);
-    setSaved(false);
-    try {
-      await onSave({ candidate_id: candidate.id, rating, notes });
-      setSaved(true);
-    } finally {
-      setSaving(false);
-    }
+    if (!autoSave || !rating) return;
+    await queueSave({ candidate_id: candidate.id, rating, notes });
   }
 
   return (
@@ -110,15 +125,16 @@ export function CoffeeChatCandidateCard({ candidate, draft, busy, onDraftChange,
         })}
       </div>
 
-      <textarea value={notes} onChange={(event) => { onDraftChange({ ...draft, notes: event.target.value.slice(0, 1000) }); setSaved(false); }} onBlur={handleNotesBlur} rows={5} placeholder="Coffee Chat notes…" style={{ width: "100%", boxSizing: "border-box", padding: "12px 13px", borderRadius: 9, border: `1px solid ${validationError ? css.red : css.borderLight}`, resize: "vertical", fontFamily: "'DM Sans', sans-serif", fontSize: 13, lineHeight: 1.5 }} />
+      <textarea disabled={busy} value={notes} onChange={(event) => { onDraftChange({ ...draft, notes: event.target.value.slice(0, 1000) }); setSaved(false); setSaveError(""); }} onBlur={handleNotesBlur} rows={5} placeholder="Coffee Chat notes…" style={{ width: "100%", boxSizing: "border-box", padding: "12px 13px", borderRadius: 9, border: `1px solid ${validationError || saveError ? css.red : css.borderLight}`, resize: "vertical", fontFamily: "'DM Sans', sans-serif", fontSize: 13, lineHeight: 1.5, opacity: busy ? 0.65 : 1 }} />
       {validationError ? <p role="alert" style={{ margin: "8px 0 0", color: css.red, fontSize: 11, fontWeight: 700 }}>Choose a rating before submitting this table.</p> : null}
+      {saveError ? <p role="alert" style={{ margin: "8px 0 0", color: css.red, fontSize: 11, fontWeight: 700 }}>{saveError}</p> : null}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, marginTop: 10, minHeight: 34 }}>
         {showSave ? <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {saved ? <span role="status" style={{ fontSize: 11, color: css.greenDark, fontWeight: 700 }}>Saved</span> : null}
           <button type="button" onClick={handleSave} disabled={busy || saving || (!rating && !persistedRating)} style={{ border: "none", borderRadius: 8, background: css.greenDark, color: "var(--color-on-primary)", padding: "9px 13px", fontSize: 12, fontWeight: 700, cursor: busy || saving || (!rating && !persistedRating) ? "not-allowed" : "pointer", opacity: busy || saving || (!rating && !persistedRating) ? 0.5 : 1 }}>
             {saving ? "Saving…" : !rating && persistedRating ? "Clear rating" : "Save rating"}
           </button>
-        </div> : saving || saved ? <span role="status" style={{ fontSize: 11, color: saved ? css.greenDark : css.textGray, fontWeight: 700 }}>{saving ? "Saving…" : "Saved"}</span> : null}
+        </div> : saving || saved ? <span role="status" style={{ fontSize: 11, color: saved ? css.greenDark : css.textGray, fontWeight: 700 }}>{saving ? "Saving…" : "Saved"}</span> : !autoSave ? <span style={{ fontSize: 11, color: css.textGray, fontWeight: 600 }}>Unsaved · submits with table</span> : null}
       </div>
     </article>
   );
@@ -277,11 +293,14 @@ export default function InterviewManagementPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { phaseLabel, activeRound, isInterviewRound, loading: cycleLoading, error: cycleError } = useActiveCycle();
+  const { cycle, phaseLabel, activeRound, isInterviewRound, loading: cycleLoading, error: cycleError } = useActiveCycle();
   const [filter, setFilter] = useState("all");
   const [coffeeView, setCoffeeView] = useState("list");
   const [activeGroupNumber, setActiveGroupNumber] = useState(null);
   const [coffeeDrafts, setCoffeeDrafts] = useState({});
+  const coffeeDraftsRef = useRef({});
+  const dirtyCoffeeCandidateIdsRef = useRef(new Set());
+  const hydratedCoffeeRoundIdRef = useRef(null);
   const [tableSubmitting, setTableSubmitting] = useState(false);
   const [tableSubmitError, setTableSubmitError] = useState(null);
   const [tableSubmitNotice, setTableSubmitNotice] = useState("");
@@ -290,10 +309,10 @@ export default function InterviewManagementPage() {
 
   const enabled = !cycleLoading && isInterviewRound;
 
-  // Shares qk.interviewCandidates() with the admin dashboard, so navigating
-  // between the dashboard and this page reads from cache instead of refetching.
+  // Round and cycle identity keep an old Coffee Chat response from being reused
+  // after the workflow advances. Root invalidation still expires every variant.
   const query = useQuery({
-    queryKey: qk.interviewCandidates(),
+    queryKey: qk.interviewCandidates(activeRound?.id, cycle?.id),
     queryFn: async () => {
       const res = await authedFetch(`${API}/interviews/candidates`);
       return readJsonOrThrow(res, "loading interview candidates", "Check GET /interviews/candidates in server/src/routes/interviewRoutes.js");
@@ -304,7 +323,7 @@ export default function InterviewManagementPage() {
 
   const data = query.data ?? { candidates: [], stats: null, context: null };
   const loading = enabled && query.isPending;
-  const isCoffeeChat = normalizeRoundType(activeRound?.type) === ROUND_TYPES.COFFEE_CHAT;
+  const isCoffeeChat = normalizeRoundType(data.context?.round?.type || activeRound?.type) === ROUND_TYPES.COFFEE_CHAT;
 
   const persistEvaluation = useCallback(async (payload) => {
     const res = await authedFetch(`${API}/interviews/evaluations`, {
@@ -319,15 +338,43 @@ export default function InterviewManagementPage() {
   }, [authedFetch]);
 
   const refreshEvaluationData = useCallback(
-    () => invalidateAfterCoffeeChatEvaluation(queryClient),
+    (options) => invalidateAfterCoffeeChatEvaluation(queryClient, options),
     [queryClient]
   );
 
   const saveEvaluation = useCallback(async (payload) => {
-    const result = await persistEvaluation(payload);
+    const roundId = data.context?.round?.id || activeRound?.id;
+    const requestPayload = { ...payload, round_id: roundId };
+    const result = await persistEvaluation(requestPayload);
+    if (isCoffeeChat) {
+      if (payload.rating) {
+        const expected = buildCoffeeChatTablePayload({
+          roundId,
+          candidates: [{ id: payload.candidate_id }],
+          drafts: { [payload.candidate_id]: payload },
+        });
+        verifyCoffeeChatSaveResponse(expected, {
+          roundId: result?.evaluation?.roundId,
+          evaluations: result?.evaluation ? [result.evaluation] : [],
+        });
+      } else if (result?.evaluation != null) {
+        throw new Error("The server did not confirm that the Coffee Chat rating was cleared.");
+      }
+
+      const currentDraft = coffeeDraftsRef.current[payload.candidate_id];
+      if (currentDraft?.rating === payload.rating && currentDraft?.notes === payload.notes) {
+        dirtyCoffeeCandidateIdsRef.current.delete(payload.candidate_id);
+        const nextDrafts = {
+          ...coffeeDraftsRef.current,
+          [payload.candidate_id]: result?.evaluation ? draftFromEvaluation(result.evaluation) : { rating: "", notes: "" },
+        };
+        coffeeDraftsRef.current = nextDrafts;
+        setCoffeeDrafts(nextDrafts);
+      }
+    }
     await refreshEvaluationData();
     return result;
-  }, [persistEvaluation, refreshEvaluationData]);
+  }, [activeRound?.id, data.context?.round?.id, isCoffeeChat, persistEvaluation, refreshEvaluationData]);
 
   async function chooseStartingTable(groupNumber) {
     if (!groupNumber || startingTableSaving) return;
@@ -375,20 +422,38 @@ export default function InterviewManagementPage() {
   }, [data.candidates]);
 
   useEffect(() => {
+    const roundId = data.context?.round?.id || null;
+    const roundChanged = hydratedCoffeeRoundIdRef.current !== roundId;
+    if (roundChanged) {
+      hydratedCoffeeRoundIdRef.current = roundId;
+      dirtyCoffeeCandidateIdsRef.current.clear();
+    }
+    const candidateIds = new Set((data.candidates || []).map((candidate) => candidate.id));
+    [...dirtyCoffeeCandidateIdsRef.current].forEach((candidateId) => {
+      if (!candidateIds.has(candidateId)) dirtyCoffeeCandidateIdsRef.current.delete(candidateId);
+    });
     setCoffeeDrafts((current) => {
       const next = {};
-      let changed = false;
+      let changed = roundChanged;
       (data.candidates || []).forEach((candidate) => {
-        if (current[candidate.id]) next[candidate.id] = current[candidate.id];
-        else {
-          next[candidate.id] = makeCoffeeDraft(candidate);
+        const serverDraft = makeCoffeeDraft(candidate);
+        if (dirtyCoffeeCandidateIdsRef.current.has(candidate.id) && current[candidate.id]) {
+          next[candidate.id] = current[candidate.id];
+        } else {
+          next[candidate.id] = serverDraft;
+          if (current[candidate.id]?.rating !== serverDraft.rating || current[candidate.id]?.notes !== serverDraft.notes) {
+            changed = true;
+          }
+        }
+        if (!current[candidate.id]) {
           changed = true;
         }
       });
       if (Object.keys(current).length !== Object.keys(next).length) changed = true;
+      coffeeDraftsRef.current = changed ? next : current;
       return changed ? next : current;
     });
-  }, [data.candidates]);
+  }, [data.candidates, data.context?.round?.id]);
 
   useEffect(() => {
     const groupNumbers = coffeeGroups.map(([number]) => number);
@@ -403,8 +468,23 @@ export default function InterviewManagementPage() {
     });
   }, [coffeeGroups, data.context?.startingGroupNumber]);
 
+  useEffect(() => {
+    const warnBeforeUnload = (event) => {
+      if (dirtyCoffeeCandidateIdsRef.current.size === 0) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, []);
+
   const updateCoffeeDraft = useCallback((candidateId, draft) => {
-    setCoffeeDrafts((current) => ({ ...current, [candidateId]: draft }));
+    dirtyCoffeeCandidateIdsRef.current.add(candidateId);
+    setCoffeeDrafts((current) => {
+      const next = { ...current, [candidateId]: draft };
+      coffeeDraftsRef.current = next;
+      return next;
+    });
     setInvalidCandidateIds((current) => {
       if (!current.has(candidateId)) return current;
       const next = new Set(current);
@@ -425,29 +505,50 @@ export default function InterviewManagementPage() {
       return;
     }
 
+    const roundId = data.context?.round?.id || activeRound?.id;
+    if (!roundId) {
+      setTableSubmitError(new Error("The Coffee Chat round could not be identified. Refresh before submitting."));
+      return;
+    }
+    const payload = buildCoffeeChatTablePayload({ roundId, candidates, drafts: coffeeDrafts });
+
     setTableSubmitting(true);
     setTableSubmitError(null);
     setTableSubmitNotice("");
     try {
-      await Promise.all(candidates.map(async (candidate) => {
-        try {
-          const draft = coffeeDrafts[candidate.id] || makeCoffeeDraft(candidate);
-          await persistEvaluation({
-            candidate_id: candidate.id,
-            rating: draft.rating,
-            notes: draft.notes,
-          });
-        } catch (error) {
-          throw new Error(`${candidate.name}: ${error.message || "could not save rating"}`);
-        }
-      }));
-      await refreshEvaluationData();
+      const res = await authedFetch(`${API}/interviews/coffee-chat/table-evaluations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw await formatResponseError(res, "submitting the Coffee Chat table");
+      const saveResponse = await res.json();
+      verifyCoffeeChatSaveResponse(payload, saveResponse);
+
+      const refreshed = await query.refetch();
+      if (refreshed.error || !refreshed.data) {
+        throw refreshed.error || new Error("The table saved, but the server reload could not be verified.");
+      }
+      verifyCoffeeChatReload(payload, refreshed.data.candidates || []);
+      await refreshEvaluationData({ includeInterviewCandidates: false });
+
+      const confirmedByCandidate = new Map(
+        (refreshed.data.candidates || []).map((candidate) => [candidate.id, candidate.evaluation])
+      );
+      const nextDrafts = { ...coffeeDraftsRef.current };
+      payload.evaluations.forEach((evaluation) => {
+        dirtyCoffeeCandidateIdsRef.current.delete(evaluation.candidate_id);
+        nextDrafts[evaluation.candidate_id] = draftFromEvaluation(confirmedByCandidate.get(evaluation.candidate_id));
+      });
+      coffeeDraftsRef.current = nextDrafts;
+      setCoffeeDrafts(nextDrafts);
+
       const currentIndex = coffeeGroups.findIndex(([number]) => number === groupNumber);
       const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % coffeeGroups.length : 0;
       const nextGroupNumber = coffeeGroups[nextIndex]?.[0] ?? groupNumber;
       setInvalidCandidateIds(new Set());
       setActiveGroupNumber(nextGroupNumber);
-      setTableSubmitNotice(`${groupNumber ? `Table ${groupNumber}` : "Unassigned table"} submitted. Opening ${nextGroupNumber ? `Table ${nextGroupNumber}` : "the next table"}.`);
+      setTableSubmitNotice(`${groupNumber ? `Table ${groupNumber}` : "Unassigned table"} saved and verified. Opening ${nextGroupNumber ? `Table ${nextGroupNumber}` : "the next table"}.`);
     } catch (error) {
       setTableSubmitError(error);
     } finally {
