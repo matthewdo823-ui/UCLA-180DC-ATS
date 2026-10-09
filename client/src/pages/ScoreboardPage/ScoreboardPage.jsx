@@ -1567,7 +1567,7 @@ export default function ScoreboardPage() {
   }
 
   function toggleDeliberationMode() {
-    if (viewingHistorical) return;
+    if (viewingHistorical || !isAdmin) return;
     setDeliberationMode(on => {
       if (on) {
         setFilters(f => ({ ...f, decision: "all" }));
