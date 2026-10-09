@@ -51,6 +51,8 @@ router.get('/scoreboard', resumeController.getScoreboard);
 router.get('/demographics', demographicsController.getDemographics);
 router.post('/scoreboard/decisions/bulk', requireRoles('admin'), resumeController.bulkUpsertRoundDecisions);
 router.post('/scoreboard/decisions', requireRoles('admin'), resumeController.upsertRoundDecision);
+// Open to every staff role (admin/member/board) — the whole committee votes.
+router.post('/scoreboard/deliberation-votes', resumeController.upsertDeliberationVote);
 router.get('/grader-scoreboard', requireRoles('admin'), resumeController.getGraderScoreboard);
 router.get('/frq-grader-scoreboard', requireRoles('admin'), resumeController.getFrqGraderScoreboard);
 

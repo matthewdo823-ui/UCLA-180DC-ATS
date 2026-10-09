@@ -64,6 +64,12 @@ const {
     assertCandidateEligibleForRoundDecision,
 } = require('../services/roundDeliberationService');
 const {
+    DELIBERATION_VOTE_SCORES,
+    isValidDeliberationRating,
+    mapDeliberationVote,
+    aggregateDeliberationVotes,
+} = require('../utils/deliberationVotes');
+const {
     resolveAdvanceNotificationForRound,
     fetchLatestAdvanceBatch,
     isGmailConfigured,
@@ -1917,6 +1923,7 @@ exports.getScoreboard = async (req, res) => {
             interviewEvaluationResult,
             coffeeMemberAssignmentResult,
             attendedEventsByCandidate,
+            deliberationVoteResult,
         ] = await Promise.all([
             supabase
                 .from('resumes')
@@ -2011,6 +2018,11 @@ exports.getScoreboard = async (req, res) => {
                     .eq("round_id", deliberationRound.id)
                 : Promise.resolve({ data: [], error: null }),
             loadAttendedEventsByCandidate(activeCycleId),
+            supabase
+                .from("deliberation_votes")
+                .select("candidate_id, rating, weighted_score, voted_by")
+                .eq("cycle_id", activeCycleId)
+                .eq("round_id", deliberationRound.id),
         ]);
 
         const { data: resumes, error: resumeError } = resumeResult;
@@ -2020,6 +2032,7 @@ exports.getScoreboard = async (req, res) => {
         const { data: frqRows, error: frqError } = frqResult;
         const { data: interviewEvaluationRows, error: interviewEvaluationError } = interviewEvaluationResult;
         const { data: coffeeMemberAssignments, error: coffeeMemberAssignmentError } = coffeeMemberAssignmentResult;
+        const { data: deliberationVoteRows, error: deliberationVoteError } = deliberationVoteResult;
         if (resumeError) throw resumeError;
         if (cycleCandError) throw cycleCandError;
         if (decisionError) throw decisionError;
@@ -2027,6 +2040,7 @@ exports.getScoreboard = async (req, res) => {
         if (frqError) throw frqError;
         if (interviewEvaluationError && !isMissingSchemaError(interviewEvaluationError)) throw interviewEvaluationError;
         if (coffeeMemberAssignmentError && !isMissingSchemaError(coffeeMemberAssignmentError)) throw coffeeMemberAssignmentError;
+        if (deliberationVoteError && !isMissingSchemaError(deliberationVoteError)) throw deliberationVoteError;
 
         const candidateLinkLookups = buildCandidateLinkLookups(cycleCandidates);
         const decisionLookup = buildDecisionLookup(roundDecisionRows);
@@ -2272,6 +2286,31 @@ exports.getScoreboard = async (req, res) => {
             candidate.coffeeChatExpectedEvaluationCount = coffeeMemberAssignmentError ? null : assignedCoffeeMemberIds.size;
         });
 
+        // Deliberation votes are an open, live tally the whole committee sees.
+        // Group each candidate's votes, fold them into the breakdown/net, and
+        // surface the caller's own pick so the UI can highlight it.
+        const deliberationVotesByCandidate = {};
+        (deliberationVoteError ? [] : deliberationVoteRows || []).forEach((row) => {
+            if (!deliberationVotesByCandidate[row.candidate_id]) deliberationVotesByCandidate[row.candidate_id] = [];
+            deliberationVotesByCandidate[row.candidate_id].push({
+                rating: row.rating,
+                weightedScore: Number(row.weighted_score),
+                votedBy: row.voted_by,
+            });
+        });
+        candidatesWithSignals.forEach((candidate) => {
+            const votes = deliberationVotesByCandidate[candidate.candidateId] || [];
+            const tally = aggregateDeliberationVotes(votes);
+            const mine = votes.find((vote) => vote.votedBy === req.user?.user_id) || null;
+            candidate.deliberationVote = {
+                breakdown: tally.breakdown,
+                count: tally.count,
+                net: tally.net,
+                myRating: mine?.rating || null,
+            };
+        });
+        const deliberationVotingAvailable = !deliberationVoteError;
+
         const isCoffeeChatScoreboard = normalizeRoundType(deliberationRound.type) === ROUND_TYPES.COFFEE_CHAT;
         if (isCoffeeChatScoreboard) {
             candidatesWithSignals.sort((a, b) =>
@@ -2327,6 +2366,7 @@ exports.getScoreboard = async (req, res) => {
                 notification,
                 rankingMode: isCoffeeChatScoreboard ? "coffee_chat" : "resume_screen",
                 assignedMemberCount: coffeeMemberAssignmentError ? null : assignedCoffeeMemberIds.size,
+                deliberationVotingAvailable,
             },
             metrics: metricsWithFrq,
             maxPerCategory,
@@ -2553,6 +2593,97 @@ exports.bulkUpsertRoundDecisions = async (req, res) => {
         });
     } catch (err) {
         return respondWithServerError(res, err, "bulkUpsertRoundDecisions");
+    }
+};
+
+// Cast (or clear) the caller's own deliberation vote for a candidate. Unlike
+// round_decisions, this is open to every staff role — the whole committee votes.
+// Votes are only meaningful while the round sits in the Deliberation phase.
+exports.upsertDeliberationVote = async (req, res) => {
+    const candidateIdInput = String(req.body?.candidate_id || "").trim();
+    const resumeIdInput = String(req.body?.resume_id || "").trim();
+    const rating = String(req.body?.rating || "").trim().toLowerCase();
+    const notes = typeof req.body?.notes === "string" ? req.body.notes.slice(0, 1000) : "";
+    const votedBy = req.user?.user_id;
+
+    try {
+        const activeCycle = await getActiveCycleRow();
+        if (!activeCycle?.id) {
+            return res.status(503).json({ error: "No active recruiting cycle" });
+        }
+
+        const activeRound = await getOpenRoundForCycle(activeCycle.id);
+        if (!activeRound) {
+            return res.status(503).json({
+                error: "No round is open — open a round in Cycle Management before voting.",
+            });
+        }
+        if (!canRecordDecisions(getRoundPhase(activeRound))) {
+            return res.status(400).json({
+                error: `${activeRound.name} is not in Deliberation yet — voting opens once grading freezes.`,
+            });
+        }
+
+        const resolved = await resolveCandidateIdForDecision({
+            candidateId: candidateIdInput,
+            resumeId: resumeIdInput,
+            cycleId: activeCycle.id,
+        });
+        if (resolved.error) {
+            return res.status(resolved.status).json({ error: resolved.error });
+        }
+
+        const candidateId = resolved.candidateId;
+        if (resolved.backfillCandidateId) {
+            await maybeBackfillResumeCandidateId(resolved.resumeId, resolved.backfillCandidateId);
+        }
+
+        // An empty rating means the member cleared their vote — remove the row so
+        // the tally and count drop, matching Coffee Chat's "unselect clears" feel.
+        if (!rating) {
+            const { error: deleteError } = await supabase
+                .from("deliberation_votes")
+                .delete()
+                .eq("candidate_id", candidateId)
+                .eq("round_id", activeRound.id)
+                .eq("voted_by", votedBy);
+            if (deleteError && !isMissingSchemaError(deleteError)) {
+                return respondWithServerError(res, deleteError, "upsertDeliberationVote clear");
+            }
+            return res.json({ vote: null });
+        }
+
+        if (!isValidDeliberationRating(rating)) {
+            return res.status(400).json({ error: "rating must be Strong Yes, Yes, No, or Strong No" });
+        }
+
+        const payload = {
+            candidate_id: candidateId,
+            cycle_id: activeCycle.id,
+            round_id: activeRound.id,
+            rating,
+            weighted_score: DELIBERATION_VOTE_SCORES[rating],
+            notes,
+            voted_by: votedBy,
+            updated_at: new Date().toISOString(),
+        };
+
+        const { data, error } = await supabase
+            .from("deliberation_votes")
+            .upsert(payload, { onConflict: "candidate_id,round_id,voted_by" })
+            .select("*")
+            .single();
+
+        if (error) {
+            if (isMissingSchemaError(error)) {
+                return res.status(503).json({ error: "Deliberation voting requires database migration #41." });
+            }
+            return respondWithServerError(res, error, "upsertDeliberationVote upsert");
+        }
+
+        return res.json({ vote: mapDeliberationVote(data) });
+    } catch (err) {
+        return respondWithServerError(res, err, "upsertDeliberationVote");
     }
 };
 
