@@ -1,0 +1,7 @@
+* @matthewdo823-ui
+
+# Changes that can expose production data or credentials always require owner review.
+/.github/workflows/ @matthewdo823-ui
+/server/sql/ @matthewdo823-ui
+/server/src/middleware/ @matthewdo823-ui
+/server/src/config/ @matthewdo823-ui

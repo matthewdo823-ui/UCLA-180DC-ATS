@@ -1,4 +1,4 @@
-// In-memory cache for files pulled through the Drive proxy (/view/pdf, /view/image).
+// In-memory cache for candidate-bound document fallbacks.
 //
 // The server sends `Cache-Control: private, max-age=86400`, which handles caching
 // across page loads. This layer covers the two things the HTTP cache can't:

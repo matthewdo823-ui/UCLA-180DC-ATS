@@ -2,21 +2,11 @@ name: Database migrations
 
 # Applying DDL to the production database is not reversible by re-running the job,
 # so this workflow is deliberately narrow:
-#   - pull requests get a read-only plan, never an apply
-#   - applies happen only from main, only when sql/ actually changed
+#   - it is manual-only; untrusted pull-request code never receives database access
+#   - both plans and applies check out the trusted main branch
 #   - the `production` environment gates the apply, so a required reviewer can be
 #     configured in repo settings without touching this file
 on:
-  pull_request:
-    paths:
-      - 'server/sql/**'
-      - 'server/scripts/apply-migrations.js'
-      - '.github/workflows/migrate.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'server/sql/**'
-      - 'server/scripts/apply-migrations.js'
   workflow_dispatch:
     inputs:
       plan_only:
@@ -31,34 +21,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  plan:
-    # Forked PRs get no secrets, so the plan would fail on a missing connection
-    # string rather than tell anyone anything useful.
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    # Every job reads SUPABASE_DB_URL from this one environment, so a password
-    # rotation is a single secret update.
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: server/package-lock.json
-      - run: npm ci --prefix server
-      - name: Plan pending migrations
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: npm run migrate:plan --prefix server
-
   apply:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.plan_only)
+    if: ${{ !inputs.plan_only }}
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -74,12 +47,16 @@ jobs:
         run: npm run migrate --prefix server
 
   manual-plan:
-    if: github.event_name == 'workflow_dispatch' && inputs.plan_only
+    if: ${{ inputs.plan_only }}
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm

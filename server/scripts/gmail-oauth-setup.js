@@ -62,11 +62,11 @@ async function main() {
     process.exit(1);
   }
 
-  const sendAs = process.env.GMAIL_SEND_AS || process.env.GMAIL_IMPERSONATE_USER || "matthewdo823@gmail.com";
+  const sendAs = process.env.GMAIL_SEND_AS || process.env.GMAIL_IMPERSONATE_USER;
 
   console.log("\nAdd these lines to server/.env:\n");
   console.log(`GMAIL_REFRESH_TOKEN=${tokens.refresh_token}`);
-  console.log(`GMAIL_SEND_AS=${sendAs}`);
+  console.log(`GMAIL_SEND_AS=${sendAs || "sender@gmail.com"}`);
   console.log(`GMAIL_FROM_NAME=180DC Recruiting`);
   console.log("\nThen restart the API and run: npm run gmail-test-send\n");
 }

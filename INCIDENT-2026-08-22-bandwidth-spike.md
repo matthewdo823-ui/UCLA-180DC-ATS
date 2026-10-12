@@ -4,7 +4,7 @@
 **Incident window:** Aug 22, 2026, ~18:18–20:01 UTC (12:18–2:01 PM MDT)
 **Suspension:** Aug 24, 2026 6:38 AM — "Suspended by Monthly Quota Exceeded"
 **Resumed:** Aug 27, 2026 10:59 AM
-**Author:** Hayden
+**Record type:** Maintainer incident analysis
 
 ---
 

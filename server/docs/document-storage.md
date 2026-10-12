@@ -27,7 +27,8 @@ ready copy matching the current Drive source. It sends `Cache-Control: no-store`
 If not ready or Storage signing is unavailable, it returns an authenticated
 `GET /resume/:id/file-content?version=...` fallback. That endpoint resolves the
 source from the resume row and rejects obsolete versions with 409. Permission
-failures never bypass the resolver. Existing `/view/pdf` consumers remain compatible.
+failures never bypass the resolver. Resume and headshot fallbacks resolve their
+source from an authorized database row rather than accepting a caller-supplied URL.
 
 The viewer caches file bytes, refreshes a failed/expired signed link once, and can
 fall back to Drive. ATS bearer tokens are sent only to the ATS API, never Storage.

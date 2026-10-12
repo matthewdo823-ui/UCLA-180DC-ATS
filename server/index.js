@@ -33,7 +33,17 @@ app.set('trust proxy', 1);
 app.use(compression(compressionOptions()));
 app.use(helmet({ contentSecurityPolicy: false }));
 
-app.use(express.json());
+// This process serves authenticated recruiting data, not public cacheable API
+// resources. Later file-stream handlers may deliberately replace this with a
+// bounded private cache header after authorizing a specific document.
+app.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Pragma', 'no-cache');
+  res.vary('Authorization');
+  next();
+});
+
+app.use(express.json({ limit: '100kb' }));
 app.use(cors({
   origin(origin, callback) {
     if (!origin || isAllowedClientOrigin(origin)) {
@@ -49,14 +59,29 @@ app.use(cors({
 // the instant the process boots. Used to stop Render's free tier from spinning down.
 app.get('/health', (_req, res) => res.status(200).json({ ok: true, ts: Date.now() }));
 
-// Gmail OAuth setup redirect (no auth — used only during npm run gmail-oauth-setup)
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Gmail OAuth setup redirect. Keep this one-time utility closed unless a
+// maintainer explicitly enables it while obtaining a refresh token; leaving it
+// online serves no production purpose and OAuth codes can appear in request URLs.
 app.get('/oauth2callback', (req, res) => {
+  if (process.env.GMAIL_OAUTH_SETUP_ENABLED !== '1') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
   const code = String(req.query?.code || '').trim();
   const err = String(req.query?.error || '').trim();
   if (err) {
     return res.status(400).type('html').send(
       `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem">`
-      + `<h2>Google sign-in failed</h2><p>${err}</p><p>Close this tab and try again.</p></body></html>`
+      + `<h2>Google sign-in failed</h2><p>${escapeHtml(err)}</p><p>Close this tab and try again.</p></body></html>`
     );
   }
   if (!code) {
@@ -65,7 +90,7 @@ app.get('/oauth2callback', (req, res) => {
       + '<h2>No authorization code</h2><p>Close this tab and run npm run gmail-oauth-setup again.</p></body></html>'
     );
   }
-  const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escaped = escapeHtml(code);
   return res.type('html').send(
     '<!DOCTYPE html><html><head><title>Gmail OAuth</title></head>'
     + '<body style="font-family:sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem">'

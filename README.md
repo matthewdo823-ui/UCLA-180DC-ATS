@@ -68,7 +68,7 @@ cp server/.env.example server/.env
 | `GOOGLE_DRIVE_IMPERSONATE_USER` | Workspace only | User to impersonate for private Forms/Drive files |
 | `FORM_CONFIG_PATH` | Legacy only | Fallback `form-config.json` path; current config is stored per cycle |
 | `FORMS_SYNC_CRON` | No | In-process sync schedule (default every 10 minutes) |
-| `DISABLE_FORMS_SYNC_CRON` | No | Set to `1` when using Vercel cron instead |
+| `DISABLE_FORMS_SYNC_CRON` | No | Set to `1` when an external scheduler owns sync |
 | `CRON_SECRET` | For cron | Shared secret for `POST /cron/forms-sync` |
 | `DOC_SYNC_BATCH_SIZE` | No | Documents claimed per worker pass (default `10`) |
 | `DOC_SYNC_CONCURRENCY` | No | Parallel Drive downloads in the worker (default `3`) |
@@ -170,22 +170,33 @@ the worker can be deployed before or after the API without breaking images.
 | Role | Access |
 |------|--------|
 | `applicant` | Limited — redirected to no-access for most pages |
-| `member` | Grade resumes, view scoreboards |
-| `admin` | Full access — user/cycle management, grader scoreboard, flagged candidates, scoreboard deliberation & export |
+| `member` | Grade resumes, view scoreboards, cast deliberation votes |
+| `board` | Grade resumes and applications, view scoreboards, cast deliberation votes |
+| `admin` | Full access — management, decision controls, deliberation workspace and export |
 
 ## Production deployment
 
 Typical setup:
 
-- **Frontend** → Vercel (`client/`)
-  - Set `VITE_API_URL` to your API base URL
-  - Set `API_URL` and `CRON_SECRET` for the Vercel cron proxy ([client/api/cron/forms-sync.js](client/api/cron/forms-sync.js))
-  - Cron schedule is defined in [client/vercel.json](client/vercel.json) (currently daily at `00:00` UTC)
-- **API** → any Node host (Railway, Render, Fly.io, etc.)
-  - Set all server env vars
-  - Add your Vercel frontend URL to `CORS_ALLOWED_ORIGINS`
-  - Set `DISABLE_FORMS_SYNC_CRON=1` if using Vercel cron
-  - Set `CRON_SECRET` to match the Vercel project
+- **Frontend** → Render Static Site (`client/`)
+  - Build command: `npm install && npm run build`
+  - Publish directory: `dist`
+  - Set `VITE_API_URL` to the Render API service URL
+  - Add a rewrite rule from `/*` to `/index.html` so direct visits and refreshes
+    on React Router URLs such as `/scoreboard` do not return a Render 404
+- **API** → Render Web Service (`server/`)
+  - Build command: `npm install`
+  - Start command: `npm start`
+  - Set the variables from `server/.env.example`
+  - Add the frontend URL to `CORS_ALLOWED_ORIGINS`
+- **Document worker** → Render Background Worker (`server/`)
+  - Build command: `npm install`
+  - Start command: `npm run worker`
+  - Use the same Supabase and Google Drive credentials as the API
+
+The API runs Forms sync in-process by default. If a separate scheduler calls
+`POST /cron/forms-sync`, set `DISABLE_FORMS_SYNC_CRON=1` and give both services
+the same `CRON_SECRET`.
 
 Build the frontend for production:
 
@@ -216,6 +227,16 @@ cd client && npm run build
 | `/` | Resumes, cycles, interviews, users |
 
 All protected routes expect `Authorization: Bearer <token>`.
+
+## Security and public releases
+
+- Report vulnerabilities using [SECURITY.md](SECURITY.md); do not include
+  credentials or applicant data in a public issue.
+- Never make a repository public if any reachable Git or pull-request ref has
+  contained production credentials or applicant data. Follow the clean-history
+  process in [docs/public-release.md](docs/public-release.md).
+- Production data access is server-only. Do not put the Supabase service-role
+  key, Google credentials, or any backend-only environment variable in `client/`.
 
 ## Troubleshooting
 

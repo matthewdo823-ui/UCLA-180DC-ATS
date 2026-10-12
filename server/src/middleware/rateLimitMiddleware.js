@@ -6,24 +6,34 @@ const REGISTER_WINDOW_MS = 15 * 60 * 1000;
 
 const PASSWORD_RESET_MAX_ATTEMPTS = 3;
 const PASSWORD_RESET_WINDOW_MS = 15 * 60 * 1000;
+const MAX_TRACKED_IPS = 10_000;
+const CLEANUP_INTERVAL_MS = 60 * 1000;
 
 function getClientIp(req) {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string' && forwarded.length) {
-        return forwarded.split(',')[0].trim();
-    }
-
-    return req.ip || req.socket?.remoteAddress || 'unknown';
+    // Express derives req.ip using the configured trust-proxy boundary. Reading
+    // X-Forwarded-For directly trusts an attacker-controlled leftmost value and
+    // lets callers rotate that header to bypass every limiter.
+    return String(req.ip || req.socket?.remoteAddress || 'unknown');
 }
 
-function createIpRateLimiter({ maxAttempts, windowMs, errorMessage }) {
+function createIpRateLimiter({ maxAttempts, windowMs, errorMessage, maxTrackedIps = MAX_TRACKED_IPS }) {
     const attempts = new Map();
+    let nextCleanupAt = 0;
 
     function cleanupExpiredRecords(now) {
+        if (now < nextCleanupAt && attempts.size < maxTrackedIps) return;
         for (const [ip, record] of attempts) {
             if (now >= record.resetAt) {
                 attempts.delete(ip);
             }
+        }
+        nextCleanupAt = now + CLEANUP_INTERVAL_MS;
+
+        // Bound process memory even under a distributed source-IP flood. The
+        // oldest insertion is evicted first; established active limits remain
+        // effective for the rest of the bounded set.
+        while (attempts.size >= maxTrackedIps) {
+            attempts.delete(attempts.keys().next().value);
         }
     }
 
@@ -69,6 +79,8 @@ const passwordResetRateLimit = createIpRateLimiter({
 });
 
 module.exports = {
+    createIpRateLimiter,
+    getClientIp,
     loginRateLimit,
     registerRateLimit,
     passwordResetRateLimit,
