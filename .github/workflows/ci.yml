@@ -51,6 +51,10 @@ jobs:
             server/package-lock.json
       - run: npm ci --prefix client
       - run: npm ci --prefix server
+      - name: Audit client dependencies
+        run: npm audit --audit-level=high --prefix client
+      - name: Audit server dependencies
+        run: npm audit --audit-level=high --prefix server
       - run: npm run lint --prefix client
       - run: npm run build --prefix client
       - run: npm test --prefix server
