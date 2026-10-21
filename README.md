@@ -58,7 +58,8 @@ cp server/.env.example server/.env
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `SUPABASE_URL` | Yes | Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | Yes | Supabase service role key |
+| `SUPABASE_SECRET_KEY` | Yes | Server-only Supabase secret key (`sb_secret_...`) |
+| `SUPABASE_SERVICE_KEY` | Legacy only | Temporary fallback for the deprecated JWT-based service-role key |
 | `JWT_SECRET` | Yes | Secret for signing auth tokens |
 | `JWT_EXPIRES_IN` | No | JWT lifetime (default `8h`) |
 | `PORT` | No | API port (default `3000`) |
@@ -155,7 +156,7 @@ cd server && npm run worker
 On Render, deploy this as a **Background Worker** alongside the web service: same
 repo, root directory `server`, build `npm install`, start `npm run worker`, and the
 same environment variables as the API (it needs `SUPABASE_URL`,
-`SUPABASE_SERVICE_KEY`, and Google Drive credentials).
+`SUPABASE_SECRET_KEY`, and Google Drive credentials).
 
 The queue is the `documents` table itself — the Forms sync enqueues a row as it
 records each candidate, and the worker claims batches with `FOR UPDATE SKIP LOCKED`.

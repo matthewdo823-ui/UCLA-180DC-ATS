@@ -11,7 +11,9 @@ normal force-push.
 1. Rotate every credential that has ever appeared in GitHub. At minimum review
    the Supabase service-role and database credentials, JWT and cron secrets,
    Google service-account keys, Gmail OAuth credentials and refresh tokens, and
-   third-party API keys. Update Render only after creating the replacement values.
+   third-party API keys. For Supabase, create a new independently revocable secret
+   key, deploy it to every backend as `SUPABASE_SECRET_KEY`, confirm the API and
+   worker use it, then deactivate the legacy `anon` and `service_role` keys.
 2. Merge and deploy the security hardening while the operational repository is
    still private. Apply pending database migrations through the manual workflow.
 3. Remove real candidate data from examples, fixtures, screenshots, issue text,
