@@ -213,6 +213,11 @@
       "order": 41,
       "file": "add_deliberation_votes.sql",
       "mode": "auto"
+    },
+    {
+      "order": 42,
+      "file": "harden_server_only_data_access.sql",
+      "mode": "auto"
     }
   ]
 }

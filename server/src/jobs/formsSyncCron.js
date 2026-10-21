@@ -1,7 +1,7 @@
 /**
- * Periodic Google Forms sync via node-cron (local / long-running hosts).
- * On Vercel, use client/vercel.json cron → /api/cron/forms-sync instead and set
- * DISABLE_FORMS_SYNC_CRON=1 on the API server.
+ * Periodic Google Forms sync via node-cron (local / long-running hosts such as
+ * the Render web service). An external scheduler can call /cron/forms-sync
+ * instead when DISABLE_FORMS_SYNC_CRON=1.
  *
  * Env:
  *   FORMS_SYNC_CRON — cron expression (default: every 10 minutes)
@@ -32,7 +32,7 @@ async function runFormsSync(source) {
 
 function startFormsSyncCron() {
   if (process.env.DISABLE_FORMS_SYNC_CRON === "1") {
-    console.log("[formsSync] In-process cron disabled (use Vercel cron or manual sync).");
+    console.log("[formsSync] In-process cron disabled (use an external scheduler or manual sync).");
     return null;
   }
 

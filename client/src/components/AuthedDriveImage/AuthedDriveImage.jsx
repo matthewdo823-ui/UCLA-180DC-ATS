@@ -7,6 +7,15 @@ export function isDriveUrl(url) {
   return typeof url === "string" && url.trim().length > 0 && /drive\.google\.com|docs\.google\.com/i.test(url);
 }
 
+function extractDriveFileId(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.searchParams.get('id') || parsed.pathname.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
 // Start fetching shortly before a row scrolls into view, so the image is usually
 // decoded by the time it's actually on screen.
 const PRELOAD_MARGIN = "200px";
@@ -22,7 +31,8 @@ export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback, ca
   // Derived rather than pushed into state from the effect: "this isn't a Drive
   // URL" is knowable during render, so there's no reason to trigger a second
   // render pass to discover it.
-  const canLoad = isDriveUrl(fileUrl) && Boolean(authToken);
+  const driveVersion = extractDriveFileId(fileUrl);
+  const canLoad = isDriveUrl(fileUrl) && Boolean(authToken) && Boolean(candidateId) && Boolean(driveVersion);
 
   // Only request images the user can actually see. The scoreboard renders one of
   // these per candidate with no pagination, so fetching on mount meant a few
@@ -75,9 +85,11 @@ export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback, ca
           }
         }
 
-        // Not synced yet (or no candidate context): fall back to proxying Drive.
-        // This is what lets the storage migration ship before the queue drains.
-        const proxyUrl = `${API}/view/image?url=${encodeURIComponent(fileUrl.trim())}`;
+        // Not synced yet: use a candidate-bound fallback. The server resolves the
+        // Drive URL from the authorized database row and verifies this version;
+        // callers can no longer turn the service account into an arbitrary Drive
+        // file proxy by supplying their own URL.
+        const proxyUrl = `${API}/candidates/${encodeURIComponent(candidateId)}/headshot-content?version=${encodeURIComponent(driveVersion)}`;
         // The Blob itself lives in the shared cache; the object URL is per-mount
         // so the existing revoke-on-unmount stays correct.
         const blob = await fetchDriveImageBlob(proxyUrl, authToken);
@@ -97,7 +109,7 @@ export default function AuthedDriveImage({ fileUrl, authToken, alt, fallback, ca
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [authToken, canLoad, candidateId, fileUrl, inView]);
+  }, [authToken, canLoad, candidateId, driveVersion, inView]);
 
   const loaded = canLoad && src && !failed;
 

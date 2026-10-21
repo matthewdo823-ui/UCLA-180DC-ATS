@@ -8,12 +8,12 @@ The ATS sends plain-text advance emails through the **Gmail API**. Choose **one*
 
 | Sender type | Setup path |
 |-------------|------------|
-| **Personal Gmail** (e.g. `matthewdo823@gmail.com`) | **OAuth** (Path A) — domain-wide delegation does **not** work for `@gmail.com` |
+| **Personal Gmail** (e.g. `sender@gmail.com`) | **OAuth** (Path A) — domain-wide delegation does **not** work for `@gmail.com` |
 | **Google Workspace** (e.g. `@ucla.edu`) | **Domain-wide delegation** (Path B) |
 
 ---
 
-## Path A — Personal Gmail (OAuth) — recommended for `matthewdo823@gmail.com`
+## Path A — Personal Gmail (OAuth)
 
 ### 1. Enable Gmail API
 
@@ -25,7 +25,7 @@ GCP Console → **APIs & Services → Library** → enable **Gmail API**.
 2. User type: **External** (unless you have Workspace internal)
 3. App name: e.g. `180DC Resume Screener`
 4. Add scope: `https://www.googleapis.com/auth/gmail.send`
-5. **Test users**: add `matthewdo823@gmail.com` (required while app is in Testing mode)
+5. **Test users**: add the sender account (required while app is in Testing mode)
 
 ### 3. Create OAuth client ID
 
@@ -38,7 +38,8 @@ GCP Console → **APIs & Services → Library** → enable **Gmail API**.
 GMAIL_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GMAIL_CLIENT_SECRET=<your-client-secret>
 GMAIL_OAUTH_REDIRECT_URI=http://localhost:3000/oauth2callback
-GMAIL_SEND_AS=matthewdo823@gmail.com
+GMAIL_OAUTH_SETUP_ENABLED=1
+GMAIL_SEND_AS=sender@gmail.com
 GMAIL_FROM_NAME=180DC Recruiting
 ```
 
@@ -51,6 +52,8 @@ npm run gmail-oauth-setup
 ```
 
 Follow the prompts. Paste the printed `GMAIL_REFRESH_TOKEN` into `.env`.
+Then remove `GMAIL_OAUTH_SETUP_ENABLED` and restart the API so the setup-only
+callback is not exposed during normal operation.
 
 ### 5. Verify
 
@@ -58,7 +61,7 @@ Follow the prompts. Paste the printed `GMAIL_REFRESH_TOKEN` into `.env`.
 npm run gmail-test-send
 ```
 
-You should receive `[ATS] Gmail test` at `matthewdo823@gmail.com`.
+You should receive `[ATS] Gmail test` at the configured sender account.
 
 ---
 

@@ -26,6 +26,16 @@ google-credentials.json
 **/google-service-account*.json
 server/gcp/*.json
 
+# Package-manager authentication and private key material
+.npmrc
+**/.npmrc
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
 # Editor config (may contain local DB credentials)
 .vscode/
 

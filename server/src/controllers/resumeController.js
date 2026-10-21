@@ -3,7 +3,6 @@ const { applyScreeningEligibility, screeningAccessError, screeningExclusionReaso
 const { canGradeFrq } = require('../utils/auth');
 const supabase = require('../config/supabase');
 const { extractDriveFileID, toDownloadURL, isGoogleDriveFileUrl } = require('../utils/drive');
-const { streamDriveFileToResponse, sendDriveProxyError } = require('../utils/driveStream');
 const { getSignedUrl, SIGNED_URL_TTL_SECONDS } = require('../utils/documentStorage');
 const {
     getActiveCycleId,
@@ -1705,40 +1704,6 @@ exports.getResumeFile = async (req, res) => {
         });
     } catch (err) {
         return respondWithServerError(res, err, 'getResumeFile');
-    }
-};
-
-// Reverse proxy for image streaming (streams drive image to frontend)
-exports.viewImage = async (req, res) => {
-    const fileUrl = req.query.url;
-    if (!fileUrl) return res.status(400).send("No URL provided");
-    if (!isGoogleDriveFileUrl(fileUrl)) {
-        return res.status(400).send("Only Google Drive image URLs are allowed");
-    }
-
-    try {
-        // Avatars render at 40–132px; a single 320px thumbnail covers the largest
-        // (retina) case and keeps egress in the KB range instead of streaming the
-        // multi-MB original. One fixed size means a candidate shown in several
-        // places shares one cached blob.
-        await streamDriveFileToResponse(fileUrl, res, { fallbackContentType: 'image/jpeg', thumbnailSize: 320 });
-    } catch (err) {
-        sendDriveProxyError(res, err, 'image');
-    }
-};
-
-// Reverse proxy for file streaming (streams drive pdf to frontend)
-exports.viewPdf = async (req, res) => {
-    const fileUrl = req.query.url;
-    if (!fileUrl) return res.status(400).send("No URL provided");
-    if (!isGoogleDriveFileUrl(fileUrl)) {
-        return res.status(400).send("Only Google Drive PDF URLs are allowed");
-    }
-
-    try {
-        await streamDriveFileToResponse(fileUrl, res, { fallbackContentType: 'application/pdf' });
-    } catch (err) {
-        sendDriveProxyError(res, err, 'pdf');
     }
 };
 

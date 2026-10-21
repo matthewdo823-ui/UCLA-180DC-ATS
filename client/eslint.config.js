@@ -33,15 +33,4 @@ export default defineConfig([
       'react-hooks/exhaustive-deps': 'off',
     },
   },
-  {
-    // Vercel runs cron handlers in Node, so lint them with Node globals and
-    // without React-only rules.
-    files: ['api/**/*.js'],
-    extends: [js.configs.recommended],
-    languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.node,
-      parserOptions: { sourceType: 'module' },
-    },
-  },
 ])

@@ -10,7 +10,7 @@ while IFS= read -r file; do
     .env|*/.env|.env.*|*/.env.*)
       [[ "$file" == *.env.example ]] || tracked_secret_files+=("$file")
       ;;
-    server.env|*/server.env|server/form-config.json|server/gcp/*.json|*service-account*.json|*service_account*.json|*-sa.json|*.sa.json|*credentials*.json)
+    server.env|*/server.env|.npmrc|*/.npmrc|server/form-config.json|server/gcp/*.json|*service-account*.json|*service_account*.json|*-sa.json|*.sa.json|*credentials*.json|*.pem|*.key|*.p12|*.pfx|id_rsa|*/id_rsa|id_ed25519|*/id_ed25519)
       tracked_secret_files+=("$file")
       ;;
   esac
@@ -26,7 +26,7 @@ fi
 # Print filenames only—never echo a matched credential value into CI logs.
 secret_value_files="$({
   git grep -I -l -E \
-    '(^|[^A-Z0-9_])(SUPABASE_SERVICE(_ROLE)?_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|JWT_SECRET|CRON_SECRET|GMAIL_CLIENT_SECRET)[[:space:]]*=[[:space:]]*[^#<[:space:]]+' \
+    '(^|[^A-Z0-9_])(SUPABASE_(SECRET|SERVICE(_ROLE)?)_KEY|SUPABASE_DB_URL|DATABASE_URL|GEMINI_API_KEY|GOOGLE_API_KEY|GOOGLE_PRIVATE_KEY|JWT_SECRET|CRON_SECRET|GMAIL_CLIENT_SECRET|GMAIL_REFRESH_TOKEN|ANTHROPIC_API_KEY)[[:space:]]*=[[:space:]]*[^#$<{[:space:]]+' \
     -- . ':(exclude).github/scripts/check-tracked-secrets.sh' ':(exclude)**/node_modules/**' || true
   git grep -I -l -E \
     'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|"(private_key|client_secret)"[[:space:]]*:[[:space:]]*"[^"[:space:]]+' \

@@ -4,7 +4,7 @@
  * Env:
  *   GOOGLE_CLOUD_KEY_PATH or GOOGLE_APPLICATION_CREDENTIALS — service account JSON key file
  *   FORM_CONFIG_PATH — legacy fallback path to form-config.json
- *   SUPABASE_URL, SUPABASE_SERVICE_KEY — existing Supabase client
+ *   SUPABASE_URL, SUPABASE_SECRET_KEY — existing Supabase client
  */
 
 const supabase = require("../config/supabase");
